@@ -208,25 +208,32 @@ async function createTables(client) {
 
 // Insert demo children
 async function insertDemoChildren(client) {
+    // Get user IDs dynamically
+    const users = await client.query('SELECT id, username FROM users ORDER BY id');
+    const userMap = {};
+    users.rows.forEach(user => {
+        userMap[user.username] = user.id;
+    });
+
     const demoChildren = [
         // Johnson Family children
-        ['Emma Johnson', 3, 8, 'K', 'Maple Elementary', 'Soccer, Art, Reading'],
-        ['Noah Johnson', 3, 10, '4th', 'Maple Elementary', 'Basketball, Video Games, Science'],
+        ['Emma Johnson', userMap['johnson_family'], 8, 'K', 'Maple Elementary', 'Soccer, Art, Reading'],
+        ['Noah Johnson', userMap['johnson_family'], 10, '4th', 'Maple Elementary', 'Basketball, Video Games, Science'],
         
         // Smith Family children  
-        ['Sophia Smith', 4, 6, 'Pre-K', 'Sunshine Daycare', 'Dancing, Music, Puzzles'],
-        ['Liam Smith', 4, 9, '3rd', 'Oak Elementary', 'Baseball, Math, Chess'],
+        ['Sophia Smith', userMap['smith_family'], 6, 'Pre-K', 'Sunshine Daycare', 'Dancing, Music, Puzzles'],
+        ['Liam Smith', userMap['smith_family'], 9, '3rd', 'Oak Elementary', 'Baseball, Math, Chess'],
         
         // Davis Family children
-        ['Olivia Davis', 5, 7, '1st', 'Pine Elementary', 'Swimming, Drawing, Books'],
-        ['Mason Davis', 5, 12, '6th', 'Riverside Middle', 'Football, Coding, History'],
+        ['Olivia Davis', userMap['davis_family'], 7, '1st', 'Pine Elementary', 'Swimming, Drawing, Books'],
+        ['Mason Davis', userMap['davis_family'], 12, '6th', 'Riverside Middle', 'Football, Coding, History'],
         
         // Wilson Family children
-        ['Ava Wilson', 6, 5, 'Pre-K', 'Little Stars Preschool', 'Singing, Coloring, Animals'],
+        ['Ava Wilson', userMap['wilson_family'], 5, 'Pre-K', 'Little Stars Preschool', 'Singing, Coloring, Animals'],
         
         // Brown Family children  
-        ['Ethan Brown', 7, 11, '5th', 'Cedar Elementary', 'Tennis, Guitar, Adventure'],
-        ['Isabella Brown', 7, 14, '8th', 'Valley Middle School', 'Volleyball, Photography, Writing']
+        ['Ethan Brown', userMap['brown_family'], 11, '5th', 'Cedar Elementary', 'Tennis, Guitar, Adventure'],
+        ['Isabella Brown', userMap['brown_family'], 14, '8th', 'Valley Middle School', 'Volleyball, Photography, Writing']
     ];
 
     for (const [name, parent_id, age, grade, school, interests] of demoChildren) {
@@ -247,47 +254,54 @@ async function insertDemoChildren(client) {
 
 // Insert demo activities
 async function insertDemoActivities(client) {
+    // Get child IDs dynamically
+    const children = await client.query('SELECT id, name FROM children ORDER BY id');
+    const childMap = {};
+    children.rows.forEach(child => {
+        childMap[child.name] = child.id;
+    });
+
     const demoActivities = [
-        // Emma's activities (child_id 1)
-        [1, 'Soccer Practice', 'Weekly soccer practice with the Lightning Bolts team', '2025-08-02', null, '10:00', '11:30', 'Riverside Sports Complex', null, 25.00, 15],
-        [1, 'Art Class', 'Creative painting and drawing session', '2025-08-05', null, '14:00', '15:30', 'Community Art Center', 'https://communityartcenter.com', 30.00, 10],
-        [1, 'Birthday Party', 'Sarah\'s 8th birthday party', '2025-08-10', null, '15:00', '17:00', '123 Oak Street', null, null, null],
-        [1, 'Swimming Lessons', 'Beginner swimming lessons', '2025-08-12', null, '16:00', '17:00', 'Aquatic Center', null, 40.00, 8],
+        // Emma's activities
+        [childMap['Emma Johnson'], 'Soccer Practice', 'Weekly soccer practice with the Lightning Bolts team', '2025-08-02', null, '10:00', '11:30', 'Riverside Sports Complex', null, 25.00, 15],
+        [childMap['Emma Johnson'], 'Art Class', 'Creative painting and drawing session', '2025-08-05', null, '14:00', '15:30', 'Community Art Center', 'https://communityartcenter.com', 30.00, 10],
+        [childMap['Emma Johnson'], 'Birthday Party', 'Sarah\'s 8th birthday party', '2025-08-10', null, '15:00', '17:00', '123 Oak Street', null, null, null],
+        [childMap['Emma Johnson'], 'Swimming Lessons', 'Beginner swimming lessons', '2025-08-12', null, '16:00', '17:00', 'Aquatic Center', null, 40.00, 8],
         
-        // Noah's activities (child_id 2)
-        [2, 'Basketball Practice', 'Weekly basketball training', '2025-08-03', null, '09:00', '10:30', 'School Gymnasium', null, 20.00, 12],
-        [2, 'Science Club', 'Weekly science experiments and projects', '2025-08-07', null, '15:30', '16:30', 'Maple Elementary', null, 15.00, 20],
-        [2, 'Gaming Tournament', 'Local esports tournament', '2025-08-14', null, '13:00', '18:00', 'Gaming Lounge', 'https://gamerlounge.com', 10.00, 32],
+        // Noah's activities
+        [childMap['Noah Johnson'], 'Basketball Practice', 'Weekly basketball training', '2025-08-03', null, '09:00', '10:30', 'School Gymnasium', null, 20.00, 12],
+        [childMap['Noah Johnson'], 'Science Club', 'Weekly science experiments and projects', '2025-08-07', null, '15:30', '16:30', 'Maple Elementary', null, 15.00, 20],
+        [childMap['Noah Johnson'], 'Gaming Tournament', 'Local esports tournament', '2025-08-14', null, '13:00', '18:00', 'Gaming Lounge', 'https://gamerlounge.com', 10.00, 32],
         
-        // Sophia's activities (child_id 3)
-        [3, 'Dance Class', 'Ballet and jazz dance lessons', '2025-08-01', null, '17:00', '18:00', 'Dance Studio', null, 35.00, 8],
-        [3, 'Music Lessons', 'Piano lessons for beginners', '2025-08-04', null, '11:00', '11:45', 'Music Academy', null, 50.00, 1],
-        [3, 'Playdate', 'Playdate with Emma Johnson', '2025-08-08', null, '14:00', '16:00', 'Central Park', null, null, null],
+        // Sophia's activities
+        [childMap['Sophia Smith'], 'Dance Class', 'Ballet and jazz dance lessons', '2025-08-01', null, '17:00', '18:00', 'Dance Studio', null, 35.00, 8],
+        [childMap['Sophia Smith'], 'Music Lessons', 'Piano lessons for beginners', '2025-08-04', null, '11:00', '11:45', 'Music Academy', null, 50.00, 1],
+        [childMap['Sophia Smith'], 'Playdate', 'Playdate with Emma Johnson', '2025-08-08', null, '14:00', '16:00', 'Central Park', null, null, null],
         
-        // Liam's activities (child_id 4)
-        [4, 'Baseball Practice', 'Little League practice', '2025-08-02', null, '08:00', '10:00', 'Baseball Fields', null, 30.00, 15],
-        [4, 'Chess Club', 'Weekly chess club meeting', '2025-08-06', null, '15:00', '16:00', 'Oak Elementary', null, 10.00, 12],
-        [4, 'Math Tutoring', 'Advanced math tutoring session', '2025-08-09', null, '16:00', '17:00', 'Learning Center', null, 45.00, 1],
+        // Liam's activities
+        [childMap['Liam Smith'], 'Baseball Practice', 'Little League practice', '2025-08-02', null, '08:00', '10:00', 'Baseball Fields', null, 30.00, 15],
+        [childMap['Liam Smith'], 'Chess Club', 'Weekly chess club meeting', '2025-08-06', null, '15:00', '16:00', 'Oak Elementary', null, 10.00, 12],
+        [childMap['Liam Smith'], 'Math Tutoring', 'Advanced math tutoring session', '2025-08-09', null, '16:00', '17:00', 'Learning Center', null, 45.00, 1],
         
-        // Olivia's activities (child_id 5)
-        [5, 'Swimming Class', 'Intermediate swimming', '2025-08-01', null, '18:00', '19:00', 'Aquatic Center', null, 40.00, 8],
-        [5, 'Art Workshop', 'Drawing and painting workshop', '2025-08-11', null, '10:00', '12:00', 'Community Center', null, 25.00, 15],
+        // Olivia's activities
+        [childMap['Olivia Davis'], 'Swimming Class', 'Intermediate swimming', '2025-08-01', null, '18:00', '19:00', 'Aquatic Center', null, 40.00, 8],
+        [childMap['Olivia Davis'], 'Art Workshop', 'Drawing and painting workshop', '2025-08-11', null, '10:00', '12:00', 'Community Center', null, 25.00, 15],
         
-        // Mason's activities (child_id 6)
-        [6, 'Football Practice', 'Middle school football team', '2025-08-03', null, '16:00', '18:00', 'School Field', null, 50.00, 25],
-        [6, 'Coding Club', 'Learn programming basics', '2025-08-08', null, '17:00', '18:30', 'Tech Center', 'https://techcenter.com', 40.00, 10],
+        // Mason's activities
+        [childMap['Mason Davis'], 'Football Practice', 'Middle school football team', '2025-08-03', null, '16:00', '18:00', 'School Field', null, 50.00, 25],
+        [childMap['Mason Davis'], 'Coding Club', 'Learn programming basics', '2025-08-08', null, '17:00', '18:30', 'Tech Center', 'https://techcenter.com', 40.00, 10],
         
-        // Ava's activities (child_id 7)
-        [7, 'Singing Lessons', 'Voice lessons for kids', '2025-08-05', null, '10:00', '10:30', 'Music Studio', null, 35.00, 1],
-        [7, 'Zoo Trip', 'Field trip to the zoo', '2025-08-13', null, '09:00', '15:00', 'City Zoo', 'https://cityzoo.com', 20.00, 50],
+        // Ava's activities
+        [childMap['Ava Wilson'], 'Singing Lessons', 'Voice lessons for kids', '2025-08-05', null, '10:00', '10:30', 'Music Studio', null, 35.00, 1],
+        [childMap['Ava Wilson'], 'Zoo Trip', 'Field trip to the zoo', '2025-08-13', null, '09:00', '15:00', 'City Zoo', 'https://cityzoo.com', 20.00, 50],
         
-        // Ethan's activities (child_id 8)
-        [8, 'Tennis Lessons', 'Tennis coaching for kids', '2025-08-02', null, '14:00', '15:00', 'Tennis Club', null, 45.00, 6],
-        [8, 'Guitar Lessons', 'Learn to play guitar', '2025-08-07', null, '16:00', '16:45', 'Music School', null, 40.00, 1],
+        // Ethan's activities
+        [childMap['Ethan Brown'], 'Tennis Lessons', 'Tennis coaching for kids', '2025-08-02', null, '14:00', '15:00', 'Tennis Club', null, 45.00, 6],
+        [childMap['Ethan Brown'], 'Guitar Lessons', 'Learn to play guitar', '2025-08-07', null, '16:00', '16:45', 'Music School', null, 40.00, 1],
         
-        // Isabella's activities (child_id 9)
-        [9, 'Volleyball Practice', 'School volleyball team', '2025-08-04', null, '15:30', '17:00', 'School Gym', null, 25.00, 12],
-        [9, 'Photography Workshop', 'Digital photography basics', '2025-08-10', null, '13:00', '16:00', 'Photo Studio', 'https://photostudio.com', 60.00, 8]
+        // Isabella's activities
+        [childMap['Isabella Brown'], 'Volleyball Practice', 'School volleyball team', '2025-08-04', null, '15:30', '17:00', 'School Gym', null, 25.00, 12],
+        [childMap['Isabella Brown'], 'Photography Workshop', 'Digital photography basics', '2025-08-10', null, '13:00', '16:00', 'Photo Studio', 'https://photostudio.com', 60.00, 8]
     ];
 
     for (const [child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants] of demoActivities) {
@@ -308,11 +322,18 @@ async function insertDemoActivities(client) {
 
 // Insert demo connections
 async function insertDemoConnections(client) {
+    // Get user IDs dynamically
+    const users = await client.query('SELECT id, username FROM users');
+    const userMap = {};
+    users.rows.forEach(user => {
+        userMap[user.username] = user.id;
+    });
+
     const demoConnections = [
-        [3, 4], // Johnson <-> Smith families
-        [3, 5], // Johnson <-> Davis families  
-        [4, 5], // Smith <-> Davis families
-        [6, 7]  // Wilson <-> Brown families
+        [userMap['johnson_family'], userMap['smith_family']], // Johnson <-> Smith families
+        [userMap['johnson_family'], userMap['davis_family']], // Johnson <-> Davis families  
+        [userMap['smith_family'], userMap['davis_family']], // Smith <-> Davis families
+        [userMap['wilson_family'], userMap['brown_family']]  // Wilson <-> Brown families
     ];
 
     for (const [parent1_id, parent2_id] of demoConnections) {
