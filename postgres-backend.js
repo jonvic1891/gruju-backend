@@ -477,6 +477,333 @@ app.post('/auth/forgot-password', async (req, res) => {
     }
 });
 
+// Children endpoints
+app.get('/api/children', authenticateToken, async (req, res) => {
+    try {
+        const client = await pool.connect();
+        const result = await client.query(
+            'SELECT * FROM children WHERE parent_id = $1 ORDER BY created_at DESC',
+            [req.user.id]
+        );
+        client.release();
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+    } catch (error) {
+        console.error('Get children error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch children' });
+    }
+});
+
+app.post('/api/children', authenticateToken, async (req, res) => {
+    try {
+        const { name, age, grade, school, interests } = req.body;
+
+        if (!name || !name.trim()) {
+            return res.status(400).json({ success: false, error: 'Child name is required' });
+        }
+
+        const client = await pool.connect();
+        const result = await client.query(
+            'INSERT INTO children (name, parent_id, age, grade, school, interests) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [name.trim(), req.user.id, age, grade, school, interests]
+        );
+        client.release();
+
+        res.json({
+            success: true,
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Create child error:', error);
+        res.status(500).json({ success: false, error: 'Failed to create child' });
+    }
+});
+
+app.delete('/api/children/:id', authenticateToken, async (req, res) => {
+    try {
+        const childId = parseInt(req.params.id);
+        
+        const client = await pool.connect();
+        
+        // First check if the child belongs to this user
+        const child = await client.query(
+            'SELECT id FROM children WHERE id = $1 AND parent_id = $2',
+            [childId, req.user.id]
+        );
+
+        if (child.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Child not found' });
+        }
+
+        // Delete child (activities will be deleted by CASCADE)
+        await client.query('DELETE FROM children WHERE id = $1', [childId]);
+        client.release();
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete child error:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete child' });
+    }
+});
+
+// Activities endpoints
+app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
+    try {
+        const childId = parseInt(req.params.childId);
+        
+        const client = await pool.connect();
+        
+        // First verify the child belongs to this user
+        const child = await client.query(
+            'SELECT id FROM children WHERE id = $1 AND parent_id = $2',
+            [childId, req.user.id]
+        );
+
+        if (child.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Child not found' });
+        }
+
+        const result = await client.query(
+            'SELECT * FROM activities WHERE child_id = $1 ORDER BY start_date DESC, start_time DESC',
+            [childId]
+        );
+        client.release();
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+    } catch (error) {
+        console.error('Get activities error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch activities' });
+    }
+});
+
+app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
+    try {
+        const childId = parseInt(req.params.childId);
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants } = req.body;
+
+        if (!name || !name.trim() || !start_date) {
+            return res.status(400).json({ success: false, error: 'Activity name and start date are required' });
+        }
+
+        const client = await pool.connect();
+        
+        // First verify the child belongs to this user
+        const child = await client.query(
+            'SELECT id FROM children WHERE id = $1 AND parent_id = $2',
+            [childId, req.user.id]
+        );
+
+        if (child.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Child not found' });
+        }
+
+        const result = await client.query(
+            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
+            [childId, name.trim(), description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants]
+        );
+        client.release();
+
+        res.json({
+            success: true,
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Create activity error:', error);
+        res.status(500).json({ success: false, error: 'Failed to create activity' });
+    }
+});
+
+// Calendar endpoint
+app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
+    try {
+        const { start, end } = req.query;
+        
+        const client = await pool.connect();
+        
+        let query = `
+            SELECT a.*, c.name as child_name 
+            FROM activities a 
+            JOIN children c ON a.child_id = c.id 
+            WHERE c.parent_id = $1
+        `;
+        let params = [req.user.id];
+
+        if (start && end) {
+            query += ' AND a.start_date BETWEEN $2 AND $3';
+            params.push(start, end);
+        }
+
+        query += ' ORDER BY a.start_date, a.start_time';
+
+        const result = await client.query(query, params);
+        client.release();
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+    } catch (error) {
+        console.error('Get calendar activities error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch calendar activities' });
+    }
+});
+
+// Connection endpoints
+app.get('/api/connections/requests', authenticateToken, async (req, res) => {
+    try {
+        const client = await pool.connect();
+        const result = await client.query(
+            `SELECT cr.*, u.username as requester_name, u.email as requester_email, 
+                    c1.name as child_name, c2.name as target_child_name
+             FROM connection_requests cr
+             JOIN users u ON cr.requester_id = u.id
+             LEFT JOIN children c1 ON cr.child_id = c1.id
+             LEFT JOIN children c2 ON cr.target_child_id = c2.id
+             WHERE cr.target_parent_id = $1 AND cr.status = 'pending'
+             ORDER BY cr.created_at DESC`,
+            [req.user.id]
+        );
+        client.release();
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+    } catch (error) {
+        console.error('Get connection requests error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch connection requests' });
+    }
+});
+
+app.get('/api/connections/search', authenticateToken, async (req, res) => {
+    try {
+        const { q } = req.query;
+        
+        if (!q || q.length < 3) {
+            return res.status(400).json({ success: false, error: 'Search query must be at least 3 characters' });
+        }
+
+        const client = await pool.connect();
+        const result = await client.query(
+            `SELECT u.id, u.username, u.email, u.phone,
+                    json_agg(json_build_object('id', c.id, 'name', c.name, 'age', c.age)) as children
+             FROM users u
+             LEFT JOIN children c ON u.id = c.parent_id
+             WHERE u.id != $1 AND u.is_active = true AND (u.email ILIKE $2 OR u.phone ILIKE $2)
+             GROUP BY u.id, u.username, u.email, u.phone
+             LIMIT 10`,
+            [req.user.id, `%${q}%`]
+        );
+        client.release();
+
+        // Process results to handle null children arrays
+        const processedResults = result.rows.map(row => ({
+            ...row,
+            children: row.children.filter(child => child.id !== null)
+        }));
+
+        res.json({
+            success: true,
+            data: processedResults
+        });
+    } catch (error) {
+        console.error('Search parents error:', error);
+        res.status(500).json({ success: false, error: 'Failed to search parents' });
+    }
+});
+
+app.post('/api/connections/request', authenticateToken, async (req, res) => {
+    try {
+        const { target_parent_id, child_id, target_child_id, message } = req.body;
+
+        if (!target_parent_id || !child_id) {
+            return res.status(400).json({ success: false, error: 'Target parent and child are required' });
+        }
+
+        const client = await pool.connect();
+        
+        // Verify the child belongs to this user
+        const child = await client.query(
+            'SELECT id FROM children WHERE id = $1 AND parent_id = $2',
+            [child_id, req.user.id]
+        );
+
+        if (child.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Child not found' });
+        }
+
+        const result = await client.query(
+            'INSERT INTO connection_requests (requester_id, target_parent_id, child_id, target_child_id, message, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [req.user.id, target_parent_id, child_id, target_child_id, message, 'pending']
+        );
+        client.release();
+
+        res.json({
+            success: true,
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Send connection request error:', error);
+        res.status(500).json({ success: false, error: 'Failed to send connection request' });
+    }
+});
+
+app.post('/api/connections/respond/:requestId', authenticateToken, async (req, res) => {
+    try {
+        const requestId = parseInt(req.params.requestId);
+        const { action } = req.body;
+
+        if (!['accept', 'reject'].includes(action)) {
+            return res.status(400).json({ success: false, error: 'Invalid action' });
+        }
+
+        const client = await pool.connect();
+        
+        // Verify the request is for this user
+        const request = await client.query(
+            'SELECT * FROM connection_requests WHERE id = $1 AND target_parent_id = $2 AND status = $3',
+            [requestId, req.user.id, 'pending']
+        );
+
+        if (request.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Connection request not found' });
+        }
+
+        const status = action === 'accept' ? 'accepted' : 'rejected';
+        await client.query(
+            'UPDATE connection_requests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [status, requestId]
+        );
+
+        // If accepted, create the connection
+        if (action === 'accept') {
+            const req_data = request.rows[0];
+            await client.query(
+                'INSERT INTO connections (child1_id, child2_id, status) VALUES ($1, $2, $3)',
+                [req_data.child_id, req_data.target_child_id || req_data.child_id, 'active']
+            );
+        }
+
+        client.release();
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Respond to connection request error:', error);
+        res.status(500).json({ success: false, error: 'Failed to respond to connection request' });
+    }
+});
+
 // Start server
 async function startServer() {
     try {
