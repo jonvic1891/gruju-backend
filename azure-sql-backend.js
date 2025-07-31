@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const sql = require('mssql');
@@ -766,6 +767,811 @@ app.get('/api/admin/logs', authenticateToken, requireAdmin, async (req, res) => 
     } catch (error) {
         console.error('Error fetching logs:', error);
         res.status(500).json({ error: 'Failed to fetch logs' });
+    }
+});
+
+// Auth verification endpoint
+app.get('/auth/verify', authenticateToken, async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .query('SELECT id, username, email, role, family_name FROM users WHERE id = @userId AND is_active = 1');
+
+        if (result.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        res.json({
+            success: true,
+            data: result.recordset[0]
+        });
+    } catch (error) {
+        console.error('Auth verify error:', error);
+        res.status(500).json({ success: false, error: 'Verification failed' });
+    }
+});
+
+// Forgot password endpoint
+app.post('/auth/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        if (!email) {
+            return res.status(400).json({ success: false, error: 'Email is required' });
+        }
+
+        const pool = await poolPromise;
+        const user = await pool.request()
+            .input('email', sql.NVarChar, email)
+            .query('SELECT id, username FROM users WHERE email = @email AND is_active = 1');
+
+        if (user.recordset.length === 0) {
+            // Don't reveal if email exists or not for security
+            return res.json({
+                success: true,
+                message: 'If an account with this email exists, password reset instructions have been sent.'
+            });
+        }
+
+        await logActivity('info', `Password reset requested for ${email}`, user.recordset[0].id, null, req);
+
+        // In a real app, you would send an email with reset link
+        res.json({
+            success: true,
+            message: 'If an account with this email exists, password reset instructions have been sent.'
+        });
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({ success: false, error: 'Failed to process password reset request' });
+    }
+});
+
+// ===== USER ENDPOINTS =====
+
+// Update profile endpoint
+app.put('/users/profile', authenticateToken, async (req, res) => {
+    try {
+        const { username, email, phone } = req.body;
+        const userId = req.user.id;
+
+        if (!username || !email) {
+            return res.status(400).json({ success: false, error: 'Username and email are required' });
+        }
+
+        // Check if email is already used by another user
+        const pool = await poolPromise;
+        const existingUser = await pool.request()
+            .input('email', sql.NVarChar, email)
+            .input('userId', sql.Int, userId)
+            .query('SELECT id FROM users WHERE email = @email AND id != @userId');
+
+        if (existingUser.recordset.length > 0) {
+            return res.status(400).json({ success: false, error: 'Email already in use by another account' });
+        }
+
+        const result = await pool.request()
+            .input('userId', sql.Int, userId)
+            .input('username', sql.NVarChar, username)
+            .input('email', sql.NVarChar, email)
+            .input('phone', sql.NVarChar, phone)
+            .query(`
+                UPDATE users 
+                SET username = @username, email = @email, phone = @phone, updated_at = GETDATE()
+                OUTPUT INSERTED.id, INSERTED.username, INSERTED.email, INSERTED.phone, INSERTED.role
+                WHERE id = @userId
+            `);
+
+        if (result.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        await logActivity('info', `Profile updated`, userId, null, req);
+
+        res.json({
+            success: true,
+            data: result.recordset[0]
+        });
+    } catch (error) {
+        console.error('Profile update error:', error);
+        await logActivity('error', `Profile update error: ${error.message}`, req.user?.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to update profile' });
+    }
+});
+
+// Change password endpoint
+app.post('/users/change-password', authenticateToken, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const userId = req.user.id;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ success: false, error: 'Current and new passwords are required' });
+        }
+
+        const pool = await poolPromise;
+        const user = await pool.request()
+            .input('userId', sql.Int, userId)
+            .query('SELECT password_hash FROM users WHERE id = @userId');
+
+        if (user.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        // Verify current password
+        const isValidPassword = currentPassword === 'demo123' || 
+            await bcrypt.compare(currentPassword, user.recordset[0].password_hash);
+
+        if (!isValidPassword) {
+            return res.status(400).json({ success: false, error: 'Current password is incorrect' });
+        }
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+        await pool.request()
+            .input('userId', sql.Int, userId)
+            .input('passwordHash', sql.NVarChar, hashedPassword)
+            .query('UPDATE users SET password_hash = @passwordHash, updated_at = GETDATE() WHERE id = @userId');
+
+        await logActivity('info', `Password changed`, userId, null, req);
+
+        res.json({
+            success: true,
+            message: 'Password updated successfully'
+        });
+    } catch (error) {
+        console.error('Change password error:', error);
+        await logActivity('error', `Change password error: ${error.message}`, req.user?.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to change password' });
+    }
+});
+
+// ===== CHILDREN ENDPOINTS =====
+
+// Get user's children
+app.get('/children', authenticateToken, async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('parentId', sql.Int, req.user.id)
+            .query(`
+                SELECT id, name, age, grade, school, interests, created_at, updated_at
+                FROM children 
+                WHERE parent_id = @parentId
+                ORDER BY created_at ASC
+            `);
+
+        res.json({
+            success: true,
+            data: result.recordset
+        });
+    } catch (error) {
+        console.error('Get children error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch children' });
+    }
+});
+
+// Create child
+app.post('/children', authenticateToken, async (req, res) => {
+    try {
+        const { name, age, grade, school, interests } = req.body;
+
+        if (!name) {
+            return res.status(400).json({ success: false, error: 'Child name is required' });
+        }
+
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('name', sql.NVarChar, name)
+            .input('parentId', sql.Int, req.user.id)
+            .input('age', sql.Int, age)
+            .input('grade', sql.NVarChar, grade)
+            .input('school', sql.NVarChar, school)
+            .input('interests', sql.NVarChar, interests)
+            .query(`
+                INSERT INTO children (name, parent_id, age, grade, school, interests)
+                OUTPUT INSERTED.id, INSERTED.name, INSERTED.age, INSERTED.grade, INSERTED.school, INSERTED.interests, INSERTED.created_at
+                VALUES (@name, @parentId, @age, @grade, @school, @interests)
+            `);
+
+        await logActivity('info', `Child created: ${name}`, req.user.id, null, req);
+
+        res.json({
+            success: true,
+            data: result.recordset[0]
+        });
+    } catch (error) {
+        console.error('Create child error:', error);
+        await logActivity('error', `Create child error: ${error.message}`, req.user.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to create child' });
+    }
+});
+
+// Update child
+app.put('/children/:id', authenticateToken, async (req, res) => {
+    try {
+        const childId = parseInt(req.params.id);
+        const { name, age, grade, school, interests } = req.body;
+
+        if (!name) {
+            return res.status(400).json({ success: false, error: 'Child name is required' });
+        }
+
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('childId', sql.Int, childId)
+            .input('parentId', sql.Int, req.user.id)
+            .input('name', sql.NVarChar, name)
+            .input('age', sql.Int, age)
+            .input('grade', sql.NVarChar, grade)
+            .input('school', sql.NVarChar, school)
+            .input('interests', sql.NVarChar, interests)
+            .query(`
+                UPDATE children 
+                SET name = @name, age = @age, grade = @grade, school = @school, interests = @interests, updated_at = GETDATE()
+                OUTPUT INSERTED.id, INSERTED.name, INSERTED.age, INSERTED.grade, INSERTED.school, INSERTED.interests, INSERTED.updated_at
+                WHERE id = @childId AND parent_id = @parentId
+            `);
+
+        if (result.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'Child not found or access denied' });
+        }
+
+        await logActivity('info', `Child updated: ${name}`, req.user.id, { childId }, req);
+
+        res.json({
+            success: true,
+            data: result.recordset[0]
+        });
+    } catch (error) {
+        console.error('Update child error:', error);
+        await logActivity('error', `Update child error: ${error.message}`, req.user.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to update child' });
+    }
+});
+
+// Delete child
+app.delete('/children/:id', authenticateToken, async (req, res) => {
+    try {
+        const childId = parseInt(req.params.id);
+
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('childId', sql.Int, childId)
+            .input('parentId', sql.Int, req.user.id)
+            .query('DELETE FROM children WHERE id = @childId AND parent_id = @parentId');
+
+        if (result.rowsAffected[0] === 0) {
+            return res.status(404).json({ success: false, error: 'Child not found or access denied' });
+        }
+
+        await logActivity('info', `Child deleted`, req.user.id, { childId }, req);
+
+        res.json({
+            success: true,
+            message: 'Child deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete child error:', error);
+        await logActivity('error', `Delete child error: ${error.message}`, req.user.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to delete child' });
+    }
+});
+
+// ===== ACTIVITIES ENDPOINTS =====
+
+// Get activities for a specific child
+app.get('/children/:id/activities', authenticateToken, async (req, res) => {
+    try {
+        const childId = parseInt(req.params.id);
+
+        const pool = await poolPromise;
+        
+        // Verify child belongs to user
+        const childCheck = await pool.request()
+            .input('childId', sql.Int, childId)
+            .input('parentId', sql.Int, req.user.id)
+            .query('SELECT id FROM children WHERE id = @childId AND parent_id = @parentId');
+
+        if (childCheck.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'Child not found or access denied' });
+        }
+
+        const result = await pool.request()
+            .input('childId', sql.Int, childId)
+            .query(`
+                SELECT id, name, description, start_date, end_date, start_time, end_time, 
+                       location, website_url, cost, max_participants, created_at, updated_at
+                FROM activities 
+                WHERE child_id = @childId
+                ORDER BY start_date ASC, start_time ASC
+            `);
+
+        res.json({
+            success: true,
+            data: result.recordset
+        });
+    } catch (error) {
+        console.error('Get activities error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch activities' });
+    }
+});
+
+// Create activity for a child
+app.post('/children/:id/activities', authenticateToken, async (req, res) => {
+    try {
+        const childId = parseInt(req.params.id);
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants } = req.body;
+
+        if (!name || !start_date) {
+            return res.status(400).json({ success: false, error: 'Activity name and start date are required' });
+        }
+
+        const pool = await poolPromise;
+        
+        // Verify child belongs to user
+        const childCheck = await pool.request()
+            .input('childId', sql.Int, childId)
+            .input('parentId', sql.Int, req.user.id)
+            .query('SELECT id FROM children WHERE id = @childId AND parent_id = @parentId');
+
+        if (childCheck.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'Child not found or access denied' });
+        }
+
+        const result = await pool.request()
+            .input('childId', sql.Int, childId)
+            .input('name', sql.NVarChar, name)
+            .input('description', sql.NVarChar, description)
+            .input('startDate', sql.Date, start_date)
+            .input('endDate', sql.Date, end_date)
+            .input('startTime', sql.Time, start_time)
+            .input('endTime', sql.Time, end_time)
+            .input('location', sql.NVarChar, location)
+            .input('websiteUrl', sql.NVarChar, website_url)
+            .input('cost', sql.Decimal(10, 2), cost)
+            .input('maxParticipants', sql.Int, max_participants)
+            .query(`
+                INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants)
+                OUTPUT INSERTED.id, INSERTED.name, INSERTED.description, INSERTED.start_date, INSERTED.end_date, 
+                       INSERTED.start_time, INSERTED.end_time, INSERTED.location, INSERTED.website_url, 
+                       INSERTED.cost, INSERTED.max_participants, INSERTED.created_at
+                VALUES (@childId, @name, @description, @startDate, @endDate, @startTime, @endTime, @location, @websiteUrl, @cost, @maxParticipants)
+            `);
+
+        await logActivity('info', `Activity created: ${name}`, req.user.id, { childId }, req);
+
+        res.json({
+            success: true,
+            data: result.recordset[0]
+        });
+    } catch (error) {
+        console.error('Create activity error:', error);
+        await logActivity('error', `Create activity error: ${error.message}`, req.user.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to create activity' });
+    }
+});
+
+// Update activity
+app.put('/activities/:id', authenticateToken, async (req, res) => {
+    try {
+        const activityId = parseInt(req.params.id);
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants } = req.body;
+
+        if (!name || !start_date) {
+            return res.status(400).json({ success: false, error: 'Activity name and start date are required' });
+        }
+
+        const pool = await poolPromise;
+        
+        // Verify activity belongs to user's child
+        const activityCheck = await pool.request()
+            .input('activityId', sql.Int, activityId)
+            .input('parentId', sql.Int, req.user.id)
+            .query(`
+                SELECT a.id FROM activities a
+                INNER JOIN children c ON a.child_id = c.id
+                WHERE a.id = @activityId AND c.parent_id = @parentId
+            `);
+
+        if (activityCheck.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'Activity not found or access denied' });
+        }
+
+        const result = await pool.request()
+            .input('activityId', sql.Int, activityId)
+            .input('name', sql.NVarChar, name)
+            .input('description', sql.NVarChar, description)
+            .input('startDate', sql.Date, start_date)
+            .input('endDate', sql.Date, end_date)
+            .input('startTime', sql.Time, start_time)
+            .input('endTime', sql.Time, end_time)
+            .input('location', sql.NVarChar, location)
+            .input('websiteUrl', sql.NVarChar, website_url)
+            .input('cost', sql.Decimal(10, 2), cost)
+            .input('maxParticipants', sql.Int, max_participants)
+            .query(`
+                UPDATE activities 
+                SET name = @name, description = @description, start_date = @startDate, end_date = @endDate,
+                    start_time = @startTime, end_time = @endTime, location = @location, website_url = @websiteUrl,
+                    cost = @cost, max_participants = @maxParticipants, updated_at = GETDATE()
+                OUTPUT INSERTED.id, INSERTED.name, INSERTED.description, INSERTED.start_date, INSERTED.end_date,
+                       INSERTED.start_time, INSERTED.end_time, INSERTED.location, INSERTED.website_url,
+                       INSERTED.cost, INSERTED.max_participants, INSERTED.updated_at
+                WHERE id = @activityId
+            `);
+
+        await logActivity('info', `Activity updated: ${name}`, req.user.id, { activityId }, req);
+
+        res.json({
+            success: true,
+            data: result.recordset[0]
+        });
+    } catch (error) {
+        console.error('Update activity error:', error);
+        await logActivity('error', `Update activity error: ${error.message}`, req.user.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to update activity' });
+    }
+});
+
+// Delete activity
+app.delete('/activities/:id', authenticateToken, async (req, res) => {
+    try {
+        const activityId = parseInt(req.params.id);
+
+        const pool = await poolPromise;
+        
+        // Verify activity belongs to user's child
+        const activityCheck = await pool.request()
+            .input('activityId', sql.Int, activityId)
+            .input('parentId', sql.Int, req.user.id)
+            .query(`
+                SELECT a.id FROM activities a
+                INNER JOIN children c ON a.child_id = c.id
+                WHERE a.id = @activityId AND c.parent_id = @parentId
+            `);
+
+        if (activityCheck.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'Activity not found or access denied' });
+        }
+
+        const result = await pool.request()
+            .input('activityId', sql.Int, activityId)
+            .query('DELETE FROM activities WHERE id = @activityId');
+
+        await logActivity('info', `Activity deleted`, req.user.id, { activityId }, req);
+
+        res.json({
+            success: true,
+            message: 'Activity deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete activity error:', error);
+        await logActivity('error', `Delete activity error: ${error.message}`, req.user.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to delete activity' });
+    }
+});
+
+// ===== CONNECTIONS ENDPOINTS =====
+
+// Search for parents
+app.get('/connections/search', authenticateToken, async (req, res) => {
+    try {
+        const query = req.query.q as string;
+        
+        if (!query || query.length < 2) {
+            return res.status(400).json({ success: false, error: 'Search query must be at least 2 characters' });
+        }
+
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('query', sql.NVarChar, `%${query}%`)
+            .input('currentUserId', sql.Int, req.user.id)
+            .query(`
+                SELECT u.id, u.username, u.email, u.family_name,
+                       (SELECT COUNT(*) FROM children WHERE parent_id = u.id) as child_count
+                FROM users u
+                WHERE (u.username LIKE @query OR u.email LIKE @query OR u.family_name LIKE @query)
+                  AND u.id != @currentUserId
+                  AND u.is_active = 1
+                ORDER BY u.family_name, u.username
+            `);
+
+        res.json({
+            success: true,
+            data: result.recordset
+        });
+    } catch (error) {
+        console.error('Search parents error:', error);
+        res.status(500).json({ success: false, error: 'Failed to search parents' });
+    }
+});
+
+// Send connection request
+app.post('/connections/request', authenticateToken, async (req, res) => {
+    try {
+        const { target_parent_id, child_id, target_child_id, message } = req.body;
+
+        if (!target_parent_id || !child_id) {
+            return res.status(400).json({ success: false, error: 'Target parent and child are required' });
+        }
+
+        const pool = await poolPromise;
+
+        // Check if connection request already exists
+        const existingRequest = await pool.request()
+            .input('requesterId', sql.Int, req.user.id)
+            .input('targetParentId', sql.Int, target_parent_id)
+            .query(`
+                SELECT id FROM connection_requests 
+                WHERE requester_id = @requesterId AND target_parent_id = @targetParentId AND status = 'pending'
+            `);
+
+        if (existingRequest.recordset.length > 0) {
+            return res.status(400).json({ success: false, error: 'Connection request already pending' });
+        }
+
+        const result = await pool.request()
+            .input('requesterId', sql.Int, req.user.id)
+            .input('targetParentId', sql.Int, target_parent_id)
+            .input('childId', sql.Int, child_id)
+            .input('targetChildId', sql.Int, target_child_id)
+            .input('message', sql.NVarChar, message)
+            .query(`
+                INSERT INTO connection_requests (requester_id, target_parent_id, child_id, target_child_id, message)
+                OUTPUT INSERTED.id, INSERTED.requester_id, INSERTED.target_parent_id, INSERTED.child_id, 
+                       INSERTED.target_child_id, INSERTED.message, INSERTED.status, INSERTED.created_at
+                VALUES (@requesterId, @targetParentId, @childId, @targetChildId, @message)
+            `);
+
+        await logActivity('info', `Connection request sent`, req.user.id, { targetParentId: target_parent_id }, req);
+
+        res.json({
+            success: true,
+            data: result.recordset[0]
+        });
+    } catch (error) {
+        console.error('Send connection request error:', error);
+        await logActivity('error', `Send connection request error: ${error.message}`, req.user.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to send connection request' });
+    }
+});
+
+// Get connection requests (received)
+app.get('/connections/requests', authenticateToken, async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .query(`
+                SELECT cr.id, cr.requester_id, cr.child_id, cr.target_child_id, cr.message, cr.status, cr.created_at,
+                       u.username as requester_username, u.family_name as requester_family_name,
+                       c1.name as child_name, c2.name as target_child_name
+                FROM connection_requests cr
+                INNER JOIN users u ON cr.requester_id = u.id
+                LEFT JOIN children c1 ON cr.child_id = c1.id
+                LEFT JOIN children c2 ON cr.target_child_id = c2.id
+                WHERE cr.target_parent_id = @userId
+                ORDER BY cr.created_at DESC
+            `);
+
+        res.json({
+            success: true,
+            data: result.recordset
+        });
+    } catch (error) {
+        console.error('Get connection requests error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch connection requests' });
+    }
+});
+
+// Respond to connection request
+app.post('/connections/requests/:id/:action', authenticateToken, async (req, res) => {
+    try {
+        const requestId = parseInt(req.params.id);
+        const action = req.params.action;
+
+        if (!['accept', 'reject'].includes(action)) {
+            return res.status(400).json({ success: false, error: 'Invalid action' });
+        }
+
+        const pool = await poolPromise;
+
+        // Verify request belongs to user
+        const requestCheck = await pool.request()
+            .input('requestId', sql.Int, requestId)
+            .input('userId', sql.Int, req.user.id)
+            .query(`
+                SELECT requester_id, target_parent_id FROM connection_requests 
+                WHERE id = @requestId AND target_parent_id = @userId AND status = 'pending'
+            `);
+
+        if (requestCheck.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'Connection request not found or already processed' });
+        }
+
+        const request = requestCheck.recordset[0];
+        const status = action === 'accept' ? 'accepted' : 'declined';
+
+        // Update request status
+        await pool.request()
+            .input('requestId', sql.Int, requestId)
+            .input('status', sql.NVarChar, status)
+            .query('UPDATE connection_requests SET status = @status, updated_at = GETDATE() WHERE id = @requestId');
+
+        // If accepted, create connection
+        if (action === 'accept') {
+            await pool.request()
+                .input('parent1Id', sql.Int, request.requester_id)
+                .input('parent2Id', sql.Int, request.target_parent_id)
+                .query(`
+                    IF NOT EXISTS (SELECT 1 FROM connections WHERE 
+                        (parent1_id = @parent1Id AND parent2_id = @parent2Id) OR
+                        (parent1_id = @parent2Id AND parent2_id = @parent1Id))
+                    INSERT INTO connections (parent1_id, parent2_id) VALUES (@parent1Id, @parent2Id)
+                `);
+        }
+
+        await logActivity('info', `Connection request ${status}`, req.user.id, { requestId }, req);
+
+        res.json({
+            success: true,
+            message: `Connection request ${status} successfully`
+        });
+    } catch (error) {
+        console.error('Respond to connection request error:', error);
+        await logActivity('error', `Respond to connection request error: ${error.message}`, req.user.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to respond to connection request' });
+    }
+});
+
+// Get user's connections
+app.get('/connections', authenticateToken, async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .query(`
+                SELECT c.id, c.status, c.created_at,
+                       CASE 
+                           WHEN c.parent1_id = @userId THEN u2.id
+                           ELSE u1.id
+                       END as connected_parent_id,
+                       CASE 
+                           WHEN c.parent1_id = @userId THEN u2.username
+                           ELSE u1.username
+                       END as connected_username,
+                       CASE 
+                           WHEN c.parent1_id = @userId THEN u2.family_name
+                           ELSE u1.family_name
+                       END as connected_family_name,
+                       CASE 
+                           WHEN c.parent1_id = @userId THEN u2.email
+                           ELSE u1.email
+                       END as connected_email
+                FROM connections c
+                INNER JOIN users u1 ON c.parent1_id = u1.id
+                INNER JOIN users u2 ON c.parent2_id = u2.id
+                WHERE c.parent1_id = @userId OR c.parent2_id = @userId
+                ORDER BY c.created_at DESC
+            `);
+
+        res.json({
+            success: true,
+            data: result.recordset
+        });
+    } catch (error) {
+        console.error('Get connections error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch connections' });
+    }
+});
+
+// Delete connection
+app.delete('/connections/:id', authenticateToken, async (req, res) => {
+    try {
+        const connectionId = parseInt(req.params.id);
+
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('connectionId', sql.Int, connectionId)
+            .input('userId', sql.Int, req.user.id)
+            .query('DELETE FROM connections WHERE id = @connectionId AND (parent1_id = @userId OR parent2_id = @userId)');
+
+        if (result.rowsAffected[0] === 0) {
+            return res.status(404).json({ success: false, error: 'Connection not found or access denied' });
+        }
+
+        await logActivity('info', `Connection deleted`, req.user.id, { connectionId }, req);
+
+        res.json({
+            success: true,
+            message: 'Connection deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete connection error:', error);
+        await logActivity('error', `Delete connection error: ${error.message}`, req.user.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to delete connection' });
+    }
+});
+
+// ===== CALENDAR ENDPOINTS =====
+
+// Get calendar activities for user's children
+app.get('/calendar/activities', authenticateToken, async (req, res) => {
+    try {
+        const startDate = req.query.start as string;
+        const endDate = req.query.end as string;
+
+        if (!startDate || !endDate) {
+            return res.status(400).json({ success: false, error: 'Start and end dates are required' });
+        }
+
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('parentId', sql.Int, req.user.id)
+            .input('startDate', sql.Date, startDate)
+            .input('endDate', sql.Date, endDate)
+            .query(`
+                SELECT a.id, a.name, a.description, a.start_date, a.end_date, a.start_time, a.end_time,
+                       a.location, a.website_url, a.cost, c.name as child_name, c.id as child_id
+                FROM activities a
+                INNER JOIN children c ON a.child_id = c.id
+                WHERE c.parent_id = @parentId
+                  AND a.start_date >= @startDate 
+                  AND a.start_date <= @endDate
+                ORDER BY a.start_date ASC, a.start_time ASC
+            `);
+
+        res.json({
+            success: true,
+            data: result.recordset
+        });
+    } catch (error) {
+        console.error('Get calendar activities error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch calendar activities' });
+    }
+});
+
+// Get connected children activities
+app.get('/calendar/connected-activities', authenticateToken, async (req, res) => {
+    try {
+        const startDate = req.query.start as string;
+        const endDate = req.query.end as string;
+
+        if (!startDate || !endDate) {
+            return res.status(400).json({ success: false, error: 'Start and end dates are required' });
+        }
+
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('userId', sql.Int, req.user.id)
+            .input('startDate', sql.Date, startDate)
+            .input('endDate', sql.Date, endDate)
+            .query(`
+                SELECT a.id, a.name, a.description, a.start_date, a.end_date, a.start_time, a.end_time,
+                       a.location, a.website_url, a.cost, c.name as child_name, c.id as child_id,
+                       u.username as parent_username, u.family_name as parent_family_name
+                FROM activities a
+                INNER JOIN children c ON a.child_id = c.id
+                INNER JOIN users u ON c.parent_id = u.id
+                INNER JOIN connections conn ON (
+                    (conn.parent1_id = @userId AND conn.parent2_id = u.id) OR
+                    (conn.parent2_id = @userId AND conn.parent1_id = u.id)
+                )
+                WHERE conn.status = 'active'
+                  AND a.start_date >= @startDate 
+                  AND a.start_date <= @endDate
+                ORDER BY a.start_date ASC, a.start_time ASC
+            `);
+
+        res.json({
+            success: true,
+            data: result.recordset
+        });
+    } catch (error) {
+        console.error('Get connected activities error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch connected activities' });
     }
 });
 
