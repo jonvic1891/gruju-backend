@@ -162,29 +162,158 @@ async function createTables(client) {
             )
         `);
 
-        // Insert default admin user if not exists
-        const adminExists = await client.query(`SELECT id FROM users WHERE email = 'admin@parentactivityapp.com'`);
-        if (adminExists.rows.length === 0) {
-            await client.query(`
-                INSERT INTO users (username, email, phone, password_hash, role, family_name)
-                VALUES ('admin', 'admin@parentactivityapp.com', '+1555000001', 
-                        '$2a$12$dummy.hash.for.demo.purposes', 'super_admin', 'Admin Family')
-            `);
+        // Insert demo users if they don't exist
+        const demoUsers = [
+            ['admin', 'admin@parentactivityapp.com', '+1555000001', 'super_admin', 'Admin Family'],
+            ['manager', 'manager@parentactivityapp.com', '+1555000002', 'admin', 'Manager Family'],
+            ['johnson_family', 'johnson.family@email.com', '+1555000003', 'user', 'Johnson Family'],
+            ['smith_family', 'smith.family@email.com', '+1555000004', 'user', 'Smith Family'],
+            ['davis_family', 'davis.family@email.com', '+1555000005', 'user', 'Davis Family'],
+            ['wilson_family', 'wilson.family@email.com', '+1555000006', 'user', 'Wilson Family'],
+            ['brown_family', 'brown.family@email.com', '+1555000007', 'user', 'Brown Family']
+        ];
+
+        for (const [username, email, phone, role, family_name] of demoUsers) {
+            const userExists = await client.query(`SELECT id FROM users WHERE email = $1`, [email]);
+            if (userExists.rows.length === 0) {
+                await client.query(`
+                    INSERT INTO users (username, email, phone, password_hash, role, family_name)
+                    VALUES ($1, $2, $3, '$2a$12$dummy.hash.for.demo.purposes', $4, $5)
+                `, [username, email, phone, role, family_name]);
+                console.log(`✅ Created demo user: ${username}`);
+            }
         }
 
-        const managerExists = await client.query(`SELECT id FROM users WHERE email = 'manager@parentactivityapp.com'`);
-        if (managerExists.rows.length === 0) {
-            await client.query(`
-                INSERT INTO users (username, email, phone, password_hash, role, family_name)
-                VALUES ('manager', 'manager@parentactivityapp.com', '+1555000002', 
-                        '$2a$12$dummy.hash.for.demo.purposes', 'admin', 'Manager Family')
-            `);
-        }
+        // Insert demo children if they don't exist
+        await insertDemoChildren(client);
+        
+        // Insert demo activities if they don't exist
+        await insertDemoActivities(client);
+        
+        // Insert demo connections if they don't exist
+        await insertDemoConnections(client);
 
         console.log('✅ Database tables created successfully');
     } catch (error) {
         console.error('❌ Error creating tables:', error);
         throw error;
+    }
+}
+
+// Insert demo children
+async function insertDemoChildren(client) {
+    const demoChildren = [
+        // Johnson Family children
+        ['Emma Johnson', 3, 8, 'K', 'Maple Elementary', 'Soccer, Art, Reading'],
+        ['Noah Johnson', 3, 10, '4th', 'Maple Elementary', 'Basketball, Video Games, Science'],
+        
+        // Smith Family children  
+        ['Sophia Smith', 4, 6, 'Pre-K', 'Sunshine Daycare', 'Dancing, Music, Puzzles'],
+        ['Liam Smith', 4, 9, '3rd', 'Oak Elementary', 'Baseball, Math, Chess'],
+        
+        // Davis Family children
+        ['Olivia Davis', 5, 7, '1st', 'Pine Elementary', 'Swimming, Drawing, Books'],
+        ['Mason Davis', 5, 12, '6th', 'Riverside Middle', 'Football, Coding, History'],
+        
+        // Wilson Family children
+        ['Ava Wilson', 6, 5, 'Pre-K', 'Little Stars Preschool', 'Singing, Coloring, Animals'],
+        
+        // Brown Family children  
+        ['Ethan Brown', 7, 11, '5th', 'Cedar Elementary', 'Tennis, Guitar, Adventure'],
+        ['Isabella Brown', 7, 14, '8th', 'Valley Middle School', 'Volleyball, Photography, Writing']
+    ];
+
+    for (const [name, parent_id, age, grade, school, interests] of demoChildren) {
+        const childExists = await client.query(`SELECT id FROM children WHERE name = $1 AND parent_id = $2`, [name, parent_id]);
+        if (childExists.rows.length === 0) {
+            await client.query(`
+                INSERT INTO children (name, parent_id, age, grade, school, interests)
+                VALUES ($1, $2, $3, $4, $5, $6)
+            `, [name, parent_id, age, grade, school, interests]);
+            console.log(`✅ Created demo child: ${name}`);
+        }
+    }
+}
+
+// Insert demo activities
+async function insertDemoActivities(client) {
+    const demoActivities = [
+        // Emma's activities (child_id 1)
+        [1, 'Soccer Practice', 'Weekly soccer practice with the Lightning Bolts team', '2025-08-02', null, '10:00', '11:30', 'Riverside Sports Complex', null, 25.00, 15],
+        [1, 'Art Class', 'Creative painting and drawing session', '2025-08-05', null, '14:00', '15:30', 'Community Art Center', 'https://communityartcenter.com', 30.00, 10],
+        [1, 'Birthday Party', 'Sarah\'s 8th birthday party', '2025-08-10', null, '15:00', '17:00', '123 Oak Street', null, null, null],
+        [1, 'Swimming Lessons', 'Beginner swimming lessons', '2025-08-12', null, '16:00', '17:00', 'Aquatic Center', null, 40.00, 8],
+        
+        // Noah's activities (child_id 2)
+        [2, 'Basketball Practice', 'Weekly basketball training', '2025-08-03', null, '09:00', '10:30', 'School Gymnasium', null, 20.00, 12],
+        [2, 'Science Club', 'Weekly science experiments and projects', '2025-08-07', null, '15:30', '16:30', 'Maple Elementary', null, 15.00, 20],
+        [2, 'Gaming Tournament', 'Local esports tournament', '2025-08-14', null, '13:00', '18:00', 'Gaming Lounge', 'https://gamerlounge.com', 10.00, 32],
+        
+        // Sophia's activities (child_id 3)
+        [3, 'Dance Class', 'Ballet and jazz dance lessons', '2025-08-01', null, '17:00', '18:00', 'Dance Studio', null, 35.00, 8],
+        [3, 'Music Lessons', 'Piano lessons for beginners', '2025-08-04', null, '11:00', '11:45', 'Music Academy', null, 50.00, 1],
+        [3, 'Playdate', 'Playdate with Emma Johnson', '2025-08-08', null, '14:00', '16:00', 'Central Park', null, null, null],
+        
+        // Liam's activities (child_id 4)
+        [4, 'Baseball Practice', 'Little League practice', '2025-08-02', null, '08:00', '10:00', 'Baseball Fields', null, 30.00, 15],
+        [4, 'Chess Club', 'Weekly chess club meeting', '2025-08-06', null, '15:00', '16:00', 'Oak Elementary', null, 10.00, 12],
+        [4, 'Math Tutoring', 'Advanced math tutoring session', '2025-08-09', null, '16:00', '17:00', 'Learning Center', null, 45.00, 1],
+        
+        // Olivia's activities (child_id 5)
+        [5, 'Swimming Class', 'Intermediate swimming', '2025-08-01', null, '18:00', '19:00', 'Aquatic Center', null, 40.00, 8],
+        [5, 'Art Workshop', 'Drawing and painting workshop', '2025-08-11', null, '10:00', '12:00', 'Community Center', null, 25.00, 15],
+        
+        // Mason's activities (child_id 6)
+        [6, 'Football Practice', 'Middle school football team', '2025-08-03', null, '16:00', '18:00', 'School Field', null, 50.00, 25],
+        [6, 'Coding Club', 'Learn programming basics', '2025-08-08', null, '17:00', '18:30', 'Tech Center', 'https://techcenter.com', 40.00, 10],
+        
+        // Ava's activities (child_id 7)
+        [7, 'Singing Lessons', 'Voice lessons for kids', '2025-08-05', null, '10:00', '10:30', 'Music Studio', null, 35.00, 1],
+        [7, 'Zoo Trip', 'Field trip to the zoo', '2025-08-13', null, '09:00', '15:00', 'City Zoo', 'https://cityzoo.com', 20.00, 50],
+        
+        // Ethan's activities (child_id 8)
+        [8, 'Tennis Lessons', 'Tennis coaching for kids', '2025-08-02', null, '14:00', '15:00', 'Tennis Club', null, 45.00, 6],
+        [8, 'Guitar Lessons', 'Learn to play guitar', '2025-08-07', null, '16:00', '16:45', 'Music School', null, 40.00, 1],
+        
+        // Isabella's activities (child_id 9)
+        [9, 'Volleyball Practice', 'School volleyball team', '2025-08-04', null, '15:30', '17:00', 'School Gym', null, 25.00, 12],
+        [9, 'Photography Workshop', 'Digital photography basics', '2025-08-10', null, '13:00', '16:00', 'Photo Studio', 'https://photostudio.com', 60.00, 8]
+    ];
+
+    for (const [child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants] of demoActivities) {
+        const activityExists = await client.query(`SELECT id FROM activities WHERE name = $1 AND child_id = $2`, [name, child_id]);
+        if (activityExists.rows.length === 0) {
+            await client.query(`
+                INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            `, [child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants]);
+            console.log(`✅ Created demo activity: ${name} for child ${child_id}`);
+        }
+    }
+}
+
+// Insert demo connections
+async function insertDemoConnections(client) {
+    const demoConnections = [
+        [3, 4], // Johnson <-> Smith families
+        [3, 5], // Johnson <-> Davis families  
+        [4, 5], // Smith <-> Davis families
+        [6, 7]  // Wilson <-> Brown families
+    ];
+
+    for (const [parent1_id, parent2_id] of demoConnections) {
+        const connectionExists = await client.query(`
+            SELECT id FROM connections 
+            WHERE (parent1_id = $1 AND parent2_id = $2) OR (parent1_id = $2 AND parent2_id = $1)
+        `, [parent1_id, parent2_id]);
+        
+        if (connectionExists.rows.length === 0) {
+            await client.query(`
+                INSERT INTO connections (parent1_id, parent2_id, status)
+                VALUES ($1, $2, 'active')
+            `, [parent1_id, parent2_id]);
+            console.log(`✅ Created demo connection: ${parent1_id} <-> ${parent2_id}`);
+        }
     }
 }
 
