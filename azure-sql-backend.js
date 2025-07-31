@@ -1258,7 +1258,7 @@ app.delete('/activities/:id', authenticateToken, async (req, res) => {
 // Search for parents
 app.get('/connections/search', authenticateToken, async (req, res) => {
     try {
-        const query = req.query.q as string;
+        const query = req.query.q;
         
         if (!query || query.length < 2) {
             return res.status(400).json({ success: false, error: 'Search query must be at least 2 characters' });
@@ -1500,8 +1500,8 @@ app.delete('/connections/:id', authenticateToken, async (req, res) => {
 // Get calendar activities for user's children
 app.get('/calendar/activities', authenticateToken, async (req, res) => {
     try {
-        const startDate = req.query.start as string;
-        const endDate = req.query.end as string;
+        const startDate = req.query.start;
+        const endDate = req.query.end;
 
         if (!startDate || !endDate) {
             return res.status(400).json({ success: false, error: 'Start and end dates are required' });
@@ -1536,8 +1536,8 @@ app.get('/calendar/activities', authenticateToken, async (req, res) => {
 // Get connected children activities
 app.get('/calendar/connected-activities', authenticateToken, async (req, res) => {
     try {
-        const startDate = req.query.start as string;
-        const endDate = req.query.end as string;
+        const startDate = req.query.start;
+        const endDate = req.query.end;
 
         if (!startDate || !endDate) {
             return res.status(400).json({ success: false, error: 'Start and end dates are required' });
