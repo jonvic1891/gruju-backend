@@ -1,1 +1,1 @@
-web: node azure-sql-backend.js
+web: node postgres-backend.js
