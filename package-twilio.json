@@ -1,0 +1,18 @@
+{
+  "name": "sms-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "twilio": "^5.3.7",
+    "@sendgrid/mail": "^8.1.3",
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
+  }
+}

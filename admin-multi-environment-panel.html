@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parent Activity App - Multi-Environment Database Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #007AFF 0%, #0056CC 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .card-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .card-body {
+            padding: 20px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-mock {
+            background-color: #ffc107;
+        }
+        
+        .status-demo {
+            background-color: #17a2b8;
+        }
+        
+        .status-test {
+            background-color: #fd7e14;
+        }
+        
+        .status-production {
+            background-color: #28a745;
+        }
+        
+        .status-error {
+            background-color: #dc3545;
+        }
+        
+        .btn {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+            transition: background-color 0.2s;
+        }
+        
+        .btn:hover {
+            background: #0056CC;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .btn-success {
+            background: #28a745;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+        }
+        
+        .btn-warning {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+        
+        .btn-info {
+            background: #17a2b8;
+        }
+        
+        .btn-info:hover {
+            background: #138496;
+        }
+        
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .alert {
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .alert-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .alert-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .tab-container {
+            display: flex;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .tab.active {
+            border-bottom-color: #007AFF;
+            color: #007AFF;
+            font-weight: 500;
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 20px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .environment-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .environment-card {
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.2s;
+        }
+        
+        .environment-card.active {
+            border-color: #007AFF;
+            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.15);
+        }
+        
+        .environment-card.demo {
+            border-color: #17a2b8;
+        }
+        
+        .environment-card.test {
+            border-color: #fd7e14;
+        }
+        
+        .environment-card.production {
+            border-color: #28a745;
+        }
+        
+        .environment-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .environment-details {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .provision-form {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .demo-integration {
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .demo-integration h3 {
+            margin-bottom: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 10px;
+            }
+            
+            .environment-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌐 Multi-Environment Database Administration</h1>
+        <p>Manage Demo, Test, and Production databases with seamless switching</p>
+    </div>
+
+    <div class="container">
+        <!-- Current Status Card -->
+        <div class="card">
+            <div class="card-header">
+                <span>📊 Current Database Environment</span>
+                <button class="btn" onclick="refreshStatus()">🔄 Refresh</button>
+            </div>
+            <div class="card-body">
+                <div id="dbStatus" class="loading">Loading database status...</div>
+            </div>
+        </div>
+
+        <!-- Demo Integration Notice -->
+        <div class="demo-integration">
+            <h3>🎮 Demo App Integration</h3>
+            <p>Your demo app can now connect to real SQL databases! Switch environments to test actual database connections in the demo interface.</p>
+            <div style="margin-top: 10px;">
+                <button class="btn" onclick="openDemo()" style="background: rgba(255,255,255,0.2);">🚀 Open Demo App</button>
+                <button class="btn" onclick="testDemoConnection()" style="background: rgba(255,255,255,0.2);">🧪 Test Demo Integration</button>
+            </div>
+        </div>
+
+        <!-- Environment Overview -->
+        <div class="card">
+            <div class="card-header">
+                <span>🌍 Available Database Environments</span>
+            </div>
+            <div class="card-body">
+                <div id="environmentOverview" class="environment-grid">
+                    <div class="loading">Loading environments...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="card">
+            <div class="tab-container">
+                <div class="tab active" onclick="switchTab('provision')">➕ Provision Database</div>
+                <div class="tab" onclick="switchTab('switch')">🔄 Switch Environment</div>
+                <div class="tab" onclick="switchTab('migration')">📦 Data Migration</div>
+                <div class="tab" onclick="switchTab('monitoring')">📊 Monitoring</div>
+            </div>
+
+            <!-- Provision Database Tab -->
+            <div id="provision" class="tab-content active">
+                <h3>Provision New Database Environment</h3>
+                <div id="provisionAlert"></div>
+                
+                <div class="provision-form">
+                    <form id="provisionForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="configId">Configuration ID:</label>
+                                <input type="text" id="configId" name="configId" class="form-control" 
+                                       placeholder="e.g., demo, test, staging" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="environment">Environment Type:</label>
+                                <select id="environment" name="environment" class="form-control" required>
+                                    <option value="">Select Environment</option>
+                                    <option value="demo">Demo/Development</option>
+                                    <option value="test">Test/Staging</option>
+                                    <option value="production">Production</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="name">Environment Name:</label>
+                                <input type="text" id="name" name="name" class="form-control" 
+                                       placeholder="e.g., Demo Database" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="description">Description:</label>
+                                <input type="text" id="description" name="description" class="form-control" 
+                                       placeholder="Database description (optional)">
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="server">Server Name:</label>
+                                <input type="text" id="server" name="server" class="form-control" 
+                                       placeholder="your-server.database.windows.net" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="database">Database Name:</label>
+                                <input type="text" id="database" name="database" class="form-control" 
+                                       placeholder="ParentActivityDB_Demo" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="username">Username:</label>
+                                <input type="text" id="username" name="username" class="form-control" 
+                                       placeholder="your_username" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="password">Password:</label>
+                                <input type="password" id="password" name="password" class="form-control" 
+                                       placeholder="your_password" required>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <button type="button" class="btn btn-success" onclick="provisionDatabase()">
+                                ➕ Provision Database
+                            </button>
+                            <button type="button" class="btn" onclick="testProvisionConnection()">
+                                🧪 Test Connection First
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Switch Environment Tab -->
+            <div id="switch" class="tab-content">
+                <h3>Switch Database Environment</h3>
+                <div id="switchAlert"></div>
+                
+                <div id="switchOptions" class="environment-grid">
+                    <div class="loading">Loading switch options...</div>
+                </div>
+            </div>
+
+            <!-- Migration Tab -->
+            <div id="migration" class="tab-content">
+                <h3>Data Migration Between Environments</h3>
+                <div id="migrationAlert"></div>
+                
+                <div class="alert-info">
+                    <h4>Migration Options:</h4>
+                    <ul style="margin: 10px 0 0 20px;">
+                        <li><strong>Mock → SQL:</strong> Transfer demo data to any SQL environment</li>
+                        <li><strong>Demo → Production:</strong> Promote tested data to production</li>
+                        <li><strong>Test → Production:</strong> Deploy verified changes</li>
+                    </ul>
+                </div>
+                
+                <div style="margin: 20px 0;">
+                    <button class="btn btn-success" onclick="startMigration()">📦 Start Migration</button>
+                    <button class="btn btn-info" onclick="checkMigrationStatus()">📊 Check Status</button>
+                </div>
+                
+                <div id="migrationResults" style="display: none;"></div>
+            </div>
+
+            <!-- Monitoring Tab -->
+            <div id="monitoring" class="tab-content">
+                <h3>Environment Monitoring & Health</h3>
+                <div id="monitoringAlert"></div>
+                
+                <div id="healthStatus" class="loading">Loading health status...</div>
+                
+                <div style="margin-top: 20px;">
+                    <button class="btn" onclick="runHealthCheck()">🔍 Run Health Check</button>
+                    <button class="btn btn-info" onclick="viewPerformanceMetrics()">📈 View Metrics</button>
+                    <button class="btn" onclick="downloadLogs()">📋 Download Logs</button>
+                </div>
+                
+                <div id="monitoringResults" style="margin-top: 15px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000';
+        let authToken = null;
+        let currentEnvironments = [];
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            authToken = localStorage.getItem('adminToken');
+            if (!authToken) {
+                loginAdmin();
+            } else {
+                refreshStatus();
+            }
+        });
+
+        async function loginAdmin() {
+            const email = prompt('Admin Email:', 'admin@parentactivityapp.com');
+            const password = prompt('Admin Password:', 'demo123');
+            
+            if (!email || !password) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    authToken = data.data.token;
+                    localStorage.setItem('adminToken', authToken);
+                    refreshStatus();
+                } else {
+                    alert('Login failed: ' + data.error);
+                }
+            } catch (error) {
+                alert('Login error: ' + error.message);
+            }
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            if (tabName === 'switch') {
+                loadSwitchOptions();
+            } else if (tabName === 'monitoring') {
+                runHealthCheck();
+            }
+        }
+
+        async function refreshStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/database/status`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    displayDatabaseStatus(data.data);
+                    displayEnvironmentOverview(data.data);
+                    currentEnvironments = data.data.availableConfigs;
+                }
+            } catch (error) {
+                document.getElementById('dbStatus').innerHTML = 
+                    '<div class="alert alert-danger">Error: ' + error.message + '</div>';
+            }
+        }
+
+        function displayDatabaseStatus(status) {
+            const statusClass = `status-${status.currentMode}`;
+            const environmentName = status.currentConfig ? status.currentConfig.name : 'Mock Database';
+            
+            document.getElementById('dbStatus').innerHTML = `
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                    <div style="display: flex; align-items: center;">
+                        <span class="status-indicator ${statusClass}"></span>
+                        <strong style="font-size: 18px;">${environmentName}</strong>
+                    </div>
+                    <span class="btn btn-small btn-${status.currentMode === 'production' ? 'danger' : 'info'}">
+                        ${status.currentMode.toUpperCase()}
+                    </span>
+                </div>
+                <p>${status.message}</p>
+                ${status.currentConfig ? `
+                    <div style="margin-top: 10px; font-size: 14px; color: #666;">
+                        <strong>Server:</strong> ${status.currentConfig.server}<br>
+                        <strong>Database:</strong> ${status.currentConfig.database}
+                    </div>
+                ` : ''}
+                <small>Status checked: ${new Date().toLocaleString()}</small>
+            `;
+        }
+
+        function displayEnvironmentOverview(status) {
+            const mockCard = `
+                <div class="environment-card ${status.currentMode === 'mock' ? 'active' : ''}">
+                    <div class="environment-title">
+                        <span class="status-indicator status-mock"></span>
+                        Mock Database
+                    </div>
+                    <div class="environment-details">
+                        Demo mode with sample data<br>
+                        <strong>Status:</strong> Always available
+                    </div>
+                    <button class="btn btn-warning btn-small" onclick="switchToEnvironment('mock')">
+                        ${status.currentMode === 'mock' ? '✅ Active' : '🔄 Switch'}
+                    </button>
+                </div>
+            `;
+
+            const sqlCards = status.availableConfigs.map(config => `
+                <div class="environment-card ${config.environment} ${status.currentMode === config.environment ? 'active' : ''}">
+                    <div class="environment-title">
+                        <span class="status-indicator status-${config.environment}"></span>
+                        ${config.name}
+                    </div>
+                    <div class="environment-details">
+                        ${config.description || 'SQL Database'}<br>
+                        <strong>Environment:</strong> ${config.environment}
+                    </div>
+                    <button class="btn btn-small ${status.currentMode === config.environment ? 'btn-success' : 'btn-info'}" 
+                            onclick="switchToEnvironment('${config.id}')">
+                        ${status.currentMode === config.environment ? '✅ Active' : '🔄 Switch'}
+                    </button>
+                </div>
+            `).join('');
+
+            document.getElementById('environmentOverview').innerHTML = mockCard + sqlCards;
+        }
+
+        async function provisionDatabase() {
+            const form = document.getElementById('provisionForm');
+            const formData = new FormData(form);
+            
+            const config = {
+                configId: formData.get('configId'),
+                server: formData.get('server'),
+                database: formData.get('database'),
+                user: formData.get('username'),
+                password: formData.get('password'),
+                environment: formData.get('environment'),
+                name: formData.get('name'),
+                description: formData.get('description')
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/database/provision`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify(config)
+                });
+
+                const data = await response.json();
+                const alertClass = data.success ? 'alert-success' : 'alert-danger';
+                const icon = data.success ? '✅' : '❌';
+                
+                document.getElementById('provisionAlert').innerHTML = `
+                    <div class="alert ${alertClass}">
+                        ${icon} ${data.success ? data.message : data.error}
+                    </div>
+                `;
+
+                if (data.success) {
+                    form.reset();
+                    refreshStatus();
+                }
+            } catch (error) {
+                document.getElementById('provisionAlert').innerHTML = `
+                    <div class="alert alert-danger">❌ Provisioning failed: ${error.message}</div>
+                `;
+            }
+        }
+
+        async function switchToEnvironment(environmentId) {
+            try {
+                const response = await fetch(`${API_BASE}/database/switch`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ environmentId })
+                });
+
+                const data = await response.json();
+                const alertClass = data.success ? 'alert-success' : 'alert-danger';
+                const icon = data.success ? '✅' : '❌';
+                
+                // Show alert in appropriate section
+                const alertElement = document.getElementById('switchAlert') || document.getElementById('provisionAlert');
+                if (alertElement) {
+                    alertElement.innerHTML = `
+                        <div class="alert ${alertClass}">${icon} ${data.success ? data.message : data.error}</div>
+                    `;
+                }
+
+                if (data.success) {
+                    refreshStatus();
+                }
+            } catch (error) {
+                const alertElement = document.getElementById('switchAlert') || document.getElementById('provisionAlert');
+                if (alertElement) {
+                    alertElement.innerHTML = `
+                        <div class="alert alert-danger">❌ Switch failed: ${error.message}</div>
+                    `;
+                }
+            }
+        }
+
+        async function loadSwitchOptions() {
+            await refreshStatus();
+        }
+
+        async function testProvisionConnection() {
+            const form = document.getElementById('provisionForm');
+            const formData = new FormData(form);
+            
+            const connectionData = {
+                server: formData.get('server'),
+                database: formData.get('database'),
+                user: formData.get('username'),
+                password: formData.get('password')
+            };
+
+            try {
+                const response = await fetch(`${API_BASE}/database/test-connection`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify(connectionData)
+                });
+
+                const data = await response.json();
+                const alertClass = data.success ? 'alert-success' : 'alert-danger';
+                const icon = data.success ? '✅' : '❌';
+                
+                document.getElementById('provisionAlert').innerHTML = `
+                    <div class="alert ${alertClass}">
+                        ${icon} ${data.success ? 'Connection test successful!' : data.error}
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('provisionAlert').innerHTML = `
+                    <div class="alert alert-danger">❌ Connection test failed: ${error.message}</div>
+                `;
+            }
+        }
+
+        async function startMigration() {
+            if (!confirm('Start data migration? This will transfer data between environments.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/database/migrate`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                const data = await response.json();
+                const alertClass = data.success ? 'alert-success' : 'alert-danger';
+                const icon = data.success ? '✅' : '❌';
+                
+                document.getElementById('migrationResults').style.display = 'block';
+                document.getElementById('migrationResults').innerHTML = `
+                    <div class="alert ${alertClass}">${icon} ${data.success ? data.message : data.error}</div>
+                `;
+            } catch (error) {
+                document.getElementById('migrationResults').innerHTML = `
+                    <div class="alert alert-danger">❌ Migration failed: ${error.message}</div>
+                `;
+            }
+        }
+
+        async function runHealthCheck() {
+            try {
+                document.getElementById('healthStatus').innerHTML = 
+                    '<div class="loading">Running comprehensive health check...</div>';
+
+                const response = await fetch(`${API_BASE}/database/health`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    displayHealthStatus(data.data);
+                }
+            } catch (error) {
+                document.getElementById('healthStatus').innerHTML = 
+                    '<div class="alert alert-danger">Health check failed: ' + error.message + '</div>';
+            }
+        }
+
+        function displayHealthStatus(health) {
+            const statusClass = health.status === 'healthy' ? 'alert-success' : 'alert-danger';
+            const icon = health.status === 'healthy' ? '💚' : '❌';
+            
+            document.getElementById('healthStatus').innerHTML = `
+                <div class="alert ${statusClass}">
+                    ${icon} <strong>${health.type}</strong> - ${health.status.toUpperCase()}
+                </div>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 15px;">
+                    <h4>Health Details:</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 10px;">
+                        <div><strong>Mode:</strong> ${health.mode}</div>
+                        <div><strong>Connection:</strong> ${health.connectionStatus}</div>
+                        <div><strong>Users:</strong> ${health.userCount}</div>
+                        <div><strong>Checked:</strong> ${new Date(health.timestamp).toLocaleString()}</div>
+                    </div>
+                    ${health.error ? `<div style="margin-top: 10px; color: #dc3545;"><strong>Error:</strong> ${health.error}</div>` : ''}
+                </div>
+            `;
+        }
+
+        function openDemo() {
+            window.open('demo.html', '_blank');
+        }
+
+        function testDemoConnection() {
+            alert('Demo connection test - this would verify the demo app can connect to the current database environment.');
+        }
+
+        function checkMigrationStatus() {
+            refreshStatus();
+        }
+
+        function viewPerformanceMetrics() {
+            alert('Performance metrics viewer would be implemented here.');
+        }
+
+        function downloadLogs() {
+            alert('Log download functionality would be implemented here.');
+        }
+    </script>
+</body>
+</html>

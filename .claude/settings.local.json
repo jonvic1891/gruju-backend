@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:*)",
+      "Bash(rg:*)",
+      "Bash(timeout 5s npm run dev)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(npm start)",
+      "Bash(timeout 10s npm start)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(curl:*)",
+      "Bash(firebase login:*)"
+    ],
+    "deny": []
+  }
+}
