@@ -174,13 +174,19 @@ async function createTables(client) {
         ];
 
         for (const [username, email, phone, role, family_name] of demoUsers) {
-            const userExists = await client.query(`SELECT id FROM users WHERE email = $1`, [email]);
+            const userExists = await client.query(`SELECT id FROM users WHERE email = $1 OR username = $2`, [email, username]);
             if (userExists.rows.length === 0) {
-                await client.query(`
-                    INSERT INTO users (username, email, phone, password_hash, role, family_name)
-                    VALUES ($1, $2, $3, '$2a$12$dummy.hash.for.demo.purposes', $4, $5)
-                `, [username, email, phone, role, family_name]);
-                console.log(`✅ Created demo user: ${username}`);
+                try {
+                    await client.query(`
+                        INSERT INTO users (username, email, phone, password_hash, role, family_name)
+                        VALUES ($1, $2, $3, '$2a$12$dummy.hash.for.demo.purposes', $4, $5)
+                    `, [username, email, phone, role, family_name]);
+                    console.log(`✅ Created demo user: ${username}`);
+                } catch (error) {
+                    if (error.code !== '23505') { // Ignore duplicate key errors
+                        console.error(`Error creating user ${username}:`, error);
+                    }
+                }
             }
         }
 
@@ -226,11 +232,15 @@ async function insertDemoChildren(client) {
     for (const [name, parent_id, age, grade, school, interests] of demoChildren) {
         const childExists = await client.query(`SELECT id FROM children WHERE name = $1 AND parent_id = $2`, [name, parent_id]);
         if (childExists.rows.length === 0) {
-            await client.query(`
-                INSERT INTO children (name, parent_id, age, grade, school, interests)
-                VALUES ($1, $2, $3, $4, $5, $6)
-            `, [name, parent_id, age, grade, school, interests]);
-            console.log(`✅ Created demo child: ${name}`);
+            try {
+                await client.query(`
+                    INSERT INTO children (name, parent_id, age, grade, school, interests)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                `, [name, parent_id, age, grade, school, interests]);
+                console.log(`✅ Created demo child: ${name}`);
+            } catch (error) {
+                console.error(`Error creating child ${name}:`, error.message);
+            }
         }
     }
 }
@@ -283,11 +293,15 @@ async function insertDemoActivities(client) {
     for (const [child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants] of demoActivities) {
         const activityExists = await client.query(`SELECT id FROM activities WHERE name = $1 AND child_id = $2`, [name, child_id]);
         if (activityExists.rows.length === 0) {
-            await client.query(`
-                INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-            `, [child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants]);
-            console.log(`✅ Created demo activity: ${name} for child ${child_id}`);
+            try {
+                await client.query(`
+                    INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                `, [child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants]);
+                console.log(`✅ Created demo activity: ${name} for child ${child_id}`);
+            } catch (error) {
+                console.error(`Error creating activity ${name}:`, error.message);
+            }
         }
     }
 }
@@ -308,11 +322,15 @@ async function insertDemoConnections(client) {
         `, [parent1_id, parent2_id]);
         
         if (connectionExists.rows.length === 0) {
-            await client.query(`
-                INSERT INTO connections (parent1_id, parent2_id, status)
-                VALUES ($1, $2, 'active')
-            `, [parent1_id, parent2_id]);
-            console.log(`✅ Created demo connection: ${parent1_id} <-> ${parent2_id}`);
+            try {
+                await client.query(`
+                    INSERT INTO connections (parent1_id, parent2_id, status)
+                    VALUES ($1, $2, 'active')
+                `, [parent1_id, parent2_id]);
+                console.log(`✅ Created demo connection: ${parent1_id} <-> ${parent2_id}`);
+            } catch (error) {
+                console.error(`Error creating connection ${parent1_id} <-> ${parent2_id}:`, error.message);
+            }
         }
     }
 }
