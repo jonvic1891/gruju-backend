@@ -139,16 +139,23 @@ async function createTables(client) {
                 id SERIAL PRIMARY KEY,
                 parent1_id INTEGER,
                 parent2_id INTEGER,
-                child1_id INTEGER,
-                child2_id INTEGER,
                 status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'blocked')),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (parent1_id) REFERENCES users(id),
                 FOREIGN KEY (parent2_id) REFERENCES users(id),
-                FOREIGN KEY (child1_id) REFERENCES children(id),
-                FOREIGN KEY (child2_id) REFERENCES children(id)
+                UNIQUE(parent1_id, parent2_id)
             )
         `);
+
+        // Add child columns if they don't exist (migration)
+        try {
+            await client.query(`ALTER TABLE connections ADD COLUMN IF NOT EXISTS child1_id INTEGER`);
+            await client.query(`ALTER TABLE connections ADD COLUMN IF NOT EXISTS child2_id INTEGER`);
+            await client.query(`ALTER TABLE connections ADD CONSTRAINT IF NOT EXISTS fk_child1 FOREIGN KEY (child1_id) REFERENCES children(id)`);
+            await client.query(`ALTER TABLE connections ADD CONSTRAINT IF NOT EXISTS fk_child2 FOREIGN KEY (child2_id) REFERENCES children(id)`);
+        } catch (error) {
+            console.log('Migration columns may already exist:', error.message);
+        }
 
         // System logs table
         await client.query(`
