@@ -133,17 +133,20 @@ async function createTables(client) {
             )
         `);
 
-        // Connections table
+        // Connections table (updated to match original demo structure)
         await client.query(`
             CREATE TABLE IF NOT EXISTS connections (
                 id SERIAL PRIMARY KEY,
-                parent1_id INTEGER NOT NULL,
-                parent2_id INTEGER NOT NULL,
+                parent1_id INTEGER,
+                parent2_id INTEGER,
+                child1_id INTEGER,
+                child2_id INTEGER,
                 status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'blocked')),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (parent1_id) REFERENCES users(id),
                 FOREIGN KEY (parent2_id) REFERENCES users(id),
-                UNIQUE(parent1_id, parent2_id)
+                FOREIGN KEY (child1_id) REFERENCES children(id),
+                FOREIGN KEY (child2_id) REFERENCES children(id)
             )
         `);
 
@@ -162,26 +165,26 @@ async function createTables(client) {
             )
         `);
 
-        // Insert demo users if they don't exist
-        const demoUsers = [
-            ['admin', 'admin@parentactivityapp.com', '+1555000001', 'super_admin', 'Admin Family'],
-            ['manager', 'manager@parentactivityapp.com', '+1555000002', 'admin', 'Manager Family'],
-            ['johnson_family', 'johnson.family@email.com', '+1555000003', 'user', 'Johnson Family'],
-            ['smith_family', 'smith.family@email.com', '+1555000004', 'user', 'Smith Family'],
-            ['davis_family', 'davis.family@email.com', '+1555000005', 'user', 'Davis Family'],
-            ['wilson_family', 'wilson.family@email.com', '+1555000006', 'user', 'Wilson Family'],
-            ['brown_family', 'brown.family@email.com', '+1555000007', 'user', 'Brown Family']
+        // Insert original demo users from demo.html exactly as they were
+        const originalDemoUsers = [
+            ['admin', 'admin@parentactivityapp.com', '+1555000001', 'super_admin', 'Super Admin'],
+            ['manager', 'manager@parentactivityapp.com', '+1555000002', 'admin', 'System Manager'],
+            ['johnson', 'johnson@example.com', '', 'user', 'Johnson Family'],
+            ['davis', 'davis@example.com', '07487654321', 'user', 'Davis Family'],
+            ['wong', 'wong@example.com', '07456789123', 'user', 'Wong Family'],
+            ['thompson', 'thompson@example.com', '', 'user', 'Thompson Family'],
+            ['miller', 'joe@example.com', '07412345123', 'user', 'Miller Family']
         ];
 
-        for (const [username, email, phone, role, family_name] of demoUsers) {
-            const userExists = await client.query(`SELECT id FROM users WHERE email = $1 OR username = $2`, [email, username]);
+        for (const [username, email, phone, role, family_name] of originalDemoUsers) {
+            const userExists = await client.query(`SELECT id FROM users WHERE email = $1`, [email]);
             if (userExists.rows.length === 0) {
                 try {
                     await client.query(`
                         INSERT INTO users (username, email, phone, password_hash, role, family_name)
                         VALUES ($1, $2, $3, '$2a$12$dummy.hash.for.demo.purposes', $4, $5)
                     `, [username, email, phone, role, family_name]);
-                    console.log(`✅ Created demo user: ${username}`);
+                    console.log(`✅ Created original demo user: ${username}`);
                 } catch (error) {
                     if (error.code !== '23505') { // Ignore duplicate key errors
                         console.error(`Error creating user ${username}:`, error);
@@ -206,53 +209,47 @@ async function createTables(client) {
     }
 }
 
-// Insert demo children
+// Insert original demo children from demo.html
 async function insertDemoChildren(client) {
     // Get user IDs dynamically
-    const users = await client.query('SELECT id, username FROM users ORDER BY id');
+    const users = await client.query('SELECT id, email FROM users ORDER BY id');
     const userMap = {};
     users.rows.forEach(user => {
-        userMap[user.username] = user.id;
+        userMap[user.email] = user.id;
     });
 
-    const demoChildren = [
-        // Johnson Family children
-        ['Emma Johnson', userMap['johnson_family'], 8, 'K', 'Maple Elementary', 'Soccer, Art, Reading'],
-        ['Noah Johnson', userMap['johnson_family'], 10, '4th', 'Maple Elementary', 'Basketball, Video Games, Science'],
-        
-        // Smith Family children  
-        ['Sophia Smith', userMap['smith_family'], 6, 'Pre-K', 'Sunshine Daycare', 'Dancing, Music, Puzzles'],
-        ['Liam Smith', userMap['smith_family'], 9, '3rd', 'Oak Elementary', 'Baseball, Math, Chess'],
-        
-        // Davis Family children
-        ['Olivia Davis', userMap['davis_family'], 7, '1st', 'Pine Elementary', 'Swimming, Drawing, Books'],
-        ['Mason Davis', userMap['davis_family'], 12, '6th', 'Riverside Middle', 'Football, Coding, History'],
-        
-        // Wilson Family children
-        ['Ava Wilson', userMap['wilson_family'], 5, 'Pre-K', 'Little Stars Preschool', 'Singing, Coloring, Animals'],
-        
-        // Brown Family children  
-        ['Ethan Brown', userMap['brown_family'], 11, '5th', 'Cedar Elementary', 'Tennis, Guitar, Adventure'],
-        ['Isabella Brown', userMap['brown_family'], 14, '8th', 'Valley Middle School', 'Volleyball, Photography, Writing']
+    const originalDemoChildren = [
+        // Original demo.html families and children
+        ['Emma Johnson', userMap['johnson@example.com']],
+        ['Alex Johnson', userMap['johnson@example.com']],
+        ['Jake Davis', userMap['davis@example.com']],
+        ['Mia Wong', userMap['wong@example.com']],
+        ['Ryan Wong', userMap['wong@example.com']],
+        ['Zoe Wong', userMap['wong@example.com']],
+        ['Sophie Thompson', userMap['thompson@example.com']],
+        ['Oliver Thompson', userMap['thompson@example.com']],
+        ['Theodore Miller', userMap['joe@example.com']]
     ];
 
-    for (const [name, parent_id, age, grade, school, interests] of demoChildren) {
-        const childExists = await client.query(`SELECT id FROM children WHERE name = $1 AND parent_id = $2`, [name, parent_id]);
-        if (childExists.rows.length === 0) {
-            try {
-                await client.query(`
-                    INSERT INTO children (name, parent_id, age, grade, school, interests)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                `, [name, parent_id, age, grade, school, interests]);
-                console.log(`✅ Created demo child: ${name}`);
-            } catch (error) {
-                console.error(`Error creating child ${name}:`, error.message);
+    for (const [name, parent_id] of originalDemoChildren) {
+        if (parent_id) { // Only insert if parent exists
+            const childExists = await client.query(`SELECT id FROM children WHERE name = $1 AND parent_id = $2`, [name, parent_id]);
+            if (childExists.rows.length === 0) {
+                try {
+                    await client.query(`
+                        INSERT INTO children (name, parent_id)
+                        VALUES ($1, $2)
+                    `, [name, parent_id]);
+                    console.log(`✅ Created original demo child: ${name}`);
+                } catch (error) {
+                    console.error(`Error creating child ${name}:`, error.message);
+                }
             }
         }
     }
 }
 
-// Insert demo activities
+// Insert original demo activities from demo.html
 async function insertDemoActivities(client) {
     // Get child IDs dynamically
     const children = await client.query('SELECT id, name FROM children ORDER BY id');
@@ -261,50 +258,42 @@ async function insertDemoActivities(client) {
         childMap[child.name] = child.id;
     });
 
-    const demoActivities = [
-        // Emma's activities
-        [childMap['Emma Johnson'], 'Soccer Practice', 'Weekly soccer practice with the Lightning Bolts team', '2025-08-02', null, '10:00', '11:30', 'Riverside Sports Complex', null, 25.00, 15],
-        [childMap['Emma Johnson'], 'Art Class', 'Creative painting and drawing session', '2025-08-05', null, '14:00', '15:30', 'Community Art Center', 'https://communityartcenter.com', 30.00, 10],
-        [childMap['Emma Johnson'], 'Birthday Party', 'Sarah\'s 8th birthday party', '2025-08-10', null, '15:00', '17:00', '123 Oak Street', null, null, null],
-        [childMap['Emma Johnson'], 'Swimming Lessons', 'Beginner swimming lessons', '2025-08-12', null, '16:00', '17:00', 'Aquatic Center', null, 40.00, 8],
+    // Get current week dates for activities (like original demo.html)
+    const today = new Date();
+    const currentWeekDates = [];
+    const startOfWeek = new Date(today);
+    const dayOfWeek = startOfWeek.getDay();
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    startOfWeek.setDate(startOfWeek.getDate() - daysFromMonday);
+    
+    for (let i = 0; i < 7; i++) {
+        const weekDay = new Date(startOfWeek);
+        weekDay.setDate(startOfWeek.getDate() + i);
+        const year = weekDay.getFullYear();
+        const month = String(weekDay.getMonth() + 1).padStart(2, '0');
+        const day = String(weekDay.getDate()).padStart(2, '0');
+        currentWeekDates.push(`${year}-${month}-${day}`);
+    }
+
+    const originalDemoActivities = [
+        // Emma Johnson activities (from original demo.html)
+        [childMap['Emma Johnson'], 'Soccer Practice', 'Mondays at the park', currentWeekDates[0], null, '16:00', '18:00', null, null, null, null],
+        [childMap['Emma Johnson'], 'Swimming Lesson', 'Wednesdays at the pool', currentWeekDates[2], null, '10:00', '11:00', null, null, null, null],
+        [childMap['Emma Johnson'], 'Art Class', 'Thursdays art session', currentWeekDates[3], null, '14:00', '15:30', null, null, null, null],
+        [childMap['Emma Johnson'], 'Dance Class', 'Saturday morning dance', currentWeekDates[5], null, '11:00', '12:00', null, null, null, null],
+        [childMap['Emma Johnson'], 'Tennis Lesson', 'Sunday afternoon tennis', currentWeekDates[6], null, '14:00', '15:00', null, null, null, null],
         
-        // Noah's activities
-        [childMap['Noah Johnson'], 'Basketball Practice', 'Weekly basketball training', '2025-08-03', null, '09:00', '10:30', 'School Gymnasium', null, 20.00, 12],
-        [childMap['Noah Johnson'], 'Science Club', 'Weekly science experiments and projects', '2025-08-07', null, '15:30', '16:30', 'Maple Elementary', null, 15.00, 20],
-        [childMap['Noah Johnson'], 'Gaming Tournament', 'Local esports tournament', '2025-08-14', null, '13:00', '18:00', 'Gaming Lounge', 'https://gamerlounge.com', 10.00, 32],
+        // Alex Johnson activities (from original demo.html)
+        [childMap['Alex Johnson'], 'Piano Lesson', 'Tuesday piano practice', currentWeekDates[1], null, '15:30', '16:30', null, null, null, null],
+        [childMap['Alex Johnson'], 'Basketball', 'Friday morning basketball', currentWeekDates[4], null, '09:00', '10:30', null, null, null, null],
         
-        // Sophia's activities
-        [childMap['Sophia Smith'], 'Dance Class', 'Ballet and jazz dance lessons', '2025-08-01', null, '17:00', '18:00', 'Dance Studio', null, 35.00, 8],
-        [childMap['Sophia Smith'], 'Music Lessons', 'Piano lessons for beginners', '2025-08-04', null, '11:00', '11:45', 'Music Academy', null, 50.00, 1],
-        [childMap['Sophia Smith'], 'Playdate', 'Playdate with Emma Johnson', '2025-08-08', null, '14:00', '16:00', 'Central Park', null, null, null],
-        
-        // Liam's activities
-        [childMap['Liam Smith'], 'Baseball Practice', 'Little League practice', '2025-08-02', null, '08:00', '10:00', 'Baseball Fields', null, 30.00, 15],
-        [childMap['Liam Smith'], 'Chess Club', 'Weekly chess club meeting', '2025-08-06', null, '15:00', '16:00', 'Oak Elementary', null, 10.00, 12],
-        [childMap['Liam Smith'], 'Math Tutoring', 'Advanced math tutoring session', '2025-08-09', null, '16:00', '17:00', 'Learning Center', null, 45.00, 1],
-        
-        // Olivia's activities
-        [childMap['Olivia Davis'], 'Swimming Class', 'Intermediate swimming', '2025-08-01', null, '18:00', '19:00', 'Aquatic Center', null, 40.00, 8],
-        [childMap['Olivia Davis'], 'Art Workshop', 'Drawing and painting workshop', '2025-08-11', null, '10:00', '12:00', 'Community Center', null, 25.00, 15],
-        
-        // Mason's activities
-        [childMap['Mason Davis'], 'Football Practice', 'Middle school football team', '2025-08-03', null, '16:00', '18:00', 'School Field', null, 50.00, 25],
-        [childMap['Mason Davis'], 'Coding Club', 'Learn programming basics', '2025-08-08', null, '17:00', '18:30', 'Tech Center', 'https://techcenter.com', 40.00, 10],
-        
-        // Ava's activities
-        [childMap['Ava Wilson'], 'Singing Lessons', 'Voice lessons for kids', '2025-08-05', null, '10:00', '10:30', 'Music Studio', null, 35.00, 1],
-        [childMap['Ava Wilson'], 'Zoo Trip', 'Field trip to the zoo', '2025-08-13', null, '09:00', '15:00', 'City Zoo', 'https://cityzoo.com', 20.00, 50],
-        
-        // Ethan's activities
-        [childMap['Ethan Brown'], 'Tennis Lessons', 'Tennis coaching for kids', '2025-08-02', null, '14:00', '15:00', 'Tennis Club', null, 45.00, 6],
-        [childMap['Ethan Brown'], 'Guitar Lessons', 'Learn to play guitar', '2025-08-07', null, '16:00', '16:45', 'Music School', null, 40.00, 1],
-        
-        // Isabella's activities
-        [childMap['Isabella Brown'], 'Volleyball Practice', 'School volleyball team', '2025-08-04', null, '15:30', '17:00', 'School Gym', null, 25.00, 12],
-        [childMap['Isabella Brown'], 'Photography Workshop', 'Digital photography basics', '2025-08-10', null, '13:00', '16:00', 'Photo Studio', 'https://photostudio.com', 60.00, 8]
+        // Other original demo activities
+        [childMap['Theodore Miller'], 'Robotics Club', 'Tuesday robotics club', currentWeekDates[1], null, '16:00', '18:00', null, null, null, null],
+        [childMap['Jake Davis'], 'Football Training', 'Wednesday football training', currentWeekDates[2], null, '17:00', '18:30', null, null, null, null],
+        [childMap['Mia Wong'], 'Violin Lessons', 'Thursday violin lessons', currentWeekDates[3], null, '15:00', '16:00', null, null, null, null]
     ];
 
-    for (const [child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants] of demoActivities) {
+    for (const [child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants] of originalDemoActivities) {
         const activityExists = await client.query(`SELECT id FROM activities WHERE name = $1 AND child_id = $2`, [name, child_id]);
         if (activityExists.rows.length === 0) {
             try {
@@ -320,37 +309,95 @@ async function insertDemoActivities(client) {
     }
 }
 
-// Insert demo connections
+// Insert original demo connections
 async function insertDemoConnections(client) {
     // Get user IDs dynamically
-    const users = await client.query('SELECT id, username FROM users');
+    const users = await client.query('SELECT id, email FROM users');
     const userMap = {};
     users.rows.forEach(user => {
-        userMap[user.username] = user.id;
+        userMap[user.email] = user.id;
     });
 
-    const demoConnections = [
-        [userMap['johnson_family'], userMap['smith_family']], // Johnson <-> Smith families
-        [userMap['johnson_family'], userMap['davis_family']], // Johnson <-> Davis families  
-        [userMap['smith_family'], userMap['davis_family']], // Smith <-> Davis families
-        [userMap['wilson_family'], userMap['brown_family']]  // Wilson <-> Brown families
+    // Get child IDs
+    const children = await client.query('SELECT id, name FROM children');
+    const childMap = {};
+    children.rows.forEach(child => {
+        childMap[child.name] = child.id;
+    });
+
+    // Insert demo connection requests (from original demo.html)
+    const demoConnectionRequests = [
+        {
+            requester_id: userMap['davis@example.com'],
+            target_parent_id: userMap['johnson@example.com'],
+            child_id: childMap['Jake Davis'],
+            target_child_id: childMap['Emma Johnson'],
+            status: 'pending',
+            message: 'Jake would love to join Emma for soccer practice!'
+        },
+        {
+            requester_id: userMap['wong@example.com'],
+            target_parent_id: userMap['johnson@example.com'],
+            child_id: childMap['Ryan Wong'],
+            target_child_id: childMap['Alex Johnson'],
+            status: 'pending',
+            message: 'Ryan and Alex could be great basketball partners!'
+        },
+        {
+            requester_id: userMap['thompson@example.com'],
+            target_parent_id: userMap['johnson@example.com'],
+            child_id: childMap['Sophie Thompson'],
+            target_child_id: childMap['Emma Johnson'],
+            status: 'accepted',
+            message: 'Sophie is excited to join Emma for swimming!'
+        }
     ];
 
-    for (const [parent1_id, parent2_id] of demoConnections) {
-        const connectionExists = await client.query(`
-            SELECT id FROM connections 
-            WHERE (parent1_id = $1 AND parent2_id = $2) OR (parent1_id = $2 AND parent2_id = $1)
-        `, [parent1_id, parent2_id]);
-        
-        if (connectionExists.rows.length === 0) {
-            try {
-                await client.query(`
-                    INSERT INTO connections (parent1_id, parent2_id, status)
-                    VALUES ($1, $2, 'active')
-                `, [parent1_id, parent2_id]);
-                console.log(`✅ Created demo connection: ${parent1_id} <-> ${parent2_id}`);
-            } catch (error) {
-                console.error(`Error creating connection ${parent1_id} <-> ${parent2_id}:`, error.message);
+    for (const request of demoConnectionRequests) {
+        if (request.requester_id && request.target_parent_id && request.child_id && request.target_child_id) {
+            const requestExists = await client.query(`
+                SELECT id FROM connection_requests 
+                WHERE requester_id = $1 AND target_parent_id = $2 AND child_id = $3 AND target_child_id = $4
+            `, [request.requester_id, request.target_parent_id, request.child_id, request.target_child_id]);
+            
+            if (requestExists.rows.length === 0) {
+                try {
+                    await client.query(`
+                        INSERT INTO connection_requests (requester_id, target_parent_id, child_id, target_child_id, status, message)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                    `, [request.requester_id, request.target_parent_id, request.child_id, request.target_child_id, request.status, request.message]);
+                    console.log(`✅ Created original demo connection request`);
+                } catch (error) {
+                    console.error(`Error creating connection request:`, error.message);
+                }
+            }
+        }
+    }
+
+    // Insert established connections (from original demo.html)
+    const establishedConnections = [
+        [childMap['Emma Johnson'], childMap['Theodore Miller']],
+        [childMap['Alex Johnson'], childMap['Ryan Wong']],
+        [childMap['Emma Johnson'], childMap['Sophie Thompson']]
+    ];
+
+    for (const [child1_id, child2_id] of establishedConnections) {
+        if (child1_id && child2_id) {
+            const connectionExists = await client.query(`
+                SELECT id FROM connections 
+                WHERE (child1_id = $1 AND child2_id = $2) OR (child1_id = $2 AND child2_id = $1)
+            `, [child1_id, child2_id]);
+            
+            if (connectionExists.rows.length === 0) {
+                try {
+                    await client.query(`
+                        INSERT INTO connections (child1_id, child2_id, status)
+                        VALUES ($1, $2, 'active')
+                    `, [child1_id, child2_id]);
+                    console.log(`✅ Created original demo connection: ${child1_id} <-> ${child2_id}`);
+                } catch (error) {
+                    console.error(`Error creating connection ${child1_id} <-> ${child2_id}:`, error.message);
+                }
             }
         }
     }
