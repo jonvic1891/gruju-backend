@@ -172,15 +172,15 @@ async function createTables(client) {
             )
         `);
 
-        // Insert all users from original Azure SQL demo data (from setup-gruju-full-demo.sql)
+        // Insert EXACT users from real Azure SQL database (extracted data)
         const originalDemoUsers = [
             ['admin', 'admin@parentactivityapp.com', '+1555000001', 'super_admin', 'Super Admin'],
             ['manager', 'manager@parentactivityapp.com', '+1555000002', 'admin', 'System Manager'],
-            ['johnson', 'johnson@example.com', '+1555000003', 'user', 'Johnson Family'],
-            ['jane', 'jane@example.com', '+1555000004', 'user', 'Smith Family'],
-            ['mike', 'mike@example.com', '+1555000005', 'user', 'Miller Family'],
-            ['sarah', 'sarah@example.com', '+1555000006', 'user', 'Davis Family'],
-            ['david', 'david@example.com', '+1555000007', 'user', 'Wilson Family']
+            ['johnson', 'johnson@example.com', '', 'user', 'Johnson Family'],
+            ['davis', 'davis@example.com', '', 'user', 'Davis Family'],
+            ['wong', 'wong@example.com', '', 'user', 'Wong Family'],
+            ['thompson', 'thompson@example.com', '', 'user', 'Thompson Family'],
+            ['miller', 'joe@example.com', '', 'user', 'Miller Family']
         ];
 
         for (const [username, email, phone, role, family_name] of originalDemoUsers) {
@@ -226,25 +226,16 @@ async function insertDemoChildren(client) {
     });
 
     const originalDemoChildren = [
-        // Johnson Family (john@example.com) - from Azure SQL setup script
+        // EXACT children from real Azure SQL database
         ['Emma Johnson', userMap['johnson@example.com']],
         ['Alex Johnson', userMap['johnson@example.com']],
-        
-        // Smith Family (jane@example.com)
-        ['Sophia Smith', userMap['jane@example.com']],
-        ['Lucas Smith', userMap['jane@example.com']],
-        
-        // Miller Family (mike@example.com)
-        ['Olivia Miller', userMap['mike@example.com']],
-        ['Mason Miller', userMap['mike@example.com']],
-        ['Theodore Miller', userMap['mike@example.com']],
-        
-        // Davis Family (sarah@example.com)
-        ['Isabella Davis', userMap['sarah@example.com']],
-        ['Ethan Davis', userMap['sarah@example.com']],
-        
-        // Wilson Family (david@example.com)
-        ['Ava Wilson', userMap['david@example.com']]
+        ['Jake Davis', userMap['davis@example.com']],
+        ['Mia Wong', userMap['wong@example.com']],
+        ['Ryan Wong', userMap['wong@example.com']],
+        ['Zoe Wong', userMap['wong@example.com']],
+        ['Sophie Thompson', userMap['thompson@example.com']],
+        ['Oliver Thompson', userMap['thompson@example.com']],
+        ['Theodore Miller', userMap['joe@example.com']]
     ];
 
     for (const [name, parent_id] of originalDemoChildren) {
@@ -292,26 +283,22 @@ async function insertDemoActivities(client) {
     }
 
     const originalDemoActivities = [
-        // Emma's activities from Azure SQL setup script (exact activities)
-        [childMap['Emma Johnson'], 'Soccer Practice', null, currentWeekDates[1], null, '16:00:00', '17:30:00', null, null, null, null],
-        [childMap['Emma Johnson'], 'Piano Lesson', null, currentWeekDates[3], null, '15:00:00', '16:00:00', null, null, null, null],
-        [childMap['Emma Johnson'], 'Dance Class', null, currentWeekDates[5], null, '17:00:00', '18:00:00', 'https://dancestudio.com', null, null, null],
+        // EXACT activities from real Azure SQL database
+        // Emma Johnson's 5 activities
+        [childMap['Emma Johnson'], 'Soccer Practice', null, currentWeekDates[0], null, '17:00:00', '19:00:00', null, null, null, null],
+        [childMap['Emma Johnson'], 'Swimming Lesson', null, currentWeekDates[2], null, '11:00:00', '12:00:00', null, null, null, null],
+        [childMap['Emma Johnson'], 'Art Class', null, currentWeekDates[3], null, '15:00:00', '16:30:00', null, null, null, null],
+        [childMap['Emma Johnson'], 'Dance Class', null, currentWeekDates[5], null, '12:00:00', '13:00:00', null, null, null, null],
+        [childMap['Emma Johnson'], 'Tennis Lesson', null, currentWeekDates[6], null, '15:00:00', '16:00:00', null, null, null, null],
         
-        // Alex's activities
-        [childMap['Alex Johnson'], 'Basketball Training', null, currentWeekDates[2], null, '17:00:00', '18:30:00', null, null, null, null],
-        [childMap['Alex Johnson'], 'Math Tutoring', null, currentWeekDates[4], null, '16:30:00', '17:30:00', null, null, null, null],
+        // Alex Johnson's 2 activities
+        [childMap['Alex Johnson'], 'Piano Lesson', null, currentWeekDates[1], null, '16:30:00', '17:30:00', null, null, null, null],
+        [childMap['Alex Johnson'], 'Basketball', null, currentWeekDates[4], null, '10:00:00', '11:30:00', null, null, null, null],
         
-        // Sophia's activities
-        [childMap['Sophia Smith'], 'Swimming Lessons', null, currentWeekDates[1], null, '14:00:00', '15:00:00', 'https://swimclub.com', null, null, null],
-        [childMap['Sophia Smith'], 'Art Class', null, currentWeekDates[6], null, '10:00:00', '11:30:00', null, null, null, null],
-        
-        // Theodore's activities
-        [childMap['Theodore Miller'], 'Robotics Club', null, currentWeekDates[2], null, '16:00:00', '18:00:00', 'https://robotics.edu', null, null, null],
-        [childMap['Theodore Miller'], 'Tennis Lessons', null, currentWeekDates[6], null, '14:30:00', '15:30:00', null, null, null, null],
-        
-        // Other activities from Azure SQL demo
-        [childMap['Isabella Davis'], 'Gymnastics', null, currentWeekDates[3], null, '17:00:00', '18:30:00', 'https://gymnastics.com', null, null, null],
-        [childMap['Ava Wilson'], 'Violin Lessons', null, currentWeekDates[2], null, '15:30:00', '16:30:00', null, null, null, null]
+        // Other family activities from real Azure SQL
+        [childMap['Jake Davis'], 'Football Training', null, currentWeekDates[2], null, '18:00:00', '19:30:00', null, null, null, null],
+        [childMap['Theodore Miller'], 'Robotics Club', null, currentWeekDates[1], null, '17:00:00', '19:00:00', null, null, null, null],
+        [childMap['Mia Wong'], 'Violin Lessons', null, currentWeekDates[3], null, '16:00:00', '17:00:00', null, null, null, null]
     ];
 
     for (const [child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants] of originalDemoActivities) {
@@ -346,31 +333,39 @@ async function insertDemoConnections(client) {
         childMap[child.name] = child.id;
     });
 
-    // Insert demo connection requests (from Azure SQL setup script)
+    // Insert demo connection requests with all notification types for Emma
     const demoConnectionRequests = [
         {
-            requester_id: userMap['jane@example.com'],
+            requester_id: userMap['davis@example.com'],
             target_parent_id: userMap['johnson@example.com'],
-            child_id: childMap['Sophia Smith'],
+            child_id: childMap['Jake Davis'],
             target_child_id: childMap['Emma Johnson'],
             status: 'pending',
-            message: 'Hi! Our daughters are the same age and both love soccer. Would love to arrange a playdate!'
+            message: 'Jake would love to join Emma for soccer practice!'
         },
         {
-            requester_id: userMap['mike@example.com'],
+            requester_id: userMap['wong@example.com'],
             target_parent_id: userMap['johnson@example.com'],
-            child_id: childMap['Theodore Miller'],
+            child_id: childMap['Ryan Wong'],
             target_child_id: childMap['Alex Johnson'],
             status: 'pending',
-            message: 'Theodore and Alex are both into sports. Maybe they could be friends?'
+            message: 'Ryan and Alex could be great basketball partners!'
         },
         {
-            requester_id: userMap['sarah@example.com'],
-            target_parent_id: userMap['jane@example.com'],
-            child_id: childMap['Isabella Davis'],
-            target_child_id: childMap['Sophia Smith'],
+            requester_id: userMap['thompson@example.com'],
+            target_parent_id: userMap['johnson@example.com'],
+            child_id: childMap['Sophie Thompson'],
+            target_child_id: childMap['Emma Johnson'],
             status: 'accepted',
-            message: 'Both girls love dance and gymnastics!'
+            message: 'Sophie is excited to join Emma for swimming!'
+        },
+        {
+            requester_id: userMap['wong@example.com'],
+            target_parent_id: userMap['johnson@example.com'],
+            child_id: childMap['Mia Wong'],
+            target_child_id: childMap['Emma Johnson'],
+            status: 'declined',
+            message: 'Mia was hoping to join Emma for art class, but the timing didn\'t work out.'
         }
     ];
 
@@ -395,11 +390,10 @@ async function insertDemoConnections(client) {
         }
     }
 
-    // Insert established connections (from Azure SQL setup script)
+    // Note: Real Azure SQL has different connections table structure
+    // Only adding connection for accepted request (Sophie->Emma)
     const establishedConnections = [
-        [childMap['Isabella Davis'], childMap['Sophia Smith']],
-        [childMap['Emma Johnson'], childMap['Olivia Miller']],
-        [childMap['Alex Johnson'], childMap['Lucas Smith']]
+        [childMap['Sophie Thompson'], childMap['Emma Johnson']]
     ];
 
     for (const [child1_id, child2_id] of establishedConnections) {
