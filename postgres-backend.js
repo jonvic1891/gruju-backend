@@ -176,7 +176,7 @@ async function createTables(client) {
         const originalDemoUsers = [
             ['admin', 'admin@parentactivityapp.com', '+1555000001', 'super_admin', 'Super Admin'],
             ['manager', 'manager@parentactivityapp.com', '+1555000002', 'admin', 'System Manager'],
-            ['john', 'john@example.com', '+1555000003', 'user', 'Johnson Family'],
+            ['johnson', 'johnson@example.com', '+1555000003', 'user', 'Johnson Family'],
             ['jane', 'jane@example.com', '+1555000004', 'user', 'Smith Family'],
             ['mike', 'mike@example.com', '+1555000005', 'user', 'Miller Family'],
             ['sarah', 'sarah@example.com', '+1555000006', 'user', 'Davis Family'],
@@ -227,8 +227,8 @@ async function insertDemoChildren(client) {
 
     const originalDemoChildren = [
         // Johnson Family (john@example.com) - from Azure SQL setup script
-        ['Emma Johnson', userMap['john@example.com']],
-        ['Alex Johnson', userMap['john@example.com']],
+        ['Emma Johnson', userMap['johnson@example.com']],
+        ['Alex Johnson', userMap['johnson@example.com']],
         
         // Smith Family (jane@example.com)
         ['Sophia Smith', userMap['jane@example.com']],
@@ -350,7 +350,7 @@ async function insertDemoConnections(client) {
     const demoConnectionRequests = [
         {
             requester_id: userMap['jane@example.com'],
-            target_parent_id: userMap['john@example.com'],
+            target_parent_id: userMap['johnson@example.com'],
             child_id: childMap['Sophia Smith'],
             target_child_id: childMap['Emma Johnson'],
             status: 'pending',
@@ -358,7 +358,7 @@ async function insertDemoConnections(client) {
         },
         {
             requester_id: userMap['mike@example.com'],
-            target_parent_id: userMap['john@example.com'],
+            target_parent_id: userMap['johnson@example.com'],
             child_id: childMap['Theodore Miller'],
             target_child_id: childMap['Alex Johnson'],
             status: 'pending',
