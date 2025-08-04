@@ -785,6 +785,13 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
     try {
         const childId = parseInt(req.params.childId);
         
+        console.log('🔍 GET /api/activities/:childId Debug:', {
+            childId,
+            userId: req.user.id,
+            userEmail: req.user.email,
+            timestamp: new Date().toISOString()
+        });
+        
         const client = await pool.connect();
         
         // First verify the child belongs to this user
@@ -793,8 +800,16 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
             [childId, req.user.id]
         );
 
+        console.log('👶 Child verification:', {
+            childId,
+            userId: req.user.id,
+            foundChildren: child.rows.length,
+            childData: child.rows
+        });
+
         if (child.rows.length === 0) {
             client.release();
+            console.log('❌ Child not found - returning 404');
             return res.status(404).json({ success: false, error: 'Child not found' });
         }
 
@@ -802,6 +817,13 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
             'SELECT * FROM activities WHERE child_id = $1 ORDER BY start_date DESC, start_time DESC',
             [childId]
         );
+        
+        console.log('📋 Activities query result:', {
+            childId,
+            activitiesFound: result.rows.length,
+            activities: result.rows
+        });
+        
         client.release();
 
         res.json({
@@ -809,7 +831,7 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
             data: result.rows
         });
     } catch (error) {
-        console.error('Get activities error:', error);
+        console.error('💥 Get activities error:', error);
         res.status(500).json({ success: false, error: 'Failed to fetch activities' });
     }
 });
