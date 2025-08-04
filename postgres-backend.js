@@ -38,6 +38,7 @@ const pool = new Pool({
 async function initializeDatabase() {
     try {
         console.log('🔄 Connecting to PostgreSQL Database...');
+        
         const client = await pool.connect();
         console.log('✅ Connected to PostgreSQL Database successfully!');
         
@@ -45,9 +46,11 @@ async function initializeDatabase() {
         await client.query('SELECT NOW()');
         console.log('✅ Database connection test query successful');
         
-        // Create tables if they don't exist
-        await createTables(client);
         client.release();
+        
+        // Create tables if they don't exist
+        // await createTables(client);
+        // client.release();
         
         return true;
     } catch (error) {
@@ -792,49 +795,72 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
             timestamp: new Date().toISOString()
         });
         
+        // Query activities with invitation status from database
         const client = await pool.connect();
         
-        // First verify the child belongs to this user
-        const child = await client.query(
-            'SELECT id FROM children WHERE id = $1 AND parent_id = $2',
-            [childId, req.user.id]
-        );
-
-        console.log('👶 Child verification:', {
-            childId,
-            userId: req.user.id,
-            foundChildren: child.rows.length,
-            childData: child.rows
-        });
-
-        if (child.rows.length === 0) {
+        try {
+            // Get activities for the child with invitation status
+            const query = `
+                SELECT 
+                    a.*,
+                    ai.status as invitation_status,
+                    ai.inviter_parent_id,
+                    CASE 
+                        WHEN ai.status IS NOT NULL THEN true 
+                        ELSE false 
+                    END as is_shared,
+                    CASE 
+                        WHEN ai.invited_parent_id = $2 THEN false 
+                        ELSE true 
+                    END as is_host,
+                    false as is_cancelled
+                FROM activities a
+                LEFT JOIN activity_invitations ai ON a.id = ai.activity_id 
+                    AND ai.invited_parent_id = $2
+                WHERE a.child_id = $1
+                ORDER BY a.start_date, a.start_time
+            `;
+            
+            const result = await client.query(query, [childId, req.user.id]);
+            
+            // Process activities to add proper invitation status
+            const activities = result.rows.map(activity => ({
+                ...activity,
+                invitation_status: activity.invitation_status || 'none',
+                is_shared: activity.invitation_status === 'accepted' || activity.is_shared,
+                is_host: activity.inviter_parent_id ? false : true,
+                is_cancelled: false
+            }));
+            
+            console.log('🎯 Retrieved activities from database:', activities.length);
+            
+            res.json({
+                success: true,
+                data: activities
+            });
+            
+        } finally {
             client.release();
-            console.log('❌ Child not found - returning 404');
-            return res.status(404).json({ success: false, error: 'Child not found' });
         }
-
-        const result = await client.query(
-            'SELECT * FROM activities WHERE child_id = $1 ORDER BY start_date DESC, start_time DESC',
-            [childId]
-        );
         
-        console.log('📋 Activities query result:', {
-            childId,
-            activitiesFound: result.rows.length,
-            activities: result.rows
-        });
-        
-        client.release();
-
-        res.json({
-            success: true,
-            data: result.rows
-        });
     } catch (error) {
-        console.error('💥 Get activities error:', error);
+        console.error('Get activities error:', error);
         res.status(500).json({ success: false, error: 'Failed to fetch activities' });
     }
 });
+
+function getDateForWeekday(currentDate, targetDay) {
+    // targetDay: 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const current = new Date(currentDate);
+    const currentDay = current.getDay();
+    const daysUntilTarget = targetDay - currentDay;
+    
+    // If the target day is in the past this week, get next week's occurrence
+    const adjustedDays = daysUntilTarget < 0 ? daysUntilTarget + 7 : daysUntilTarget;
+    
+    current.setDate(current.getDate() + adjustedDays);
+    return current;
+}
 
 app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
     try {
