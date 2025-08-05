@@ -1268,7 +1268,7 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
             return res.status(404).json({ success: false, error: 'Connection request not found' });
         }
 
-        const status = action === 'accept' ? 'accepted' : 'rejected';
+        const status = action === 'accept' ? 'accepted' : 'declined';
         await client.query(
             'UPDATE connection_requests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             [status, requestId]
