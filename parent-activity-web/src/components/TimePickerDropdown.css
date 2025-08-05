@@ -1,0 +1,128 @@
+.time-picker-dropdown {
+  display: inline-block;
+  width: 100%;
+}
+
+.time-selectors {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 8px 12px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.time-selectors:focus-within {
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.time-select {
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-family: inherit;
+  color: #495057;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.time-select:focus {
+  outline: none;
+  background: #f8f9fa;
+}
+
+.time-select:hover {
+  background: #f8f9fa;
+}
+
+.hour-select, .minute-select {
+  width: 50px;
+  text-align: center;
+}
+
+.period-select {
+  width: 60px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.time-separator {
+  font-weight: bold;
+  color: #6c757d;
+  margin: 0 2px;
+  user-select: none;
+}
+
+.time-display {
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: #e8f5e8;
+  border: 1px solid #c3e6c3;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #2d5a2d;
+  text-align: center;
+}
+
+/* Custom arrow for selects */
+.time-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  background-size: 12px;
+  padding-right: 20px;
+}
+
+.time-select option {
+  padding: 4px 8px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .time-selectors {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+  
+  .time-select {
+    color: #e2e8f0;
+  }
+  
+  .time-select:focus,
+  .time-select:hover {
+    background: #4a5568;
+  }
+  
+  .time-separator {
+    color: #a0aec0;
+  }
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .time-selectors {
+    padding: 10px 12px;
+  }
+  
+  .time-select {
+    font-size: 16px; /* Prevents zoom on iOS */
+    padding: 6px 8px;
+  }
+  
+  .hour-select, .minute-select {
+    width: 55px;
+  }
+  
+  .period-select {
+    width: 65px;
+  }
+}
