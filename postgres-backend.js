@@ -1392,6 +1392,269 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
     }
 });
 
+// Activity Duplication endpoint
+app.post('/api/activities/:activityId/duplicate', authenticateToken, async (req, res) => {
+    try {
+        const { activityId } = req.params;
+        const { new_start_date, new_end_date } = req.body;
+
+        if (!new_start_date) {
+            return res.status(400).json({ success: false, error: 'New start date is required' });
+        }
+
+        const client = await pool.connect();
+        
+        // Get the original activity and verify ownership
+        const originalActivity = await client.query(
+            'SELECT a.*, c.parent_id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1',
+            [activityId]
+        );
+        
+        if (originalActivity.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Activity not found' });
+        }
+        
+        const activity = originalActivity.rows[0];
+        if (activity.parent_id !== req.user.id) {
+            client.release();
+            return res.status(403).json({ success: false, error: 'Not authorized to duplicate this activity' });
+        }
+
+        // Create duplicate activity
+        const duplicateResult = await client.query(
+            `INSERT INTO activities 
+             (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+             RETURNING *`,
+            [
+                activity.child_id,
+                activity.name,
+                activity.description,
+                new_start_date,
+                new_end_date || activity.end_date,
+                activity.start_time,
+                activity.end_time,
+                activity.location,
+                activity.website_url,
+                activity.cost,
+                activity.max_participants
+            ]
+        );
+
+        client.release();
+
+        res.json({
+            success: true,
+            data: duplicateResult.rows[0]
+        });
+    } catch (error) {
+        console.error('Duplicate activity error:', error);
+        res.status(500).json({ success: false, error: 'Failed to duplicate activity' });
+    }
+});
+
+// Connected Activities Calendar endpoint
+app.get('/api/calendar/connected-activities', authenticateToken, async (req, res) => {
+    try {
+        const { start, end } = req.query;
+        
+        if (!start || !end) {
+            return res.status(400).json({ success: false, error: 'Start and end dates are required' });
+        }
+
+        const client = await pool.connect();
+        
+        // Get activities from connected families
+        const query = `
+            SELECT DISTINCT
+                a.*,
+                c.name as child_name,
+                u.username as parent_name,
+                u.email as parent_email,
+                true as is_connected_activity,
+                false as is_host
+            FROM activities a
+            JOIN children c ON a.child_id = c.id
+            JOIN users u ON c.parent_id = u.id
+            JOIN connections conn ON (
+                (conn.child1_id = c.id AND conn.child2_id IN (
+                    SELECT id FROM children WHERE parent_id = $1
+                )) OR
+                (conn.child2_id = c.id AND conn.child1_id IN (
+                    SELECT id FROM children WHERE parent_id = $1
+                ))
+            )
+            WHERE conn.status = 'active'
+            AND a.start_date >= $2
+            AND a.start_date <= $3
+            AND c.parent_id != $1
+            ORDER BY a.start_date, a.start_time
+        `;
+        
+        const result = await client.query(query, [req.user.id, start, end]);
+        client.release();
+
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        console.error('Get connected activities error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch connected activities' });
+    }
+});
+
+// Activity Counts endpoint
+app.get('/api/calendar/activity-counts', authenticateToken, async (req, res) => {
+    try {
+        const { start, end, include_connected } = req.query;
+        
+        if (!start || !end) {
+            return res.status(400).json({ success: false, error: 'Start and end dates are required' });
+        }
+
+        const client = await pool.connect();
+        
+        let query = `
+            SELECT 
+                a.start_date::date as date,
+                COUNT(*) as count,
+                'own' as type
+            FROM activities a
+            JOIN children c ON a.child_id = c.id
+            WHERE c.parent_id = $1
+            AND a.start_date >= $2
+            AND a.start_date <= $3
+            GROUP BY a.start_date::date
+        `;
+        
+        const params = [req.user.id, start, end];
+        
+        // If include_connected is true, add connected activities
+        if (include_connected === 'true') {
+            query = `
+                ${query}
+                UNION ALL
+                SELECT 
+                    a.start_date::date as date,
+                    COUNT(*) as count,
+                    'connected' as type
+                FROM activities a
+                JOIN children c ON a.child_id = c.id
+                JOIN connections conn ON (
+                    (conn.child1_id = c.id AND conn.child2_id IN (
+                        SELECT id FROM children WHERE parent_id = $1
+                    )) OR
+                    (conn.child2_id = c.id AND conn.child1_id IN (
+                        SELECT id FROM children WHERE parent_id = $1
+                    ))
+                )
+                WHERE conn.status = 'active'
+                AND a.start_date >= $2
+                AND a.start_date <= $3
+                AND c.parent_id != $1
+                GROUP BY a.start_date::date
+            `;
+        }
+        
+        query += ' ORDER BY date';
+        
+        const result = await client.query(query, params);
+        client.release();
+
+        // Process results to combine counts by date
+        const countsByDate = {};
+        result.rows.forEach(row => {
+            const dateStr = row.date.toISOString().split('T')[0];
+            if (!countsByDate[dateStr]) {
+                countsByDate[dateStr] = { date: dateStr, own: 0, connected: 0, total: 0 };
+            }
+            countsByDate[dateStr][row.type] = parseInt(row.count);
+            countsByDate[dateStr].total += parseInt(row.count);
+        });
+
+        res.json({ success: true, data: Object.values(countsByDate) });
+    } catch (error) {
+        console.error('Get activity counts error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch activity counts' });
+    }
+});
+
+// Get Activity Invitations endpoint
+app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
+    try {
+        const client = await pool.connect();
+        
+        const query = `
+            SELECT 
+                ai.*,
+                a.name as activity_name,
+                a.description as activity_description,
+                a.start_date,
+                a.end_date,
+                a.start_time,
+                a.end_time,
+                a.location,
+                c_host.name as host_child_name,
+                u_host.username as host_parent_name,
+                u_host.email as host_parent_email,
+                c_invited.name as invited_child_name
+            FROM activity_invitations ai
+            JOIN activities a ON ai.activity_id = a.id
+            JOIN children c_host ON a.child_id = c_host.id
+            JOIN users u_host ON c_host.parent_id = u_host.id
+            LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
+            WHERE ai.invited_parent_id = $1
+            AND ai.status = 'pending'
+            ORDER BY ai.created_at DESC
+        `;
+        
+        const result = await client.query(query, [req.user.id]);
+        client.release();
+
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        console.error('Get activity invitations error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch activity invitations' });
+    }
+});
+
+// Respond to Activity Invitation endpoint
+app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, async (req, res) => {
+    try {
+        const { invitationId } = req.params;
+        const { action } = req.body;
+
+        if (!action || !['accept', 'reject'].includes(action)) {
+            return res.status(400).json({ success: false, error: 'Valid action (accept/reject) is required' });
+        }
+
+        const client = await pool.connect();
+        
+        // Verify the invitation exists and belongs to this user
+        const invitation = await client.query(
+            'SELECT * FROM activity_invitations WHERE id = $1 AND invited_parent_id = $2 AND status = $3',
+            [invitationId, req.user.id, 'pending']
+        );
+
+        if (invitation.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Activity invitation not found' });
+        }
+
+        const status = action === 'accept' ? 'accepted' : 'declined';
+        await client.query(
+            'UPDATE activity_invitations SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [status, invitationId]
+        );
+
+        client.release();
+
+        res.json({ success: true, message: `Activity invitation ${status}` });
+    } catch (error) {
+        console.error('Respond to activity invitation error:', error);
+        res.status(500).json({ success: false, error: 'Failed to respond to activity invitation' });
+    }
+});
+
 // Start server
 async function startServer() {
     try {
