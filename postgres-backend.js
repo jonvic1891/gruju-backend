@@ -161,23 +161,28 @@ async function createTables(client) {
         }
 
         // Activity invitations table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS activity_invitations (
-                id SERIAL PRIMARY KEY,
-                activity_id INTEGER NOT NULL,
-                inviter_parent_id INTEGER NOT NULL,
-                invited_parent_id INTEGER NOT NULL,
-                invited_child_id INTEGER,
-                message TEXT,
-                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
-                FOREIGN KEY (inviter_parent_id) REFERENCES users(id),
-                FOREIGN KEY (invited_parent_id) REFERENCES users(id),
-                FOREIGN KEY (invited_child_id) REFERENCES children(id)
-            )
-        `);
+        try {
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS activity_invitations (
+                    id SERIAL PRIMARY KEY,
+                    activity_id INTEGER NOT NULL,
+                    inviter_parent_id INTEGER NOT NULL,
+                    invited_parent_id INTEGER NOT NULL,
+                    invited_child_id INTEGER,
+                    message TEXT,
+                    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
+                    FOREIGN KEY (inviter_parent_id) REFERENCES users(id),
+                    FOREIGN KEY (invited_parent_id) REFERENCES users(id),
+                    FOREIGN KEY (invited_child_id) REFERENCES children(id)
+                )
+            `);
+            console.log('✅ Activity invitations table created/verified');
+        } catch (error) {
+            console.log('⚠️ Activity invitations table creation error:', error.message);
+        }
 
         // System logs table
         await client.query(`
@@ -1369,6 +1374,14 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
         }
 
         // Create the activity invitation
+        console.log('🔧 Attempting to insert invitation with values:', {
+            activityId,
+            inviter_parent_id: req.user.id,
+            invited_parent_id,
+            child_id,
+            message
+        });
+
         const invitationResult = await client.query(
             `INSERT INTO activity_invitations 
              (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status) 
