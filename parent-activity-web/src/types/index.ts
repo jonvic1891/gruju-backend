@@ -61,6 +61,21 @@ export interface ConnectionRequest {
   message?: string;
   created_at: string;
   updated_at: string;
+  // Extended fields from backend joins
+  requester_name?: string;
+  requester_email?: string;
+  requester_family_name?: string;
+  target_parent_name?: string;
+  target_parent_email?: string;
+  target_family_name?: string;
+  child_name?: string;
+  child_age?: number;
+  child_grade?: string;
+  child_school?: string;
+  target_child_name?: string;
+  target_child_age?: number;
+  target_child_grade?: string;
+  target_child_school?: string;
 }
 
 export interface ActivityInvitation {

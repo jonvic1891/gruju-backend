@@ -228,30 +228,16 @@ const ConnectionsScreen = () => {
             {connectionRequests.map((request) => (
               <div key={request.id} className="request-card">
                 <div className="request-header">
-                  <h4>Connection Request from {request.requester_name || 'Parent'}</h4>
                   <span className="request-date">
                     {new Date(request.created_at).toLocaleDateString()}
                   </span>
                 </div>
                 
-                <div className="request-details">
-                  <div className="child-info">
-                    <h5>Their Child:</h5>
-                    <p><strong>{request.child_name}</strong></p>
-                    {request.child_age && <p>Age: {request.child_age}</p>}
-                    {request.child_grade && <p>Grade: {request.child_grade}</p>}
-                    {request.child_school && <p>School: {request.child_school}</p>}
-                  </div>
-                  
-                  {request.target_child_name && (
-                    <div className="child-info">
-                      <h5>Wants to Connect with Your Child:</h5>
-                      <p><strong>{request.target_child_name}</strong></p>
-                      {request.target_child_age && <p>Age: {request.target_child_age}</p>}
-                      {request.target_child_grade && <p>Grade: {request.target_child_grade}</p>}
-                      {request.target_child_school && <p>School: {request.target_child_school}</p>}
-                    </div>
-                  )}
+                <div className="request-message">
+                  <p>
+                    <strong>{request.child_name}</strong> wants to connect with{' '}
+                    <strong>{request.target_child_name || 'your child'}</strong> to share activities
+                  </p>
                 </div>
                 
                 <div className="request-actions">
@@ -287,30 +273,16 @@ const ConnectionsScreen = () => {
             {sentRequests.map((request) => (
               <div key={request.id} className="request-card sent-request">
                 <div className="request-header">
-                  <h4>Request to {request.target_parent_name || 'Parent'}</h4>
                   <span className="request-date">
                     {new Date(request.created_at).toLocaleDateString()}
                   </span>
                 </div>
                 
-                <div className="request-details">
-                  <div className="child-info">
-                    <h5>Your Child:</h5>
-                    <p><strong>{request.child_name}</strong></p>
-                    {request.child_age && <p>Age: {request.child_age}</p>}
-                    {request.child_grade && <p>Grade: {request.child_grade}</p>}
-                    {request.child_school && <p>School: {request.child_school}</p>}
-                  </div>
-                  
-                  {request.target_child_name && (
-                    <div className="child-info">
-                      <h5>Wants to Connect with:</h5>
-                      <p><strong>{request.target_child_name}</strong></p>
-                      {request.target_child_age && <p>Age: {request.target_child_age}</p>}
-                      {request.target_child_grade && <p>Grade: {request.target_child_grade}</p>}
-                      {request.target_child_school && <p>School: {request.target_child_school}</p>}
-                    </div>
-                  )}
+                <div className="request-message">
+                  <p>
+                    <strong>{request.child_name}</strong> wants to connect with{' '}
+                    <strong>{request.target_child_name || 'their child'}</strong> to share activities
+                  </p>
                 </div>
                 
                 <div className="request-status">
