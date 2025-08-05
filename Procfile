@@ -1,1 +1,1 @@
-web: node postgres-backend.js
+web: cd backend && npm start

@@ -2,10 +2,10 @@
   "name": "parent-activity-azure-backend",
   "version": "1.0.0",
   "description": "Parent Activity App Backend with Azure SQL Database, Twilio SMS, and SendGrid Email",
-  "main": "azure-sql-backend.js",
+  "main": "backend/dist/server.js",
   "scripts": {
-    "start": "node azure-sql-backend.js", 
-    "dev": "nodemon azure-sql-backend.js",
+    "start": "cd backend && npm run build && npm start", 
+    "dev": "cd backend && npm run dev",
     "test": "node test-azure-connection.js"
   },
   "engines": {
