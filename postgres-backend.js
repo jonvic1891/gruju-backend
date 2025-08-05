@@ -160,6 +160,25 @@ async function createTables(client) {
             console.log('Migration columns may already exist:', error.message);
         }
 
+        // Activity invitations table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS activity_invitations (
+                id SERIAL PRIMARY KEY,
+                activity_id INTEGER NOT NULL,
+                inviter_parent_id INTEGER NOT NULL,
+                invited_parent_id INTEGER NOT NULL,
+                invited_child_id INTEGER,
+                message TEXT,
+                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
+                FOREIGN KEY (inviter_parent_id) REFERENCES users(id),
+                FOREIGN KEY (invited_parent_id) REFERENCES users(id),
+                FOREIGN KEY (invited_child_id) REFERENCES children(id)
+            )
+        `);
+
         // System logs table
         await client.query(`
             CREATE TABLE IF NOT EXISTS system_logs (
@@ -1309,6 +1328,59 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
     } catch (error) {
         console.error('Respond to connection request error:', error);
         res.status(500).json({ success: false, error: 'Failed to respond to connection request' });
+    }
+});
+
+// Activity Invitation endpoint
+app.post('/api/activities/:activityId/invite', authenticateToken, async (req, res) => {
+    try {
+        const { activityId } = req.params;
+        const { invited_parent_id, child_id, message } = req.body;
+
+        if (!invited_parent_id) {
+            return res.status(400).json({ success: false, error: 'Invited parent ID is required' });
+        }
+
+        const client = await pool.connect();
+        
+        // Verify the activity exists and belongs to this user's child
+        const activityCheck = await client.query(
+            'SELECT a.*, c.parent_id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1',
+            [activityId]
+        );
+        
+        if (activityCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Activity not found' });
+        }
+        
+        const activity = activityCheck.rows[0];
+        if (activity.parent_id !== req.user.id) {
+            client.release();
+            return res.status(403).json({ success: false, error: 'Not authorized to invite to this activity' });
+        }
+
+        // Create the activity invitation
+        const invitationResult = await client.query(
+            `INSERT INTO activity_invitations 
+             (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status, created_at, updated_at) 
+             VALUES ($1, $2, $3, $4, $5, 'pending', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+             RETURNING id`,
+            [activityId, req.user.id, invited_parent_id, child_id, message]
+        );
+
+        client.release();
+
+        res.json({
+            success: true,
+            data: { 
+                id: invitationResult.rows[0].id,
+                message: 'Activity invitation sent successfully'
+            }
+        });
+    } catch (error) {
+        console.error('Send activity invitation error:', error);
+        res.status(500).json({ success: false, error: 'Failed to send activity invitation' });
     }
 });
 
