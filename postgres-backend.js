@@ -1277,10 +1277,16 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
         // If accepted, create the connection
         if (action === 'accept') {
             const req_data = request.rows[0];
-            await client.query(
-                'INSERT INTO connections (child1_id, child2_id, status) VALUES ($1, $2, $3)',
-                [req_data.child_id, req_data.target_child_id || req_data.child_id, 'active']
-            );
+            if (req_data.target_child_id) {
+                await client.query(
+                    'INSERT INTO connections (child1_id, child2_id, status) VALUES ($1, $2, $3)',
+                    [req_data.child_id, req_data.target_child_id, 'active']
+                );
+            } else {
+                // For general connection requests without specific target child,
+                // we don't create a connection until a specific child is chosen
+                console.log('Connection request accepted but no specific target child - connection will be created when activity invitation is sent');
+            }
         }
 
         client.release();
