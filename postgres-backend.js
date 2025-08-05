@@ -1008,6 +1008,95 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
     }
 });
 
+// Update activity
+app.put('/api/activities/update/:activityId', authenticateToken, async (req, res) => {
+    try {
+        const { activityId } = req.params;
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants } = req.body;
+        
+        const client = await pool.connect();
+        
+        // Verify the activity belongs to a child of this user
+        const activityCheck = await client.query(
+            'SELECT a.id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1 AND c.parent_id = $2',
+            [activityId, req.user.id]
+        );
+        
+        if (activityCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Activity not found' });
+        }
+        
+        const result = await client.query(
+            `UPDATE activities SET 
+                name = $1, description = $2, start_date = $3, end_date = $4, 
+                start_time = $5, end_time = $6, location = $7, website_url = $8, 
+                cost = $9, max_participants = $10, updated_at = NOW()
+             WHERE id = $11 RETURNING *`,
+            [name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, activityId]
+        );
+        
+        client.release();
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        console.error('Update activity error:', error);
+        res.status(500).json({ success: false, error: 'Failed to update activity' });
+    }
+});
+
+// Delete activity
+app.delete('/api/activities/delete/:activityId', authenticateToken, async (req, res) => {
+    try {
+        const { activityId } = req.params;
+        
+        const client = await pool.connect();
+        
+        // Verify the activity belongs to a child of this user
+        const activityCheck = await client.query(
+            'SELECT a.id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1 AND c.parent_id = $2',
+            [activityId, req.user.id]
+        );
+        
+        if (activityCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Activity not found' });
+        }
+        
+        await client.query('DELETE FROM activities WHERE id = $1', [activityId]);
+        client.release();
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete activity error:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete activity' });
+    }
+});
+
+// Get connections
+app.get('/api/connections', authenticateToken, async (req, res) => {
+    try {
+        const client = await pool.connect();
+        const result = await client.query(
+            `SELECT c.*, u1.username as child1_parent_name, u2.username as child2_parent_name,
+                    ch1.name as child1_name, ch2.name as child2_name
+             FROM connections c
+             JOIN children ch1 ON c.child1_id = ch1.id
+             JOIN children ch2 ON c.child2_id = ch2.id  
+             JOIN users u1 ON ch1.parent_id = u1.id
+             JOIN users u2 ON ch2.parent_id = u2.id
+             WHERE (ch1.parent_id = $1 OR ch2.parent_id = $1) AND c.status = 'active'
+             ORDER BY c.created_at DESC`,
+            [req.user.id]
+        );
+        client.release();
+        
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        console.error('Get connections error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch connections' });
+    }
+});
+
 // Connection endpoints
 app.get('/api/connections/requests', authenticateToken, async (req, res) => {
     try {
