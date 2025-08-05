@@ -5,6 +5,7 @@ import './ConnectionsScreen.css';
 
 const ConnectionsScreen = () => {
   const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
+  const [sentRequests, setSentRequests] = useState<ConnectionRequest[]>([]);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -19,6 +20,7 @@ const ConnectionsScreen = () => {
 
   useEffect(() => {
     loadConnectionRequests();
+    loadSentRequests();
     loadMyChildren();
   }, []);
 
@@ -36,6 +38,19 @@ const ConnectionsScreen = () => {
       console.error('Load connection requests error:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSentRequests = async () => {
+    try {
+      const response = await apiService.getSentConnectionRequests();
+      if (response.success && response.data) {
+        setSentRequests(response.data);
+      } else {
+        console.error('Failed to load sent requests:', response.error);
+      }
+    } catch (error) {
+      console.error('Load sent requests error:', error);
     }
   };
 
@@ -136,6 +151,8 @@ const ConnectionsScreen = () => {
         setShowConnectModal(false);
         setSearchResults([]);
         setSearchText('');
+        // Refresh sent requests to show the new request immediately
+        loadSentRequests();
       } else {
         alert(`Error: ${response.error || 'Failed to send connection request'}`);
       }
@@ -211,10 +228,30 @@ const ConnectionsScreen = () => {
             {connectionRequests.map((request) => (
               <div key={request.id} className="request-card">
                 <div className="request-header">
-                  <h4>Connection Request</h4>
+                  <h4>Connection Request from {request.requester_name || 'Parent'}</h4>
                   <span className="request-date">
                     {new Date(request.created_at).toLocaleDateString()}
                   </span>
+                </div>
+                
+                <div className="request-details">
+                  <div className="child-info">
+                    <h5>Their Child:</h5>
+                    <p><strong>{request.child_name}</strong></p>
+                    {request.child_age && <p>Age: {request.child_age}</p>}
+                    {request.child_grade && <p>Grade: {request.child_grade}</p>}
+                    {request.child_school && <p>School: {request.child_school}</p>}
+                  </div>
+                  
+                  {request.target_child_name && (
+                    <div className="child-info">
+                      <h5>Wants to Connect with Your Child:</h5>
+                      <p><strong>{request.target_child_name}</strong></p>
+                      {request.target_child_age && <p>Age: {request.target_child_age}</p>}
+                      {request.target_child_grade && <p>Grade: {request.target_child_grade}</p>}
+                      {request.target_child_school && <p>School: {request.target_child_school}</p>}
+                    </div>
+                  )}
                 </div>
                 
                 {request.message && (
@@ -234,6 +271,58 @@ const ConnectionsScreen = () => {
                   >
                     Accept
                   </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Sent Requests Section */}
+      <div className="sent-requests-section">
+        <h3>Sent Requests ({sentRequests.length})</h3>
+        
+        {sentRequests.length === 0 ? (
+          <div className="empty-state">
+            <p>No pending sent requests</p>
+          </div>
+        ) : (
+          <div className="requests-list">
+            {sentRequests.map((request) => (
+              <div key={request.id} className="request-card sent-request">
+                <div className="request-header">
+                  <h4>Request to {request.target_parent_name || 'Parent'}</h4>
+                  <span className="request-date">
+                    {new Date(request.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                
+                <div className="request-details">
+                  <div className="child-info">
+                    <h5>Your Child:</h5>
+                    <p><strong>{request.child_name}</strong></p>
+                    {request.child_age && <p>Age: {request.child_age}</p>}
+                    {request.child_grade && <p>Grade: {request.child_grade}</p>}
+                    {request.child_school && <p>School: {request.child_school}</p>}
+                  </div>
+                  
+                  {request.target_child_name && (
+                    <div className="child-info">
+                      <h5>Wants to Connect with:</h5>
+                      <p><strong>{request.target_child_name}</strong></p>
+                      {request.target_child_age && <p>Age: {request.target_child_age}</p>}
+                      {request.target_child_grade && <p>Grade: {request.target_child_grade}</p>}
+                      {request.target_child_school && <p>School: {request.target_child_school}</p>}
+                    </div>
+                  )}
+                </div>
+                
+                {request.message && (
+                  <div className="request-message">"{request.message}"</div>
+                )}
+                
+                <div className="request-status">
+                  <span className="status-badge pending">Pending</span>
                 </div>
               </div>
             ))}

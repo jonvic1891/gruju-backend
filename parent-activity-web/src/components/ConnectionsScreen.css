@@ -144,9 +144,18 @@
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
 }
 
-.requests-section h3 {
+.sent-requests-section {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.requests-section h3,
+.sent-requests-section h3 {
   margin: 0 0 16px 0;
   color: #343a40;
   font-size: 20px;
@@ -184,6 +193,10 @@
   background: #f8f9fa;
 }
 
+.request-card.sent-request {
+  border-left: 4px solid #007bff;
+}
+
 .request-header {
   display: flex;
   justify-content: space-between;
@@ -201,6 +214,42 @@
 .request-date {
   font-size: 12px;
   color: #6c757d;
+}
+
+.request-details {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.child-info {
+  flex: 1;
+  min-width: 200px;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+}
+
+.child-info h5 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #495057;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.child-info p {
+  margin: 4px 0;
+  font-size: 14px;
+  color: #343a40;
+}
+
+.child-info p strong {
+  font-weight: 600;
+  color: #007bff;
 }
 
 .request-message {
@@ -250,6 +299,28 @@
 
 .accept-btn:hover {
   background: #1e7e34;
+}
+
+.request-status {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-badge.pending {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
 }
 
 /* Modal Styles */
@@ -404,5 +475,14 @@
   
   .child-selector {
     justify-content: flex-start;
+  }
+  
+  .request-details {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .child-info {
+    min-width: unset;
   }
 }
