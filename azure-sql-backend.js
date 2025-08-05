@@ -187,6 +187,26 @@ async function createTables(pool) {
             )
         `);
 
+        // Activity invitations table
+        await pool.request().query(`
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='activity_invitations' AND xtype='U')
+            CREATE TABLE activity_invitations (
+                id INT IDENTITY(1,1) PRIMARY KEY,
+                activity_id INT NOT NULL,
+                inviter_parent_id INT NOT NULL,
+                invited_parent_id INT NOT NULL,
+                child_id INT,
+                status NVARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+                message NVARCHAR(500),
+                created_at DATETIME2 DEFAULT GETDATE(),
+                updated_at DATETIME2 DEFAULT GETDATE(),
+                FOREIGN KEY (activity_id) REFERENCES activities(id),
+                FOREIGN KEY (inviter_parent_id) REFERENCES users(id),
+                FOREIGN KEY (invited_parent_id) REFERENCES users(id),
+                FOREIGN KEY (child_id) REFERENCES children(id)
+            )
+        `);
+
         // SMS configurations table
         await pool.request().query(`
             IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='sms_configurations' AND xtype='U')
@@ -1080,11 +1100,43 @@ app.get('/children/:id/activities', authenticateToken, async (req, res) => {
 
         const result = await pool.request()
             .input('childId', sql.Int, childId)
+            .input('parentId', sql.Int, req.user.id)
             .query(`
-                SELECT id, name, description, start_date, end_date, start_time, end_time, 
-                       location, website_url, cost, max_participants, created_at, updated_at
-                FROM activities 
-                WHERE child_id = @childId
+                SELECT 
+                    a.id, a.name, a.description, a.start_date, a.end_date, a.start_time, a.end_time, 
+                    a.location, a.website_url, a.cost, a.max_participants, a.created_at, a.updated_at,
+                    CASE 
+                        WHEN EXISTS (
+                            SELECT 1 FROM activity_invitations ai 
+                            WHERE ai.activity_id = a.id AND ai.status IN ('pending', 'accepted')
+                        ) THEN 1 
+                        ELSE 0 
+                    END as is_shared,
+                    CASE 
+                        WHEN c.parent_id = @parentId THEN 1 
+                        ELSE 0 
+                    END as is_host,
+                    0 as is_cancelled,
+                    'none' as invitation_status
+                FROM activities a
+                INNER JOIN children c ON a.child_id = c.id
+                WHERE a.child_id = @childId
+                
+                UNION ALL
+                
+                SELECT 
+                    a.id, a.name, a.description, a.start_date, a.end_date, a.start_time, a.end_time, 
+                    a.location, a.website_url, a.cost, a.max_participants, a.created_at, a.updated_at,
+                    1 as is_shared,
+                    0 as is_host,
+                    0 as is_cancelled,
+                    ai.status as invitation_status
+                FROM activities a
+                INNER JOIN children c ON a.child_id = c.id
+                INNER JOIN activity_invitations ai ON a.id = ai.activity_id
+                WHERE ai.invited_parent_id = @parentId 
+                AND ai.child_id = @childId
+                
                 ORDER BY start_date ASC, start_time ASC
             `);
 
@@ -1250,6 +1302,179 @@ app.delete('/activities/:id', authenticateToken, async (req, res) => {
         console.error('Delete activity error:', error);
         await logActivity('error', `Delete activity error: ${error.message}`, req.user.id, null, req);
         res.status(500).json({ success: false, error: 'Failed to delete activity' });
+    }
+});
+
+// ===== ACTIVITY INVITATIONS ENDPOINTS =====
+
+// Send activity invitation
+app.post('/activities/:id/invite', authenticateToken, async (req, res) => {
+    try {
+        const activityId = parseInt(req.params.id);
+        const { invited_parent_id, child_id, message } = req.body;
+        const inviter_parent_id = req.user.id;
+
+        if (!invited_parent_id) {
+            return res.status(400).json({ success: false, error: 'invited_parent_id is required' });
+        }
+
+        const pool = await poolPromise;
+
+        // Verify the activity belongs to the inviter
+        const activityCheck = await pool.request()
+            .input('activityId', sql.Int, activityId)
+            .input('inviterParentId', sql.Int, inviter_parent_id)
+            .query(`
+                SELECT a.id, a.name, c.name as child_name 
+                FROM activities a
+                INNER JOIN children c ON a.child_id = c.id
+                WHERE a.id = @activityId AND c.parent_id = @inviterParentId
+            `);
+
+        if (activityCheck.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'Activity not found or access denied' });
+        }
+
+        // Check if invitation already exists
+        const existingInvitation = await pool.request()
+            .input('activityId', sql.Int, activityId)
+            .input('inviterParentId', sql.Int, inviter_parent_id)
+            .input('invitedParentId', sql.Int, invited_parent_id)
+            .query(`
+                SELECT id FROM activity_invitations 
+                WHERE activity_id = @activityId 
+                AND inviter_parent_id = @inviterParentId 
+                AND invited_parent_id = @invitedParentId
+                AND status = 'pending'
+            `);
+
+        if (existingInvitation.recordset.length > 0) {
+            return res.status(400).json({ success: false, error: 'Invitation already sent' });
+        }
+
+        // Create the invitation
+        const result = await pool.request()
+            .input('activityId', sql.Int, activityId)
+            .input('inviterParentId', sql.Int, inviter_parent_id)
+            .input('invitedParentId', sql.Int, invited_parent_id)
+            .input('childId', sql.Int, child_id || null)
+            .input('message', sql.NVarChar, message || null)
+            .query(`
+                INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, child_id, message)
+                VALUES (@activityId, @inviterParentId, @invitedParentId, @childId, @message);
+                SELECT SCOPE_IDENTITY() as invitationId;
+            `);
+
+        const invitationId = result.recordset[0].invitationId;
+
+        await logActivity('info', `Activity invitation sent`, req.user.id, { 
+            activityId, 
+            invitationId,
+            invited_parent_id 
+        }, req);
+
+        res.json({
+            success: true,
+            data: { invitationId },
+            message: 'Activity invitation sent successfully'
+        });
+    } catch (error) {
+        console.error('Send activity invitation error:', error);
+        await logActivity('error', `Send activity invitation error: ${error.message}`, req.user.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to send activity invitation' });
+    }
+});
+
+// Get activity invitations for current user
+app.get('/activity-invitations', authenticateToken, async (req, res) => {
+    try {
+        const parentId = req.user.id;
+        const pool = await poolPromise;
+
+        const result = await pool.request()
+            .input('parentId', sql.Int, parentId)
+            .query(`
+                SELECT 
+                    ai.id, ai.activity_id, ai.inviter_parent_id, ai.invited_parent_id, 
+                    ai.child_id, ai.status, ai.message, ai.created_at, ai.updated_at,
+                    a.name as activity_name, a.description as activity_description,
+                    a.start_date, a.end_date, a.start_time, a.end_time, a.location,
+                    a.cost, a.website_url,
+                    inviter.name as inviter_name, inviter.email as inviter_email,
+                    c.name as child_name
+                FROM activity_invitations ai
+                INNER JOIN activities a ON ai.activity_id = a.id
+                INNER JOIN users inviter ON ai.inviter_parent_id = inviter.id
+                LEFT JOIN children c ON ai.child_id = c.id
+                WHERE ai.invited_parent_id = @parentId
+                ORDER BY ai.created_at DESC
+            `);
+
+        res.json({
+            success: true,
+            data: result.recordset
+        });
+    } catch (error) {
+        console.error('Get activity invitations error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch activity invitations' });
+    }
+});
+
+// Respond to activity invitation
+app.post('/activity-invitations/:id/respond', authenticateToken, async (req, res) => {
+    try {
+        const invitationId = parseInt(req.params.id);
+        const { action } = req.body; // 'accept' or 'reject'
+        const parentId = req.user.id;
+
+        if (!action || !['accept', 'reject'].includes(action)) {
+            return res.status(400).json({ success: false, error: 'Action must be accept or reject' });
+        }
+
+        const pool = await poolPromise;
+
+        // Verify the invitation belongs to the current user and is pending
+        const invitationCheck = await pool.request()
+            .input('invitationId', sql.Int, invitationId)
+            .input('parentId', sql.Int, parentId)
+            .query(`
+                SELECT ai.id, ai.activity_id, ai.status, a.name as activity_name
+                FROM activity_invitations ai
+                INNER JOIN activities a ON ai.activity_id = a.id
+                WHERE ai.id = @invitationId 
+                AND ai.invited_parent_id = @parentId 
+                AND ai.status = 'pending'
+            `);
+
+        if (invitationCheck.recordset.length === 0) {
+            return res.status(404).json({ success: false, error: 'Invitation not found or already responded' });
+        }
+
+        // Update the invitation status
+        const status = action === 'accept' ? 'accepted' : 'rejected';
+        await pool.request()
+            .input('invitationId', sql.Int, invitationId)
+            .input('status', sql.NVarChar, status)
+            .query(`
+                UPDATE activity_invitations 
+                SET status = @status, updated_at = GETDATE()
+                WHERE id = @invitationId
+            `);
+
+        await logActivity('info', `Activity invitation ${action}ed`, req.user.id, { 
+            invitationId,
+            action,
+            activity_name: invitationCheck.recordset[0].activity_name
+        }, req);
+
+        res.json({
+            success: true,
+            message: `Activity invitation ${action}ed successfully`
+        });
+    } catch (error) {
+        console.error('Respond to activity invitation error:', error);
+        await logActivity('error', `Respond to activity invitation error: ${error.message}`, req.user.id, null, req);
+        res.status(500).json({ success: false, error: 'Failed to respond to activity invitation' });
     }
 });
 

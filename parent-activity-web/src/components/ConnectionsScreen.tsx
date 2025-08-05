@@ -6,6 +6,7 @@ import './ConnectionsScreen.css';
 const ConnectionsScreen = () => {
   const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
   const [sentRequests, setSentRequests] = useState<ConnectionRequest[]>([]);
+  const [activeConnections, setActiveConnections] = useState<any[]>([]);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -21,6 +22,7 @@ const ConnectionsScreen = () => {
   useEffect(() => {
     loadConnectionRequests();
     loadSentRequests();
+    loadActiveConnections();
     loadMyChildren();
   }, []);
 
@@ -65,6 +67,19 @@ const ConnectionsScreen = () => {
     }
   };
 
+  const loadActiveConnections = async () => {
+    try {
+      const response = await apiService.getConnections();
+      if (response.success && response.data) {
+        setActiveConnections(response.data);
+      } else {
+        console.error('Failed to load active connections:', response.error);
+      }
+    } catch (error) {
+      console.error('Load active connections error:', error);
+    }
+  };
+
   const handleSearchParent = async () => {
     if (!searchText.trim() || searchText.trim().length < 3) {
       alert('Please enter at least 3 characters to search');
@@ -96,6 +111,8 @@ const ConnectionsScreen = () => {
         const response = await apiService.respondToConnectionRequest(requestId, 'accept');
         if (response.success) {
           setConnectionRequests(prev => prev.filter(req => req.id !== requestId));
+          // Reload active connections to show the new connection immediately
+          loadActiveConnections();
           alert('Connection request accepted!');
         } else {
           alert(`Error: ${response.error || 'Failed to accept request'}`);
@@ -287,6 +304,40 @@ const ConnectionsScreen = () => {
                 
                 <div className="request-status">
                   <span className="status-badge pending">Pending</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Active Connections Section */}
+      <div className="sent-requests-section">
+        <h3>Active Connections ({activeConnections.length})</h3>
+        
+        {activeConnections.length === 0 ? (
+          <div className="empty-state">
+            <p>No active connections yet</p>
+          </div>
+        ) : (
+          <div className="requests-list">
+            {activeConnections.map((connection) => (
+              <div key={connection.id} className="request-card">
+                <div className="request-header">
+                  <span className="request-date">
+                    {new Date(connection.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                
+                <div className="request-message">
+                  <p>
+                    <strong>{connection.child1_name}</strong> is connected with{' '}
+                    <strong>{connection.child2_name}</strong>
+                  </p>
+                </div>
+                
+                <div className="request-status">
+                  <span className="status-badge" style={{backgroundColor: '#28a745', color: 'white', border: '1px solid #1e7e34'}}>Active</span>
                 </div>
               </div>
             ))}

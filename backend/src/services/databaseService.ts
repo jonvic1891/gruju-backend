@@ -40,13 +40,13 @@ export class DatabaseService {
   private static instance: DatabaseService;
   private connectionPool: sql.ConnectionPool | null = null;
   private mockDb: MockDatabase;
-  private currentMode: 'mock' | 'demo' | 'test' | 'production' = 'mock';
+  private currentMode: 'mock' | 'demo' | 'test' | 'production' = 'production';
   private databaseConfigs: Map<string, DatabaseConfig> = new Map();
   private currentConfig: DatabaseConfig | null = null;
 
   private constructor() {
     this.mockDb = MockDatabase.getInstance();
-    this.currentMode = (process.env.DATABASE_MODE as 'mock' | 'demo' | 'test' | 'production') || 'mock';
+    this.currentMode = (process.env.DATABASE_MODE as 'mock' | 'demo' | 'test' | 'production') || 'production';
     this.loadConfigurationsFromEnv();
   }
 

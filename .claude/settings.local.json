@@ -12,7 +12,20 @@
       "Bash(mkdir:*)",
       "Bash(cp:*)",
       "Bash(curl:*)",
-      "Bash(firebase login:*)"
+      "Bash(firebase login:*)",
+      "Bash(git push:*)",
+      "Bash(firebase deploy:*)",
+      "Bash(kill:*)",
+      "Bash(node:*)",
+      "Bash(rm:*)",
+      "Bash(heroku config:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(sudo rm:*)",
+      "Bash(git commit:*)",
+      "Bash(npm install)",
+      "Bash(npm test:*)",
+      "Bash(heroku logs:*)"
     ],
     "deny": []
   }

@@ -75,19 +75,37 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     try {
       const response = await apiService.getConnections();
       if (response.success && response.data) {
-        // Extract children from connected families
+        // Get current user info to determine which children are ours vs connected
+        const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
+        const currentUsername = currentUser.username;
+        
+        // Extract connected children from connections
         const children: any[] = [];
         response.data.forEach((connection: any) => {
-          if (connection.children && Array.isArray(connection.children)) {
-            connection.children.forEach((connectedChild: any) => {
-              children.push({
-                ...connectedChild,
-                parentName: connection.parent_name || connection.username,
-                parentEmail: connection.parent_email || connection.email
-              });
+          // For each connection, add the child that belongs to the OTHER family
+          
+          // Add child1 if it belongs to the other family
+          if (connection.child1_name && connection.child1_parent_name !== currentUsername) {
+            children.push({
+              id: connection.child1_id,
+              name: connection.child1_name,
+              parentName: connection.child1_parent_name,
+              connectionId: connection.id
+            });
+          }
+          
+          // Add child2 if it belongs to the other family
+          if (connection.child2_name && connection.child2_parent_name !== currentUsername) {
+            children.push({
+              id: connection.child2_id,
+              name: connection.child2_name,
+              parentName: connection.child2_parent_name,
+              connectionId: connection.id
             });
           }
         });
+        
+        console.log('Connected children loaded:', children);
         setConnectedChildren(children);
       }
     } catch (error) {
