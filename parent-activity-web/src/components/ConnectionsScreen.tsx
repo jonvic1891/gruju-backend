@@ -254,10 +254,6 @@ const ConnectionsScreen = () => {
                   )}
                 </div>
                 
-                {request.message && (
-                  <div className="request-message">"{request.message}"</div>
-                )}
-                
                 <div className="request-actions">
                   <button
                     onClick={() => handleRejectRequest(request.id)}
@@ -316,10 +312,6 @@ const ConnectionsScreen = () => {
                     </div>
                   )}
                 </div>
-                
-                {request.message && (
-                  <div className="request-message">"{request.message}"</div>
-                )}
                 
                 <div className="request-status">
                   <span className="status-badge pending">Pending</span>
