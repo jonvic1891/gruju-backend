@@ -657,10 +657,10 @@ app.post('/api/auth/register', async (req, res) => {
 });
 
 // Auth verification endpoint
-app.get('/auth/verify', authenticateToken, async (req, res) => {
+app.get('/api/auth/verify', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
-        const result = await client.query('SELECT id, username, email, role, family_name FROM users WHERE id = $1 AND is_active = true', [req.user.id]);
+        const result = await client.query('SELECT id, username, email, phone, role, family_name FROM users WHERE id = $1 AND is_active = true', [req.user.id]);
         client.release();
 
         if (result.rows.length === 0) {
@@ -678,7 +678,7 @@ app.get('/auth/verify', authenticateToken, async (req, res) => {
 });
 
 // Forgot password endpoint
-app.post('/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', async (req, res) => {
     try {
         const { email } = req.body;
 
@@ -707,6 +707,79 @@ app.post('/auth/forgot-password', async (req, res) => {
     } catch (error) {
         console.error('Forgot password error:', error);
         res.status(500).json({ success: false, error: 'Failed to process password reset request' });
+    }
+});
+
+// Profile management endpoints
+// Get current user profile
+app.get('/api/users/profile', authenticateToken, async (req, res) => {
+    try {
+        const client = await pool.connect();
+        const result = await client.query(
+            'SELECT id, username, email, phone, created_at, updated_at FROM users WHERE id = $1',
+            [req.user.id]
+        );
+        client.release();
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({
+            success: true,
+            data: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Get profile error:', error);
+        res.status(500).json({ error: 'Failed to get profile' });
+    }
+});
+
+// Update user profile
+app.put('/api/users/profile', authenticateToken, async (req, res) => {
+    try {
+        const { username, email, phone } = req.body;
+
+        // Validate input
+        if (!username || !email || !phone) {
+            return res.status(400).json({ error: 'Username, email, and phone are required' });
+        }
+
+        const client = await pool.connect();
+        
+        // Check if email or username already exists for another user
+        const existingUser = await client.query(
+            'SELECT id FROM users WHERE (email = $1 OR username = $2) AND id != $3',
+            [email, username, req.user.id]
+        );
+
+        if (existingUser.rows.length > 0) {
+            client.release();
+            return res.status(409).json({ error: 'Email or username already exists' });
+        }
+
+        // Update user
+        await client.query(
+            'UPDATE users SET username = $1, email = $2, phone = $3, updated_at = NOW() WHERE id = $4',
+            [username, email, phone, req.user.id]
+        );
+
+        // Get updated user data
+        const updatedUser = await client.query(
+            'SELECT id, username, email, phone, created_at, updated_at FROM users WHERE id = $1',
+            [req.user.id]
+        );
+        
+        client.release();
+
+        res.json({
+            success: true,
+            message: 'Profile updated successfully',
+            data: updatedUser.rows[0]
+        });
+    } catch (error) {
+        console.error('Update profile error:', error);
+        res.status(500).json({ error: 'Failed to update profile' });
     }
 });
 
@@ -1097,8 +1170,8 @@ async function startServer() {
             console.log('  GET  /health - Server health check');
             console.log('  POST /api/auth/login - User authentication');
             console.log('  POST /api/auth/register - User registration');
-            console.log('  GET  /auth/verify - Token verification');
-            console.log('  POST /auth/forgot-password - Password reset request');
+            console.log('  GET  /api/auth/verify - Token verification');
+            console.log('  POST /api/auth/forgot-password - Password reset request');
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error);
