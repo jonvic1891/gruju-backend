@@ -98,7 +98,7 @@ class ApiService {
   }
 
   async verifyToken(): Promise<ApiResponse<{ user: any }>> {
-    return this.request('get', '/auth/verify');
+    return this.request('get', '/api/auth/verify');
   }
 
   async logout(): Promise<void> {
@@ -121,77 +121,81 @@ class ApiService {
 
   // Children
   async getChildren(): Promise<ApiResponse<any[]>> {
-    return this.request('get', '/children');
+    return this.request('get', '/api/children');
   }
 
   async createChild(childData: { name: string }): Promise<ApiResponse<any>> {
-    return this.request('post', '/children', childData);
+    return this.request('post', '/api/children', childData);
   }
 
   async deleteChild(childId: number): Promise<ApiResponse<any>> {
-    return this.request('delete', `/children/${childId}`);
+    return this.request('delete', `/api/children/${childId}`);
   }
 
   // Activities
   async getActivities(childId: number): Promise<ApiResponse<any[]>> {
-    return this.request<any[]>('get', `/activities/${childId}`);
+    return this.request<any[]>('get', `/api/activities/${childId}`);
   }
 
   async getCalendarActivities(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
-    return this.request('get', `/calendar/activities?start=${startDate}&end=${endDate}`);
+    return this.request('get', `/api/calendar/activities?start=${startDate}&end=${endDate}`);
   }
 
   async createActivity(childId: number, activityData: any): Promise<ApiResponse<any>> {
-    return this.request('post', `/activities/${childId}`, activityData);
+    return this.request('post', `/api/activities/${childId}`, activityData);
   }
 
   async updateActivity(activityId: number, activityData: any): Promise<ApiResponse<any>> {
-    return this.request('put', `/activities/update/${activityId}`, activityData);
+    return this.request('put', `/api/activities/update/${activityId}`, activityData);
   }
 
   async deleteActivity(activityId: number): Promise<ApiResponse<any>> {
-    return this.request('delete', `/activities/delete/${activityId}`);
+    return this.request('delete', `/api/activities/delete/${activityId}`);
   }
 
   async duplicateActivity(activityId: number, newStartDate: string, newEndDate: string): Promise<ApiResponse<any>> {
-    return this.request('post', `/activities/${activityId}/duplicate`, {
+    return this.request('post', `/api/activities/${activityId}/duplicate`, {
       new_start_date: newStartDate,
       new_end_date: newEndDate
     });
   }
 
   async getConnectedActivities(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
-    return this.request('get', `/calendar/connected-activities?start=${startDate}&end=${endDate}`);
+    return this.request('get', `/api/calendar/connected-activities?start=${startDate}&end=${endDate}`);
   }
 
   async getActivityCounts(startDate: string, endDate: string, includeConnected: boolean = false): Promise<ApiResponse<any[]>> {
-    return this.request('get', `/calendar/activity-counts?start=${startDate}&end=${endDate}&include_connected=${includeConnected}`);
+    return this.request('get', `/api/calendar/activity-counts?start=${startDate}&end=${endDate}&include_connected=${includeConnected}`);
   }
 
   // Connections
   async getConnectionRequests(): Promise<ApiResponse<any[]>> {
-    return this.request('get', '/connections/requests');
+    return this.request('get', '/api/connections/requests');
+  }
+
+  async getSentConnectionRequests(): Promise<ApiResponse<any[]>> {
+    return this.request('get', '/api/connections/sent-requests');
   }
 
   async searchParent(query: string): Promise<ApiResponse<any[]>> {
-    return this.request('get', `/connections/search?q=${encodeURIComponent(query)}`);
+    return this.request('get', `/api/connections/search?q=${encodeURIComponent(query)}`);
   }
 
   async sendConnectionRequest(requestData: any): Promise<ApiResponse<any>> {
-    return this.request('post', '/connections/request', requestData);
+    return this.request('post', '/api/connections/request', requestData);
   }
 
   async respondToConnectionRequest(requestId: number, action: 'accept' | 'reject'): Promise<ApiResponse<any>> {
-    return this.request('post', `/connections/respond/${requestId}`, { action });
+    return this.request('post', `/api/connections/respond/${requestId}`, { action });
   }
 
   async getConnections(): Promise<ApiResponse<any[]>> {
-    return this.request('get', '/connections');
+    return this.request('get', '/api/connections');
   }
 
   // Activity Invitations
   async sendActivityInvitation(activityId: number, invitedParentId: number, childId?: number, message?: string): Promise<ApiResponse<any>> {
-    return this.request('post', `/activities/${activityId}/invite`, { 
+    return this.request('post', `/api/activities/${activityId}/invite`, { 
       invited_parent_id: invitedParentId,
       child_id: childId,
       message 
@@ -199,11 +203,11 @@ class ApiService {
   }
 
   async getActivityInvitations(): Promise<ApiResponse<any[]>> {
-    return this.request('get', '/activity-invitations');
+    return this.request('get', '/api/activity-invitations');
   }
 
   async respondToActivityInvitation(invitationId: number, action: 'accept' | 'reject'): Promise<ApiResponse<any>> {
-    return this.request('post', `/activity-invitations/${invitationId}/respond`, { action });
+    return this.request('post', `/api/activity-invitations/${invitationId}/respond`, { action });
   }
 }
 
