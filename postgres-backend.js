@@ -1013,11 +1013,13 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
         const result = await client.query(
-            `SELECT cr.*, u.username as requester_name, u.email as requester_email, 
-                    c1.name as child_name, c2.name as target_child_name
+            `SELECT cr.*, 
+                    u.username as requester_name, u.email as requester_email, u.family_name as requester_family_name,
+                    c1.name as child_name, c1.age as child_age, c1.grade as child_grade, c1.school as child_school,
+                    c2.name as target_child_name, c2.age as target_child_age, c2.grade as target_child_grade, c2.school as target_child_school
              FROM connection_requests cr
              JOIN users u ON cr.requester_id = u.id
-             LEFT JOIN children c1 ON cr.child_id = c1.id
+             JOIN children c1 ON cr.child_id = c1.id
              LEFT JOIN children c2 ON cr.target_child_id = c2.id
              WHERE cr.target_parent_id = $1 AND cr.status = 'pending'
              ORDER BY cr.created_at DESC`,
@@ -1032,6 +1034,35 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Get connection requests error:', error);
         res.status(500).json({ success: false, error: 'Failed to fetch connection requests' });
+    }
+});
+
+// Get sent connection requests (for the requester to track their pending requests)
+app.get('/api/connections/sent-requests', authenticateToken, async (req, res) => {
+    try {
+        const client = await pool.connect();
+        const result = await client.query(
+            `SELECT cr.*, 
+                    u.username as target_parent_name, u.email as target_parent_email, u.family_name as target_family_name,
+                    c1.name as child_name, c1.age as child_age, c1.grade as child_grade, c1.school as child_school,
+                    c2.name as target_child_name, c2.age as target_child_age, c2.grade as target_child_grade, c2.school as target_child_school
+             FROM connection_requests cr
+             JOIN users u ON cr.target_parent_id = u.id
+             JOIN children c1 ON cr.child_id = c1.id
+             LEFT JOIN children c2 ON cr.target_child_id = c2.id
+             WHERE cr.requester_id = $1 AND cr.status = 'pending'
+             ORDER BY cr.created_at DESC`,
+            [req.user.id]
+        );
+        client.release();
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+    } catch (error) {
+        console.error('Get sent connection requests error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch sent connection requests' });
     }
 });
 
@@ -1097,11 +1128,28 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
             'INSERT INTO connection_requests (requester_id, target_parent_id, child_id, target_child_id, message, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
             [req.user.id, target_parent_id, child_id, target_child_id, message, 'pending']
         );
+
+        // Get detailed information for the response
+        const detailedRequest = await client.query(
+            `SELECT cr.*, 
+                    u_req.username as requester_name, u_req.email as requester_email,
+                    u_target.username as target_parent_name, u_target.email as target_parent_email,
+                    c1.name as child_name, c1.age as child_age, c1.grade as child_grade, c1.school as child_school,
+                    c2.name as target_child_name, c2.age as target_child_age, c2.grade as target_child_grade, c2.school as target_child_school
+             FROM connection_requests cr
+             JOIN users u_req ON cr.requester_id = u_req.id
+             JOIN users u_target ON cr.target_parent_id = u_target.id
+             JOIN children c1 ON cr.child_id = c1.id
+             LEFT JOIN children c2 ON cr.target_child_id = c2.id
+             WHERE cr.id = $1`,
+            [result.rows[0].id]
+        );
         client.release();
 
         res.json({
             success: true,
-            data: result.rows[0]
+            data: detailedRequest.rows[0],
+            message: 'Connection request sent successfully'
         });
     } catch (error) {
         console.error('Send connection request error:', error);
