@@ -1337,6 +1337,14 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
         const { activityId } = req.params;
         const { invited_parent_id, child_id, message } = req.body;
 
+        console.log('🎯 Activity invite debug:', {
+            activityId,
+            invited_parent_id,
+            child_id,
+            message,
+            userId: req.user.id
+        });
+
         if (!invited_parent_id) {
             return res.status(400).json({ success: false, error: 'Invited parent ID is required' });
         }
