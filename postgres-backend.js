@@ -957,9 +957,16 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
             return res.status(404).json({ success: false, error: 'Child not found' });
         }
 
+        // Convert empty strings to null for time fields
+        const processedStartTime = start_time && start_time.trim() ? start_time.trim() : null;
+        const processedEndTime = end_time && end_time.trim() ? end_time.trim() : null;
+        const processedEndDate = end_date && end_date.trim() ? end_date.trim() : null;
+        const processedCost = cost && cost.trim() ? parseFloat(cost.trim()) : null;
+        const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
+
         const result = await client.query(
             'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
-            [childId, name.trim(), description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants]
+            [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants]
         );
         client.release();
 
@@ -1027,13 +1034,20 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
             return res.status(404).json({ success: false, error: 'Activity not found' });
         }
         
+        // Convert empty strings to null for time fields  
+        const processedStartTime = start_time && start_time.trim() ? start_time.trim() : null;
+        const processedEndTime = end_time && end_time.trim() ? end_time.trim() : null;
+        const processedEndDate = end_date && end_date.trim() ? end_date.trim() : null;
+        const processedCost = cost && cost.trim() ? parseFloat(cost.trim()) : null;
+        const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
+
         const result = await client.query(
             `UPDATE activities SET 
                 name = $1, description = $2, start_date = $3, end_date = $4, 
                 start_time = $5, end_time = $6, location = $7, website_url = $8, 
                 cost = $9, max_participants = $10, updated_at = NOW()
              WHERE id = $11 RETURNING *`,
-            [name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, activityId]
+            [name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, activityId]
         );
         
         client.release();
