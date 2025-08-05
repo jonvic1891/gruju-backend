@@ -6,7 +6,8 @@
   "scripts": {
     "start": "cd backend && npm run build && npm start", 
     "dev": "cd backend && npm run dev",
-    "test": "node test-azure-connection.js"
+    "test": "node test-azure-connection.js",
+    "postinstall": "cd backend && npm install"
   },
   "engines": {
     "node": ">=18.0.0"
