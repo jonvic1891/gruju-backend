@@ -210,8 +210,16 @@ class ApiService {
     return this.request('get', '/api/activity-invitations');
   }
 
+  async getPendingInvitationsForCalendar(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
+    return this.request('get', `/api/calendar/pending-invitations?start=${startDate}&end=${endDate}`);
+  }
+
   async respondToActivityInvitation(invitationId: number, action: 'accept' | 'reject'): Promise<ApiResponse<any>> {
     return this.request('post', `/api/activity-invitations/${invitationId}/respond`, { action });
+  }
+
+  async getActivityParticipants(activityId: number): Promise<ApiResponse<any>> {
+    return this.request('get', `/api/activities/${activityId}/participants`);
   }
 }
 

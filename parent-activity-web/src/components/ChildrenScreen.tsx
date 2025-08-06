@@ -4,6 +4,24 @@ import { Child } from '../types';
 import ChildActivityScreen from './ChildActivityScreen';
 import './ChildrenScreen.css';
 
+interface ActivityInvitation {
+  id: number;
+  activity_id: number;
+  activity_name: string;
+  activity_description?: string;
+  start_date: string;
+  end_date?: string;
+  start_time?: string;
+  end_time?: string;
+  location?: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  host_parent_name: string;
+  host_parent_email: string;
+  invited_child_name?: string;
+  message?: string;
+  created_at: string;
+}
+
 const ChildrenScreen = () => {
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
@@ -12,6 +30,8 @@ const ChildrenScreen = () => {
   const [addingChild, setAddingChild] = useState(false);
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [childActivityCounts, setChildActivityCounts] = useState<Record<number, number>>({});
+  const [childInvitations, setChildInvitations] = useState<Record<number, ActivityInvitation[]>>({});
+  const [processingInvitation, setProcessingInvitation] = useState<number | null>(null);
   const apiService = ApiService.getInstance();
 
 
@@ -31,8 +51,9 @@ const ChildrenScreen = () => {
           : (response.data as any)?.data || [];
         setChildren(childrenData);
         
-        // Load activity counts for each child
+        // Load activity counts and invitations for each child
         await loadActivityCounts(childrenData);
+        await loadInvitationsForChildren(childrenData);
       } else {
         console.error('Failed to load children:', response.error);
         alert(`Error: ${response.error || 'Failed to load children'}`);
@@ -69,6 +90,84 @@ const ChildrenScreen = () => {
       setChildActivityCounts(counts);
     } catch (error) {
       console.error('Failed to load activity counts:', error);
+    }
+  };
+
+  const loadInvitationsForChildren = async (childrenData: Child[]) => {
+    try {
+      // Get all activity invitations for this parent
+      const response = await apiService.getActivityInvitations();
+      if (response.success && response.data) {
+        // Group invitations by child
+        const invitationsByChild: Record<number, ActivityInvitation[]> = {};
+        
+        // Initialize empty arrays for each child
+        childrenData.forEach(child => {
+          invitationsByChild[child.id] = [];
+        });
+        
+        // Group invitations by the child they're for
+        response.data.forEach((invitation: any) => {
+          // Find the child this invitation is for
+          const targetChild = childrenData.find(child => 
+            child.name === invitation.invited_child_name
+          );
+          
+          if (targetChild && invitation.status === 'pending') {
+            invitationsByChild[targetChild.id].push({
+              id: invitation.id,
+              activity_id: invitation.activity_id,
+              activity_name: invitation.activity_name,
+              activity_description: invitation.activity_description,
+              start_date: invitation.start_date,
+              end_date: invitation.end_date,
+              start_time: invitation.start_time,
+              end_time: invitation.end_time,
+              location: invitation.location,
+              status: invitation.status,
+              host_parent_name: invitation.host_parent_name,
+              host_parent_email: invitation.host_parent_email,
+              invited_child_name: invitation.invited_child_name,
+              message: invitation.message,
+              created_at: invitation.created_at
+            });
+          }
+        });
+        
+        setChildInvitations(invitationsByChild);
+      }
+    } catch (error) {
+      console.error('Failed to load invitations:', error);
+    }
+  };
+
+  const handleInvitationResponse = async (invitationId: number, action: 'accept' | 'reject') => {
+    try {
+      setProcessingInvitation(invitationId);
+      const response = await apiService.respondToActivityInvitation(invitationId, action);
+      
+      if (response.success) {
+        // Remove the invitation from the child's list
+        setChildInvitations(prev => {
+          const updated = { ...prev };
+          Object.keys(updated).forEach(childId => {
+            updated[parseInt(childId)] = updated[parseInt(childId)].filter(inv => inv.id !== invitationId);
+          });
+          return updated;
+        });
+        
+        const message = action === 'accept' 
+          ? 'Invitation accepted! Activity will appear in your calendar.' 
+          : 'Invitation declined.';
+        alert(message);
+      } else {
+        alert(`Error: ${response.error || 'Failed to respond to invitation'}`);
+      }
+    } catch (error) {
+      console.error('Failed to respond to invitation:', error);
+      alert('Failed to respond to invitation');
+    } finally {
+      setProcessingInvitation(null);
     }
   };
 
@@ -183,6 +282,61 @@ const ChildrenScreen = () => {
                 <div className="child-activity-count">
                   📋 {childActivityCounts[child.id] || 0} {childActivityCounts[child.id] === 1 ? 'Activity' : 'Activities'}
                 </div>
+
+                {/* Activity Invitations - Optimized Layout */}
+                {childInvitations[child.id] && childInvitations[child.id].length > 0 && (
+                  <div className="child-invitations">
+                    <div className="invitations-header">
+                      📩 {childInvitations[child.id].length} Invitation{childInvitations[child.id].length !== 1 ? 's' : ''}
+                    </div>
+                    {childInvitations[child.id].map((invitation) => (
+                      <div key={invitation.id} className="invitation-item" onClick={(e) => e.stopPropagation()}>
+                        <div className="invitation-header">
+                          <div className="invitation-activity">
+                            <strong>{invitation.activity_name}</strong>
+                            <span className="invitation-from">from {invitation.host_parent_name}</span>
+                          </div>
+                          <div className="invitation-actions">
+                            <button
+                              className="invitation-accept-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleInvitationResponse(invitation.id, 'accept');
+                              }}
+                              disabled={processingInvitation === invitation.id}
+                            >
+                              {processingInvitation === invitation.id ? '...' : 'Accept'}
+                            </button>
+                            <button
+                              className="invitation-reject-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleInvitationResponse(invitation.id, 'reject');
+                              }}
+                              disabled={processingInvitation === invitation.id}
+                            >
+                              {processingInvitation === invitation.id ? '...' : 'Decline'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="invitation-meta">
+                          <span className="invitation-meta-item">
+                            📅 {new Date(invitation.start_date).toLocaleDateString()}
+                          </span>
+                          {invitation.start_time && (
+                            <span className="invitation-meta-item">🕐 {invitation.start_time}</span>
+                          )}
+                          {invitation.location && (
+                            <span className="invitation-meta-item">📍 {invitation.location}</span>
+                          )}
+                        </div>
+                        {invitation.message && (
+                          <div className="invitation-message">"{invitation.message}"</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 
                 <div className="child-date">
                   Added: {new Date(child.created_at).toLocaleDateString()}

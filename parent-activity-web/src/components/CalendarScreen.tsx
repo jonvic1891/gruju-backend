@@ -4,7 +4,11 @@ import { Activity, Child } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import './CalendarScreen.css';
 
+console.log('📦 CalendarScreen.tsx loaded');
+
 const CalendarScreen = () => {
+  console.log('🎯 CalendarScreen component rendering...');
+  
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
@@ -15,22 +19,43 @@ const CalendarScreen = () => {
   const [connectionRequests, setConnectionRequests] = useState<any[]>([]);
   const [connectedActivities, setConnectedActivities] = useState<Activity[]>([]);
   const [invitedActivities, setInvitedActivities] = useState<Activity[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<Activity[]>([]);
   const [includeConnected, setIncludeConnected] = useState(false);
   const [includeInvited, setIncludeInvited] = useState(true);
+  const [includePending, setIncludePending] = useState(true);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [showActivityDetail, setShowActivityDetail] = useState(false);
+  const [activityParticipants, setActivityParticipants] = useState<any>(null);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
   const { user } = useAuth();
   const apiService = ApiService.getInstance();
 
   useEffect(() => {
+    console.log('📊 useEffect triggered with:', {
+      currentMonth: currentMonth.toISOString(),
+      includeConnected,
+      includeInvited,
+      includePending
+    });
+    
     loadActivities();
     loadChildren();
     loadConnectionRequests();
     if (includeConnected) {
+      console.log('🔗 Loading connected activities...');
       loadConnectedActivities();
     }
     if (includeInvited) {
+      console.log('📩 Loading invited activities...');
       loadInvitedActivities();
     }
-  }, [currentMonth, includeConnected, includeInvited]);
+    if (includePending) {
+      console.log('⏳ Loading pending invitations...');
+      loadPendingInvitations();
+    } else {
+      console.log('⚠️ includePending is false, skipping loadPendingInvitations');
+    }
+  }, [currentMonth, includeConnected, includeInvited, includePending]);
 
   useEffect(() => {
     if (selectedDate) {
@@ -49,9 +74,16 @@ const CalendarScreen = () => {
         (activity.start_date <= selectedDate && (activity.end_date || activity.start_date) >= selectedDate)
       ) : [];
 
-      setSelectedActivities([...ownActivities, ...connectedActivitiesForDay, ...invitedActivitiesForDay]);
+      const pendingInvitationsForDay = includePending ? pendingInvitations.filter(activity => {
+        const activityDate = activity.start_date.split('T')[0];
+        const activityEndDate = activity.end_date ? activity.end_date.split('T')[0] : activityDate;
+        return activityDate === selectedDate || 
+               (activityDate <= selectedDate && activityEndDate >= selectedDate);
+      }) : [];
+
+      setSelectedActivities([...ownActivities, ...connectedActivitiesForDay, ...invitedActivitiesForDay, ...pendingInvitationsForDay]);
     }
-  }, [selectedDate, activities, connectedActivities, invitedActivities, includeConnected, includeInvited]);
+  }, [selectedDate, activities, connectedActivities, invitedActivities, pendingInvitations, includeConnected, includeInvited, includePending]);
 
   const loadActivities = async () => {
     try {
@@ -140,6 +172,34 @@ const CalendarScreen = () => {
     }
   };
 
+  const loadPendingInvitations = async () => {
+    console.log('🚀 loadPendingInvitations function started');
+    try {
+      const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+      const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+      
+      const startDate = startOfMonth.toISOString().split('T')[0];
+      const endDate = endOfMonth.toISOString().split('T')[0];
+      
+      console.log('📡 Calling getPendingInvitationsForCalendar with:', { startDate, endDate });
+      console.log('🔍 ApiService method exists?', typeof apiService.getPendingInvitationsForCalendar);
+      
+      const response = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
+      console.log('📊 getPendingInvitationsForCalendar response:', response);
+      
+      if (response.success && response.data) {
+        console.log('✅ Setting pending invitations:', response.data);
+        setPendingInvitations(response.data);
+      } else {
+        console.log('❌ No pending invitations data, setting empty array');
+        setPendingInvitations([]);
+      }
+    } catch (error) {
+      console.error('Load pending invitations error:', error);
+      setPendingInvitations([]);
+    }
+  };
+
   const getNotificationIcon = (status: string, isIncoming: boolean) => {
     if (status === 'pending') {
       return isIncoming ? '📩' : '📤'; // Incoming invite vs Outgoing invite
@@ -167,6 +227,14 @@ const CalendarScreen = () => {
   };
 
   const generateCalendarDays = () => {
+    console.log('🔍 generateCalendarDays called with:', {
+      currentMonth: currentMonth.toISOString(),
+      includePending,
+      pendingInvitationsCount: pendingInvitations.length,
+      invitedActivitiesCount: invitedActivities.length,
+      activitiesCount: activities.length
+    });
+    
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
     
@@ -195,7 +263,29 @@ const CalendarScreen = () => {
         (activity.start_date <= dateString && (activity.end_date || activity.start_date) >= dateString)
       ) : [];
 
-      const dayActivities = [...ownActivities, ...connectedActivitiesForDay, ...invitedActivitiesForDay];
+      const pendingInvitationsForDay = includePending ? pendingInvitations.filter(activity => {
+        const activityDate = activity.start_date.split('T')[0];
+        const activityEndDate = activity.end_date ? activity.end_date.split('T')[0] : activityDate;
+        return activityDate === dateString || 
+               (activityDate <= dateString && activityEndDate >= dateString);
+      }) : [];
+
+      const dayActivities = [...ownActivities, ...connectedActivitiesForDay, ...invitedActivitiesForDay, ...pendingInvitationsForDay];
+      
+      // Debug specific dates
+      if (dateString === '2025-08-04' || dateString === '2025-08-07' || dateString === '2025-08-08' || dateString === '2025-08-15') {
+        console.log(`📅 ${dateString} DEBUG:`, {
+          ownActivities: ownActivities.length,
+          connectedActivitiesForDay: connectedActivitiesForDay.length,
+          invitedActivitiesForDay: invitedActivitiesForDay.length,
+          pendingInvitationsForDay: pendingInvitationsForDay.length,
+          totalDayActivities: dayActivities.length,
+          includePending,
+          pendingInvitationsTotal: pendingInvitations.length,
+          samplePendingDates: pendingInvitations.map(p => ({ name: p.name, date: p.start_date }))
+        });
+      }
+      
       
       // Find connection requests for this date
       const dayNotifications = connectionRequests.filter(request => {
@@ -216,6 +306,27 @@ const CalendarScreen = () => {
         const isIncoming = latestNotification.target_parent_id === user?.id; // Current user is the target
         primaryIcon = getNotificationIcon(latestNotification.status, isIncoming);
         primaryColor = getNotificationColor(latestNotification.status, isIncoming);
+      } else if (hasActivities) {
+        // Set primary color based on activity types when no notifications
+        const hasPending = pendingInvitationsForDay.length > 0;
+        const hasInvited = invitedActivitiesForDay.length > 0;
+        const hasConnected = connectedActivitiesForDay.length > 0;
+        const hasOwn = ownActivities.length > 0;
+        
+        if (hasPending) {
+          primaryColor = '#fd7e14'; // Orange for pending invitations
+          primaryIcon = '⏳';
+          console.log(`🎯 ${dateString} set as PENDING with color ${primaryColor}`);
+        } else if (hasInvited) {
+          primaryColor = '#ff9800'; // Light orange for accepted invitations
+          primaryIcon = '📩';
+        } else if (hasConnected) {
+          primaryColor = '#28a745'; // Green for connected activities
+          primaryIcon = '🤝';
+        } else if (hasOwn) {
+          primaryColor = '#007bff'; // Blue for own activities
+          primaryIcon = '🏠';
+        }
       }
       
       days.push({
@@ -259,6 +370,71 @@ const CalendarScreen = () => {
     return 'All day';
   };
 
+  const loadActivityParticipants = async (activityId: number) => {
+    try {
+      setLoadingParticipants(true);
+      const response = await apiService.getActivityParticipants(activityId);
+      if (response.success && response.data) {
+        setActivityParticipants(response.data);
+      } else {
+        setActivityParticipants(null);
+        console.error('Failed to load activity participants:', response.error);
+      }
+    } catch (error) {
+      console.error('Error loading activity participants:', error);
+      setActivityParticipants(null);
+    } finally {
+      setLoadingParticipants(false);
+    }
+  };
+
+  const handleActivityClick = (activity: Activity) => {
+    setSelectedActivity(activity);
+    setShowActivityDetail(true);
+    // Load participants for the activity (if it's a real activity with an ID)
+    if (activity.id && !isPendingInvitation(activity)) {
+      loadActivityParticipants(activity.id);
+    } else {
+      setActivityParticipants(null);
+    }
+  };
+
+  const isPendingInvitation = (activity: Activity) => {
+    return pendingInvitations.some(a => a.id === activity.id);
+  };
+
+  const isDeclinedInvitation = (activity: Activity) => {
+    // For CalendarScreen, we don't currently load declined invitations
+    // but we'll add this helper for consistency
+    return false;
+  };
+
+  const handleInvitationResponse = async (invitationId: number, action: 'accept' | 'reject') => {
+    try {
+      const response = await apiService.respondToActivityInvitation(invitationId, action);
+      if (response.success) {
+        const message = action === 'accept' 
+          ? 'Invitation accepted! Activity will appear in your calendar.' 
+          : 'Invitation declined.';
+        alert(message);
+        // Reload all activities to reflect the change
+        loadActivities();
+        if (includeInvited) loadInvitedActivities();
+        if (includePending) loadPendingInvitations();
+        setShowActivityDetail(false);
+      } else {
+        alert(`Error: ${response.error || 'Failed to respond to invitation'}`);
+      }
+    } catch (error) {
+      console.error('Failed to respond to invitation:', error);
+      alert('Failed to respond to invitation');
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
@@ -267,6 +443,8 @@ const CalendarScreen = () => {
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   const days = generateCalendarDays();
+  
+  console.log('🎨 CalendarScreen about to render JSX...');
 
   return (
     <div className="calendar-screen">
@@ -287,7 +465,15 @@ const CalendarScreen = () => {
               checked={includeInvited}
               onChange={(e) => setIncludeInvited(e.target.checked)}
             />
-            <span>Show Invited Activities</span>
+            <span>Show Accepted Invitations</span>
+          </label>
+          <label className="pending-toggle">
+            <input
+              type="checkbox"
+              checked={includePending}
+              onChange={(e) => setIncludePending(e.target.checked)}
+            />
+            <span>Show Pending Invitations</span>
           </label>
         </div>
       </div>
@@ -374,6 +560,7 @@ const CalendarScreen = () => {
                 const isOwn = activities.some(a => a.id === activity.id);
                 const isConnected = connectedActivities.some(a => a.id === activity.id);
                 const isInvited = invitedActivities.some(a => a.id === activity.id);
+                const isPending = pendingInvitations.some(a => a.id === activity.id);
                 
                 let activityType = '';
                 let activityIcon = '';
@@ -390,11 +577,27 @@ const CalendarScreen = () => {
                 } else if (isInvited) {
                   activityType = `Invited by ${activity.host_parent_username || 'Friend'}`;
                   activityIcon = '📩';
+                  activityColor = '#ff9800';
+                } else if (isPending) {
+                  activityType = `Pending Invitation from ${activity.host_parent_username || 'Friend'}`;
+                  activityIcon = '⏳';
                   activityColor = '#fd7e14';
                 }
 
                 return (
-                  <div key={index} className="activity-card" style={{ borderLeft: `4px solid ${activityColor}` }}>
+                  <div 
+                    key={index} 
+                    className="activity-card clickable-card" 
+                    style={{ borderLeft: `4px solid ${activityColor}` }}
+                    onClick={() => handleActivityClick({
+                      ...activity,
+                      isPendingInvitation: isPending,
+                      isDeclinedInvitation: false,
+                      invitationId: isPending ? activity.invitation_id : undefined,
+                      hostParent: activity.host_parent_username,
+                      message: activity.invitation_message
+                    })}
+                  >
                     <div className="activity-header">
                       <div className="activity-title-row">
                         <h4 className="activity-name">{activity.name}</h4>
@@ -419,6 +622,14 @@ const CalendarScreen = () => {
                     {activity.invitation_message && (
                       <div className="invitation-message">💌 "{activity.invitation_message}"</div>
                     )}
+                    <div className="click-hint" style={{ 
+                      fontSize: '12px', 
+                      color: '#666', 
+                      marginTop: '8px',
+                      fontStyle: 'italic' 
+                    }}>
+                      Click for details
+                    </div>
                   </div>
                 );
               })}
@@ -447,6 +658,164 @@ const CalendarScreen = () => {
       {loading && (
         <div className="loading-overlay">
           <div className="loading">Loading activities...</div>
+        </div>
+      )}
+
+      {/* Enhanced Activity Detail Modal */}
+      {showActivityDetail && selectedActivity && (
+        <div className="modal-overlay" onClick={() => setShowActivityDetail(false)}>
+          <div className="modal activity-detail-modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{selectedActivity.name}</h3>
+            <div className="activity-detail-content">
+              {selectedActivity.isPendingInvitation && (
+                <div className="invitation-info">
+                  <div className="detail-item">
+                    <strong>Invitation from:</strong>
+                    <p>👤 {selectedActivity.hostParent}</p>
+                  </div>
+                  {selectedActivity.message && (
+                    <div className="detail-item">
+                      <strong>Message:</strong>
+                      <p>💬 "{selectedActivity.message}"</p>
+                    </div>
+                  )}
+                  <div className="detail-item">
+                    <strong>Status:</strong>
+                    <p>
+                      <span style={{ color: '#48bb78' }}>📩 Pending</span>
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {selectedActivity.description && (
+                <div className="detail-item">
+                  <strong>Description:</strong>
+                  <p>{selectedActivity.description}</p>
+                </div>
+              )}
+              <div className="detail-item">
+                <strong>Date:</strong>
+                <p>{formatDate(selectedActivity.start_date)}</p>
+              </div>
+              {selectedActivity.start_time && (
+                <div className="detail-item">
+                  <strong>Time:</strong>
+                  <p>
+                    {selectedActivity.start_time}
+                    {selectedActivity.end_time && ` - ${selectedActivity.end_time}`}
+                  </p>
+                </div>
+              )}
+              {selectedActivity.location && (
+                <div className="detail-item">
+                  <strong>Location:</strong>
+                  <p>📍 {selectedActivity.location}</p>
+                </div>
+              )}
+              {selectedActivity.cost && (
+                <div className="detail-item">
+                  <strong>Cost:</strong>
+                  <p>${selectedActivity.cost}</p>
+                </div>
+              )}
+              {selectedActivity.max_participants && (
+                <div className="detail-item">
+                  <strong>Max Participants:</strong>
+                  <p>{selectedActivity.max_participants}</p>
+                </div>
+              )}
+              {selectedActivity.website_url && (
+                <div className="detail-item">
+                  <strong>Website:</strong>
+                  <p>
+                    <a href={selectedActivity.website_url} target="_blank" rel="noopener noreferrer">
+                      {selectedActivity.website_url}
+                    </a>
+                  </p>
+                </div>
+              )}
+              
+              {/* Activity Participants Section */}
+              {!selectedActivity.isPendingInvitation && (
+                <div className="participants-section">
+                  <div className="detail-item">
+                    <strong>Participants:</strong>
+                    {loadingParticipants ? (
+                      <p>Loading participants...</p>
+                    ) : activityParticipants ? (
+                      <div className="participants-list">
+                        <div className="host-info">
+                          <p>👤 <strong>{activityParticipants.host?.host_name} (Host)</strong></p>
+                        </div>
+                        {activityParticipants.participants?.length > 0 ? (
+                          <div className="invited-participants">
+                            <h4>Invited Families:</h4>
+                            {activityParticipants.participants.map((participant: any, index: number) => (
+                              <div key={index} className="participant-item">
+                                <div className="participant-info">
+                                  <span className="participant-name">👤 {participant.parent_name}</span>
+                                  {participant.child_name && (
+                                    <span className="participant-child"> ({participant.child_name})</span>
+                                  )}
+                                </div>
+                                <div className="participant-status">
+                                  {participant.status === 'pending' && (
+                                    <span style={{ color: '#fd7e14', fontSize: '12px' }}>📩 Pending</span>
+                                  )}
+                                  {participant.status === 'accepted' && (
+                                    <span style={{ color: '#48bb78', fontSize: '12px' }}>✅ Accepted</span>
+                                  )}
+                                  {participant.status === 'declined' && (
+                                    <span style={{ color: '#a0aec0', fontSize: '12px' }}>❌ Declined</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                            No invitations sent yet
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: '14px', color: '#666' }}>
+                        Unable to load participants
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button
+                onClick={() => setShowActivityDetail(false)}
+                className="cancel-btn"
+              >
+                Close
+              </button>
+              
+              {/* Show accept/decline buttons for pending invitations */}
+              {selectedActivity.isPendingInvitation && selectedActivity.invitationId && (
+                <>
+                  <button
+                    onClick={() => handleInvitationResponse(selectedActivity.invitationId!, 'accept')}
+                    className="confirm-btn"
+                    style={{ background: 'linear-gradient(135deg, #48bb78, #68d391)', marginRight: '8px' }}
+                  >
+                    ✅ Accept Invitation
+                  </button>
+                  <button
+                    onClick={() => handleInvitationResponse(selectedActivity.invitationId!, 'reject')}
+                    className="delete-btn"
+                  >
+                    ❌ Decline Invitation
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

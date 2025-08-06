@@ -46,6 +46,16 @@ export interface Activity {
   parent_username?: string;
   host_parent_username?: string;
   invitation_message?: string;
+  invitation_id?: number; // Backend API field for invitation ID
+  activity_id?: number; // Original activity ID for invitations (to load participants)
+  // Additional fields for invitation handling in frontend
+  isPendingInvitation?: boolean;
+  isDeclinedInvitation?: boolean;
+  invitationId?: number;
+  hostParent?: string;
+  message?: string;
+  host_child_name?: string;
+  host_parent_name?: string;
 }
 
 export interface Connection {

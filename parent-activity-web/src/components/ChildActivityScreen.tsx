@@ -12,6 +12,8 @@ interface ChildActivityScreenProps {
 
 const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
+  const [declinedInvitations, setDeclinedInvitations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [calendarView, setCalendarView] = useState<'5day' | '7day'>('5day');
@@ -44,6 +46,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     max_participants: ''
   });
   const [addingActivity, setAddingActivity] = useState(false);
+  const [activityParticipants, setActivityParticipants] = useState<any>(null);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
   const apiService = ApiService.getInstance();
 
   useEffect(() => {
@@ -54,20 +58,87 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const loadActivities = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getActivities(child.id);
       
-      if (response.success && response.data) {
-        const activitiesData = Array.isArray(response.data) ? response.data : [];
+      // Load child's own activities
+      const activitiesResponse = await apiService.getActivities(child.id);
+      if (activitiesResponse.success && activitiesResponse.data) {
+        const activitiesData = Array.isArray(activitiesResponse.data) ? activitiesResponse.data : [];
         setActivities(activitiesData);
       } else {
-        console.error('Failed to load activities:', response.error);
+        console.error('Failed to load activities:', activitiesResponse.error);
         setActivities([]);
       }
+      
+      // Load invitations using the proper calendar endpoints (like CalendarScreen does)
+      // Get date range for current month to load all relevant invitations
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const startDate = startOfMonth.toISOString().split('T')[0];
+      const endDate = endOfMonth.toISOString().split('T')[0];
+      
+      console.log(`📩 Loading invitations for ${child.name} from ${startDate} to ${endDate}`);
+      
+      // Load pending invitations
+      const pendingResponse = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
+      if (pendingResponse.success && pendingResponse.data) {
+        console.log(`🔍 All pending invitations returned by API:`, pendingResponse.data);
+        console.log(`🎯 Looking for invitations for child: "${child.name}"`);
+        
+        // Filter for this specific child
+        const childPendingInvitations = pendingResponse.data.filter((invitation: any) => {
+          console.log(`🔎 Checking invitation:`, {
+            invited_child_name: invitation.invited_child_name,
+            child_name: invitation.child_name,
+            matches: invitation.invited_child_name === child.name
+          });
+          return invitation.invited_child_name === child.name;
+        });
+        
+        console.log(`📩 Found ${childPendingInvitations.length} pending invitations for ${child.name}:`, childPendingInvitations);
+        setPendingInvitations(childPendingInvitations);
+      } else {
+        console.error('Failed to load pending invitations:', pendingResponse.error);
+        setPendingInvitations([]);
+      }
+      
+      // For now, we'll handle accepted invitations differently - they should show up as regular activities
+      // but we can add specific declined invitation loading if needed
+      
+      // TODO: Add declined invitation loading if backend supports it
+      setDeclinedInvitations([]);
+      
     } catch (error) {
       console.error('Load activities error:', error);
       setActivities([]);
+      setPendingInvitations([]);
+      setDeclinedInvitations([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleInvitationResponse = async (invitationId: number, action: 'accept' | 'reject') => {
+    try {
+      const response = await apiService.respondToActivityInvitation(invitationId, action);
+      
+      if (response.success) {
+        const message = action === 'accept' 
+          ? 'Invitation accepted! Activity will appear in your calendar.' 
+          : 'Invitation declined.';
+        alert(message);
+        
+        // Reload activities to update the display
+        loadActivities();
+        
+        // Close the detail modal
+        setShowActivityDetail(false);
+      } else {
+        alert(`Error: ${response.error || 'Failed to respond to invitation'}`);
+      }
+    } catch (error) {
+      console.error('Failed to respond to invitation:', error);
+      alert('Failed to respond to invitation');
     }
   };
 
@@ -120,9 +191,59 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setShowAddModal(true);
   };
 
+  const loadActivityParticipants = async (activityId: number) => {
+    try {
+      setLoadingParticipants(true);
+      const response = await apiService.getActivityParticipants(activityId);
+      if (response.success && response.data) {
+        setActivityParticipants(response.data);
+      } else {
+        setActivityParticipants(null);
+        console.error('Failed to load activity participants:', response.error);
+      }
+    } catch (error) {
+      console.error('Error loading activity participants:', error);
+      setActivityParticipants(null);
+    } finally {
+      setLoadingParticipants(false);
+    }
+  };
+
   const handleActivityClick = (activity: Activity) => {
     setSelectedActivity(activity);
     setShowActivityDetail(true);
+    
+    // Populate newActivity state with selected activity data for inline editing
+    setNewActivity({
+      name: activity.name || '',
+      description: activity.description || '',
+      start_date: activity.start_date || '',
+      end_date: activity.end_date || '',
+      start_time: activity.start_time || '',
+      end_time: activity.end_time || '',
+      location: activity.location || '',
+      website_url: activity.website_url || '',
+      cost: activity.cost ? activity.cost.toString() : '',
+      max_participants: activity.max_participants ? activity.max_participants.toString() : ''
+    });
+    
+    // Load participants for any activity that has a real backend activity ID
+    // For invitations, we need to get the original activity ID from the backend
+    if (activity.isPendingInvitation || activity.isDeclinedInvitation) {
+      // For invitations, we need to load participants using the original activity ID
+      // The invitation data should contain the original activity_id
+      const originalActivityId = (activity as any).activity_id || (activity as any).id;
+      if (originalActivityId && typeof originalActivityId === 'number') {
+        loadActivityParticipants(originalActivityId);
+      } else {
+        setActivityParticipants(null);
+      }
+    } else if (activity.id) {
+      // For regular activities, use the activity ID directly
+      loadActivityParticipants(activity.id);
+    } else {
+      setActivityParticipants(null);
+    }
   };
 
   const handleEditActivity = (activity: Activity) => {
@@ -144,7 +265,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const handleUpdateActivity = async () => {
-    if (!editingActivity || !newActivity.name.trim() || !newActivity.start_date) {
+    if (!selectedActivity || !newActivity.name.trim() || !newActivity.start_date) {
       alert('Please enter activity name and start date');
       return;
     }
@@ -157,25 +278,16 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : undefined
       };
 
-      const response = await apiService.updateActivity(editingActivity.id, activityData);
+      const response = await apiService.updateActivity(selectedActivity.id, activityData);
       
       if (response.success) {
-        setNewActivity({
-          name: '',
-          description: '',
-          start_date: '',
-          end_date: '',
-          start_time: '',
-          end_time: '',
-          location: '',
-          website_url: '',
-          cost: '',
-          max_participants: ''
-        });
-        setEditingActivity(null);
-        setShowEditModal(false);
-        loadActivities();
-        alert('Activity updated successfully');
+        // Update the selected activity with new data for immediate UI update
+        const updatedActivity = { ...selectedActivity, ...activityData };
+        setSelectedActivity(updatedActivity);
+        
+        alert('Activity updated successfully!');
+        loadActivities(); // Reload activities to reflect changes
+        // Keep modal open to see updated data
       } else {
         alert(`Error: ${response.error || 'Failed to update activity'}`);
       }
@@ -388,17 +500,17 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     });
   };
 
-  const getActivityColor = (activity: Activity) => {
-    // Green for new invitations (pending invitations I've received)
-    if (activity.invitation_status === 'pending' && !activity.is_host) {
+  const getActivityColor = (activity: Activity | any) => {
+    // Green for pending invitations (our main invitation system)
+    if (activity.isPendingInvitation) {
       return {
         background: 'linear-gradient(135deg, #48bb78, #68d391)',
         borderColor: '#38a169'
       };
     }
     
-    // Grey for declined invitations or cancelled activities
-    if (activity.invitation_status === 'rejected' || activity.is_cancelled) {
+    // Grey for declined invitations
+    if (activity.isDeclinedInvitation) {
       return {
         background: 'linear-gradient(135deg, #a0aec0, #cbd5e0)',
         borderColor: '#718096'
@@ -406,7 +518,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
     
     // Light blue for shared/accepted activities
-    if (activity.is_shared || activity.invitation_status === 'accepted') {
+    if (activity.is_shared) {
       return {
         background: 'linear-gradient(135deg, #4299e1, #63b3ed)',
         borderColor: '#3182ce'
@@ -434,6 +546,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       current.setDate(startOfWeek.getDate() + i);
       const dateString = current.toISOString().split('T')[0];
       
+      // Get activities for this day
       const dayActivities = activities.filter(activity => {
         // Convert activity dates to simple date strings for comparison
         const activityStartDate = activity.start_date.split('T')[0];
@@ -443,8 +556,45 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                (activityStartDate <= dateString && activityEndDate >= dateString);
       });
       
-      // Sort activities by start time
-      const sortedActivities = dayActivities.sort((a, b) => {
+      // Get pending invitations for this day (convert to activity format)
+      const dayPendingInvitations = pendingInvitations.filter(invitation => {
+        const invitationStartDate = invitation.start_date.split('T')[0];
+        return invitationStartDate === dateString;
+      }).map(invitation => ({
+        ...invitation,
+        id: `invitation-${invitation.id}`,
+        activity_id: invitation.id, // Original activity ID from backend for participants API
+        name: invitation.activity_name,
+        description: invitation.activity_description,
+        isPendingInvitation: true,
+        invitationId: invitation.invitation_id,
+        hostParent: invitation.host_parent_name,
+        host_child_name: invitation.host_child_name,
+        host_parent_name: invitation.host_parent_name
+      }));
+      
+      // Get declined invitations for this day (convert to activity format)
+      const dayDeclinedInvitations = declinedInvitations.filter(invitation => {
+        const invitationStartDate = invitation.start_date.split('T')[0];
+        return invitationStartDate === dateString;
+      }).map(invitation => ({
+        ...invitation,
+        id: `declined-${invitation.id}`,
+        activity_id: invitation.id, // Original activity ID from backend for participants API
+        name: invitation.activity_name,
+        description: invitation.activity_description,
+        isDeclinedInvitation: true,
+        invitationId: invitation.invitation_id,
+        hostParent: invitation.host_parent_name,
+        host_child_name: invitation.host_child_name,
+        host_parent_name: invitation.host_parent_name
+      }));
+      
+      // Combine activities and all types of invitations
+      const allDayItems = [...dayActivities, ...dayPendingInvitations, ...dayDeclinedInvitations];
+      
+      // Sort all items by start time
+      const sortedItems = allDayItems.sort((a, b) => {
         const timeA = a.start_time || '00:00:00';
         const timeB = b.start_time || '00:00:00';
         return timeA.localeCompare(timeB);
@@ -454,9 +604,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         date: new Date(current),
         dateString,
         isToday: dateString === new Date().toISOString().split('T')[0],
-        hasActivities: sortedActivities.length > 0,
-        activities: sortedActivities,
-        count: sortedActivities.length
+        hasActivities: sortedItems.length > 0,
+        activities: sortedItems,
+        count: sortedItems.length
       });
     }
     
@@ -544,11 +694,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           </div>
           <div className="legend-item">
             <div className="legend-color" style={{ background: 'linear-gradient(135deg, #48bb78, #68d391)' }}></div>
-            <span>New invitations</span>
+            <span>Pending invitations</span>
           </div>
           <div className="legend-item">
             <div className="legend-color" style={{ background: 'linear-gradient(135deg, #a0aec0, #cbd5e0)' }}></div>
-            <span>Declined/Cancelled</span>
+            <span>Declined invitations</span>
           </div>
         </div>
       </div>
@@ -597,15 +747,19 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                             background: colors.background,
                             borderLeftColor: colors.borderColor
                           }}
-                          onClick={() => {
-                            setSelectedActivity(activity);
-                            setShowActivityDetail(true);
-                          }}
+                          onClick={() => handleActivityClick(activity)}
                         >
                           <div className="activity-time">
                             {activity.start_time ? formatTime(activity.start_time) : 'All day'}
                           </div>
-                          <div className="activity-name">{activity.name}</div>
+                          <div className="activity-name">
+                            {activity.name}
+                            {activity.isPendingInvitation && <span className="invitation-badge">📩</span>}
+                            {activity.isDeclinedInvitation && <span className="invitation-badge">❌</span>}
+                          </div>
+                          {(activity.isPendingInvitation || activity.isDeclinedInvitation) && (
+                            <div className="activity-host">from {activity.host_child_name || activity.hostParent}</div>
+                          )}
                           {activity.location && (
                             <div className="activity-location">📍 {activity.location}</div>
                           )}
@@ -872,59 +1026,239 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         </div>
       )}
 
-      {/* Activity Detail Modal */}
+      {/* Enhanced Activity Detail Modal with Inline Editing */}
       {showActivityDetail && selectedActivity && (
         <div className="modal-overlay" onClick={() => setShowActivityDetail(false)}>
           <div className="modal activity-detail-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>{selectedActivity.name}</h3>
+            <h3>Activity Details</h3>
             <div className="activity-detail-content">
-              {selectedActivity.description && (
-                <div className="detail-item">
-                  <strong>Description:</strong>
-                  <p>{selectedActivity.description}</p>
+              {(selectedActivity.isPendingInvitation || selectedActivity.isDeclinedInvitation) && (
+                <div className="invitation-info">
+                  <div className="detail-item">
+                    <strong>Invitation from:</strong>
+                    <p>👤 {selectedActivity.host_child_name || selectedActivity.child_name} ({selectedActivity.host_parent_name || selectedActivity.host_parent_username})</p>
+                  </div>
+                  <div className="detail-item">
+                    <strong>Status:</strong>
+                    <p>
+                      {selectedActivity.isPendingInvitation && <span style={{ color: '#48bb78' }}>📩 Pending</span>}
+                      {selectedActivity.isDeclinedInvitation && <span style={{ color: '#a0aec0' }}>❌ Declined</span>}
+                    </p>
+                  </div>
                 </div>
               )}
-              <div className="detail-item">
-                <strong>Date:</strong>
-                <p>{formatDate(selectedActivity.start_date)}</p>
+              
+              {/* Activity Details Form - Always Editable for Host */}
+              <div className="activity-details-form">
+                <div className="form-row">
+                  <label><strong>Activity Name:</strong></label>
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                    <input
+                      type="text"
+                      value={newActivity.name}
+                      onChange={(e) => setNewActivity({...newActivity, name: e.target.value})}
+                      className="inline-edit-input"
+                      placeholder="Activity name"
+                    />
+                  ) : (
+                    <span className="readonly-value">{selectedActivity.name}</span>
+                  )}
+                </div>
+
+                <div className="form-row">
+                  <label><strong>Description:</strong></label>
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                    <textarea
+                      value={newActivity.description}
+                      onChange={(e) => setNewActivity({...newActivity, description: e.target.value})}
+                      className="inline-edit-textarea"
+                      placeholder="Activity description"
+                      rows={2}
+                    />
+                  ) : (
+                    <span className="readonly-value">{selectedActivity.description || 'No description'}</span>
+                  )}
+                </div>
+
+                <div className="form-row">
+                  <label><strong>Start Date:</strong></label>
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                    <input
+                      type="date"
+                      value={newActivity.start_date}
+                      onChange={(e) => setNewActivity({...newActivity, start_date: e.target.value})}
+                      className="inline-edit-input"
+                    />
+                  ) : (
+                    <span className="readonly-value">📅 {formatDate(selectedActivity.start_date)}</span>
+                  )}
+                </div>
+
+                <div className="form-row">
+                  <label><strong>End Date:</strong></label>
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                    <input
+                      type="date"
+                      value={newActivity.end_date}
+                      onChange={(e) => setNewActivity({...newActivity, end_date: e.target.value})}
+                      className="inline-edit-input"
+                    />
+                  ) : (
+                    <span className="readonly-value">{selectedActivity.end_date ? formatDate(selectedActivity.end_date) : 'Same day'}</span>
+                  )}
+                </div>
+
+                <div className="form-row-group">
+                  <div className="form-row">
+                    <label><strong>Start Time:</strong></label>
+                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                      <TimePickerDropdown
+                        value={newActivity.start_time}
+                        onChange={(time) => setNewActivity({...newActivity, start_time: time})}
+                        placeholder="Start time"
+                      />
+                    ) : (
+                      <span className="readonly-value">🕐 {selectedActivity.start_time ? formatTime(selectedActivity.start_time) : 'All day'}</span>
+                    )}
+                  </div>
+
+                  <div className="form-row">
+                    <label><strong>End Time:</strong></label>
+                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                      <TimePickerDropdown
+                        value={newActivity.end_time}
+                        onChange={(time) => setNewActivity({...newActivity, end_time: time})}
+                        placeholder="End time"
+                      />
+                    ) : (
+                      <span className="readonly-value">{selectedActivity.end_time ? formatTime(selectedActivity.end_time) : 'Not set'}</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <label><strong>Location:</strong></label>
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                    <input
+                      type="text"
+                      value={newActivity.location}
+                      onChange={(e) => setNewActivity({...newActivity, location: e.target.value})}
+                      className="inline-edit-input"
+                      placeholder="Activity location"
+                    />
+                  ) : (
+                    <span className="readonly-value">📍 {selectedActivity.location || 'No location specified'}</span>
+                  )}
+                </div>
+
+                <div className="form-row">
+                  <label><strong>Website:</strong></label>
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                    <input
+                      type="url"
+                      value={newActivity.website_url}
+                      onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
+                      className="inline-edit-input"
+                      placeholder="Website URL"
+                    />
+                  ) : (
+                    <span className="readonly-value">
+                      {selectedActivity.website_url ? (
+                        <a href={selectedActivity.website_url} target="_blank" rel="noopener noreferrer">
+                          🌐 {selectedActivity.website_url}
+                        </a>
+                      ) : (
+                        'No website'
+                      )}
+                    </span>
+                  )}
+                </div>
+
+                <div className="form-row-group">
+                  <div className="form-row">
+                    <label><strong>Cost:</strong></label>
+                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                      <input
+                        type="number"
+                        value={newActivity.cost}
+                        onChange={(e) => setNewActivity({...newActivity, cost: e.target.value})}
+                        className="inline-edit-input"
+                        placeholder="Cost ($)"
+                        min="0"
+                        step="0.01"
+                      />
+                    ) : (
+                      <span className="readonly-value">💰 {selectedActivity.cost ? `$${selectedActivity.cost}` : 'Free'}</span>
+                    )}
+                  </div>
+
+                  <div className="form-row">
+                    <label><strong>Max Participants:</strong></label>
+                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                      <input
+                        type="number"
+                        value={newActivity.max_participants}
+                        onChange={(e) => setNewActivity({...newActivity, max_participants: e.target.value})}
+                        className="inline-edit-input"
+                        placeholder="Max participants"
+                        min="1"
+                      />
+                    ) : (
+                      <span className="readonly-value">{selectedActivity.max_participants || 'No limit'}</span>
+                    )}
+                  </div>
+                </div>
               </div>
-              {selectedActivity.start_time && (
+              
+              {/* Activity Participants Section */}
+              <div className="participants-section">
                 <div className="detail-item">
-                  <strong>Time:</strong>
-                  <p>
-                    {formatTime(selectedActivity.start_time)}
-                    {selectedActivity.end_time && ` - ${formatTime(selectedActivity.end_time)}`}
-                  </p>
+                  <strong>Who's Invited:</strong>
+                  {loadingParticipants ? (
+                    <p>Loading participants...</p>
+                  ) : activityParticipants ? (
+                    <div className="participants-list">
+                      <div className="host-info">
+                        <p>👤 <strong>{activityParticipants.host?.host_name} (Host)</strong></p>
+                      </div>
+                      {activityParticipants.participants?.length > 0 ? (
+                        <div className="invited-participants">
+                          <h4>Invited Children & Families:</h4>
+                          {activityParticipants.participants.map((participant: any, index: number) => (
+                            <div key={index} className="participant-item">
+                              <div className="participant-info">
+                                <span className="participant-name">👤 {participant.parent_name}</span>
+                                {participant.child_name && (
+                                  <span className="participant-child"> ({participant.child_name})</span>
+                                )}
+                              </div>
+                              <div className="participant-status">
+                                {participant.status === 'pending' && (
+                                  <span style={{ color: '#fd7e14', fontSize: '12px' }}>📩 Pending</span>
+                                )}
+                                {participant.status === 'accepted' && (
+                                  <span style={{ color: '#48bb78', fontSize: '12px' }}>✅ Accepted</span>
+                                )}
+                                {participant.status === 'declined' && (
+                                  <span style={{ color: '#a0aec0', fontSize: '12px' }}>❌ Declined</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                          No other families invited yet
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '14px', color: '#666' }}>
+                      Unable to load participant information
+                    </p>
+                  )}
                 </div>
-              )}
-              {selectedActivity.location && (
-                <div className="detail-item">
-                  <strong>Location:</strong>
-                  <p>📍 {selectedActivity.location}</p>
-                </div>
-              )}
-              {selectedActivity.cost && (
-                <div className="detail-item">
-                  <strong>Cost:</strong>
-                  <p>${selectedActivity.cost}</p>
-                </div>
-              )}
-              {selectedActivity.max_participants && (
-                <div className="detail-item">
-                  <strong>Max Participants:</strong>
-                  <p>{selectedActivity.max_participants}</p>
-                </div>
-              )}
-              {selectedActivity.website_url && (
-                <div className="detail-item">
-                  <strong>Website:</strong>
-                  <p>
-                    <a href={selectedActivity.website_url} target="_blank" rel="noopener noreferrer">
-                      {selectedActivity.website_url}
-                    </a>
-                  </p>
-                </div>
-              )}
+              </div>
             </div>
             <div className="modal-actions">
               <button
@@ -933,41 +1267,83 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               >
                 Close
               </button>
-              {/* Only show Edit button for activities the user hosts */}
-              {selectedActivity.is_host && (
-                <button
-                  onClick={() => handleEditActivity(selectedActivity)}
-                  className="confirm-btn"
-                >
-                  Edit Activity
-                </button>
+              
+              {/* Show accept/decline buttons for pending invitations */}
+              {selectedActivity.isPendingInvitation && selectedActivity.invitationId && (
+                <>
+                  <button
+                    onClick={() => handleInvitationResponse(selectedActivity.invitationId!, 'accept')}
+                    className="confirm-btn"
+                    style={{ background: 'linear-gradient(135deg, #48bb78, #68d391)', marginRight: '8px' }}
+                  >
+                    ✅ Accept Invitation
+                  </button>
+                  <button
+                    onClick={() => handleInvitationResponse(selectedActivity.invitationId!, 'reject')}
+                    className="delete-btn"
+                  >
+                    ❌ Decline Invitation
+                  </button>
+                </>
               )}
-              {!selectedActivity.is_host && (
-                <div className="host-info">
+              
+              {/* Show enhanced buttons for activity host */}
+              {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation && (
+                <>
+                  <button
+                    onClick={handleUpdateActivity}
+                    className="confirm-btn"
+                    style={{ background: 'linear-gradient(135deg, #28a745, #34ce57)' }}
+                  >
+                    💾 Save Changes
+                  </button>
+                  <button
+                    onClick={() => handleInviteActivity(selectedActivity)}
+                    className="confirm-btn"
+                    style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }}
+                  >
+                    ➕ Invite More
+                  </button>
+                  <button
+                    onClick={() => handleDuplicateActivity(selectedActivity)}
+                    className="add-btn"
+                  >
+                    📋 Duplicate
+                  </button>
+                  <button
+                    onClick={() => handleDeleteActivity(selectedActivity)}
+                    className="delete-btn"
+                  >
+                    🗑️ Delete
+                  </button>
+                </>
+              )}
+              
+              {/* For non-host activities, show limited actions */}
+              {!selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation && (
+                <>
+                  <button
+                    onClick={() => handleDuplicateActivity(selectedActivity)}
+                    className="add-btn"
+                  >
+                    📋 Duplicate
+                  </button>
+                  <div className="host-info">
+                    <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                      Only the activity host can edit this activity
+                    </p>
+                  </div>
+                </>
+              )}
+              
+              {/* For declined invitations, show informational text */}
+              {selectedActivity.isDeclinedInvitation && (
+                <div className="declined-info">
                   <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
-                    Only the activity host can edit this activity
+                    This invitation has been declined. Contact the host if you'd like to reconsider.
                   </p>
                 </div>
               )}
-              <button
-                onClick={() => handleDuplicateActivity(selectedActivity)}
-                className="add-btn"
-              >
-                Duplicate
-              </button>
-              <button
-                onClick={() => handleInviteActivity(selectedActivity)}
-                className="confirm-btn"
-                style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }}
-              >
-                Invite
-              </button>
-              <button
-                onClick={() => handleDeleteActivity(selectedActivity)}
-                className="delete-btn"
-              >
-                Delete
-              </button>
             </div>
           </div>
         </div>

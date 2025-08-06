@@ -43,6 +43,19 @@
   margin: 0;
 }
 
+.pending-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.pending-toggle input[type="checkbox"] {
+  margin: 0;
+}
+
 .activity-title-row {
   display: flex;
   justify-content: space-between;
@@ -447,4 +460,200 @@
   .selected-date-section {
     padding: 16px;
   }
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.activity-detail-modal {
+  padding: 24px;
+}
+
+.activity-detail-modal h3 {
+  margin: 0 0 20px 0;
+  color: #2d3748;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.activity-detail-content {
+  margin-bottom: 24px;
+}
+
+.invitation-info {
+  background: #e6fffa;
+  border: 1px solid #38b2ac;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.detail-item {
+  margin-bottom: 16px;
+}
+
+.detail-item strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #2d3748;
+  font-weight: 600;
+}
+
+.detail-item p {
+  margin: 0;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+.detail-item a {
+  color: #3182ce;
+  text-decoration: none;
+}
+
+.detail-item a:hover {
+  text-decoration: underline;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.modal-actions button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.cancel-btn {
+  background: #e2e8f0;
+  color: #4a5568;
+}
+
+.cancel-btn:hover {
+  background: #cbd5e0;
+}
+
+.confirm-btn {
+  background: #3182ce;
+  color: white;
+}
+
+.confirm-btn:hover {
+  background: #2c5282;
+}
+
+.delete-btn {
+  background: #e53e3e;
+  color: white;
+}
+
+.delete-btn:hover {
+  background: #c53030;
+}
+
+/* Clickable Card Styles */
+.clickable-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clickable-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Activity Participants Styles */
+.participants-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.participants-list {
+  margin-top: 12px;
+}
+
+.participants-list .host-info {
+  background: #e6fffa;
+  border: 1px solid #38b2ac;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.participants-list .host-info p {
+  margin: 0;
+  color: #2d3748;
+}
+
+.invited-participants h4 {
+  margin: 16px 0 12px 0;
+  color: #2d3748;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.participant-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.participant-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.participant-name {
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.participant-child {
+  color: #4a5568;
+  font-style: italic;
+}
+
+.participant-status {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
 }
