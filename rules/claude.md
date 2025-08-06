@@ -1,3 +1,13 @@
+## DEPLOYMENT REQUIREMENTS
+- NEVER work locally - always deploy directly to Firebase
+- User only uses the live Firebase app at https://gruju-parent-activity-app.web.app
+- Backend runs on Heroku at https://gruju-backend-5014424c95f2.herokuapp.com with PostgreSQL database
+- Any code changes must be immediately built and deployed with:
+  - npm run build
+  - firebase deploy --only hosting
+- Always deploy changes before asking user to test
+- When user says "I don't see the changes" = immediately deploy to Firebase
+
 ## standard Workflow
 
 1. First think through the problem, read the codebase for relevant files, and write a plan to projectplan.md

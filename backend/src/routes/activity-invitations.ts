@@ -1,5 +1,5 @@
 import express from 'express';
-import { DatabaseHelper } from '../utils/database';
+import DatabaseService from '../services/databaseService';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = express.Router();

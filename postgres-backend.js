@@ -310,7 +310,7 @@ async function insertDemoActivities(client) {
     }
     
     console.log('🗓️ Generated currentWeekDates:', currentWeekDates);
-    console.log(`📅 Soccer Practice will be created for: ${currentWeekDates[0]}`);
+    console.log(`📅 Soccer Practice will be created for: 2025-08-06 (hardcoded)`);
 
     const originalDemoActivities = [
         // EXACT activities from real Azure SQL database
@@ -460,6 +460,7 @@ async function insertDemoConnections(client) {
 
     if (testActivity.rows.length > 0) {
         const activityId = testActivity.rows[0].id;
+        console.log(`🎯 Found Soccer Practice activity with ID: ${activityId}`);
         
         // Create invitations with different statuses
         const demoInvitations = [
@@ -489,7 +490,16 @@ async function insertDemoConnections(client) {
             }
         ];
 
+        console.log(`🔄 Processing ${demoInvitations.length} demo invitations...`);
         for (const invitation of demoInvitations) {
+            console.log(`📝 Processing invitation:`, {
+                activity_id: invitation.activity_id,
+                inviter: Object.keys(userMap).find(k => userMap[k] === invitation.inviter_parent_id),
+                invited: Object.keys(userMap).find(k => userMap[k] === invitation.invited_parent_id),
+                child: Object.keys(childMap).find(k => childMap[k] === invitation.child_id),
+                status: invitation.status
+            });
+            
             if (invitation.activity_id && invitation.inviter_parent_id && invitation.invited_parent_id && invitation.child_id) {
                 const invitationExists = await client.query(`
                     SELECT id FROM activity_invitations 
