@@ -82,20 +82,12 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       // Load pending invitations
       const pendingResponse = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
       if (pendingResponse.success && pendingResponse.data) {
-        console.log(`🔍 All pending invitations returned by API:`, pendingResponse.data);
-        console.log(`🎯 Looking for invitations for child: "${child.name}"`);
-        
         // Filter for this specific child
-        const childPendingInvitations = pendingResponse.data.filter((invitation: any) => {
-          console.log(`🔎 Checking invitation:`, {
-            invited_child_name: invitation.invited_child_name,
-            child_name: invitation.child_name,
-            matches: invitation.invited_child_name === child.name
-          });
-          return invitation.invited_child_name === child.name;
-        });
+        const childPendingInvitations = pendingResponse.data.filter((invitation: any) => 
+          invitation.invited_child_name === child.name
+        );
         
-        console.log(`📩 Found ${childPendingInvitations.length} pending invitations for ${child.name}:`, childPendingInvitations);
+        console.log(`📩 Found ${childPendingInvitations.length} pending invitations for ${child.name}`);
         setPendingInvitations(childPendingInvitations);
       } else {
         console.error('Failed to load pending invitations:', pendingResponse.error);
