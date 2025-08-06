@@ -1708,6 +1708,48 @@ app.get('/api/calendar/invited-activities', authenticateToken, async (req, res) 
     }
 });
 
+// Calendar endpoint for pending invitations
+app.get('/api/calendar/pending-invitations', authenticateToken, async (req, res) => {
+    try {
+        const { start, end } = req.query;
+        
+        if (!start || !end) {
+            return res.status(400).json({ success: false, error: 'Start and end dates are required' });
+        }
+        
+        const client = await pool.connect();
+        
+        const query = `
+            SELECT DISTINCT a.id, a.name, a.start_date, a.end_date, a.start_time, a.end_time, 
+                    a.website_url, a.created_at, a.updated_at, a.description, a.location, a.cost,
+                    c.name as child_name, c.id as child_id,
+                    u.username as host_parent_username,
+                    ai.message as invitation_message,
+                    ai.id as invitation_id,
+                    ai.status,
+                    c_invited.name as invited_child_name
+            FROM activities a
+            INNER JOIN children c ON a.child_id = c.id
+            INNER JOIN users u ON c.parent_id = u.id
+            INNER JOIN activity_invitations ai ON a.id = ai.activity_id
+            LEFT JOIN children c_invited ON ai.child_id = c_invited.id
+            WHERE ai.invited_parent_id = $1
+              AND ai.status = 'pending'
+              AND a.start_date <= $3
+              AND a.end_date >= $2
+            ORDER BY a.start_date, a.start_time
+        `;
+        
+        const result = await client.query(query, [req.user.id, start, end]);
+        client.release();
+        
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        console.error('Get pending invitations error:', error);
+        res.status(500).json({ success: false, error: 'Failed to get pending invitations' });
+    }
+});
+
 // Start server
 async function startServer() {
     try {
