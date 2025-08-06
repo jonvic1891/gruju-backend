@@ -308,11 +308,14 @@ async function insertDemoActivities(client) {
         const day = String(weekDay.getDate()).padStart(2, '0');
         currentWeekDates.push(`${year}-${month}-${day}`);
     }
+    
+    console.log('🗓️ Generated currentWeekDates:', currentWeekDates);
+    console.log(`📅 Soccer Practice will be created for: ${currentWeekDates[0]}`);
 
     const originalDemoActivities = [
         // EXACT activities from real Azure SQL database
         // Emma Johnson's 5 activities
-        [childMap['Emma Johnson'], 'Soccer Practice', null, currentWeekDates[0], null, '17:00:00', '19:00:00', null, null, null, null],
+        [childMap['Emma Johnson'], 'Soccer Practice', null, '2025-08-06', null, '17:00:00', '19:00:00', null, null, null, null],
         [childMap['Emma Johnson'], 'Swimming Lesson', null, currentWeekDates[2], null, '11:00:00', '12:00:00', null, null, null, null],
         [childMap['Emma Johnson'], 'Art Class', null, currentWeekDates[3], null, '15:00:00', '16:30:00', null, null, null, null],
         [childMap['Emma Johnson'], 'Dance Class', null, currentWeekDates[5], null, '12:00:00', '13:00:00', null, null, null, null],
@@ -473,8 +476,8 @@ async function insertDemoConnections(client) {
                 inviter_parent_id: userMap['johnson@example.com'], // Emma's parent
                 invited_parent_id: userMap['wong@example.com'], // Mia's parent
                 child_id: childMap['Mia Wong'], 
-                status: 'accepted',
-                message: 'Mia would love to join Emma!'
+                status: 'pending',
+                message: 'Would Mia like to join Emma for soccer practice?'
             },
             {
                 activity_id: activityId,
@@ -502,6 +505,18 @@ async function insertDemoConnections(client) {
                         console.log(`✅ Created demo activity invitation: ${invitation.status}`);
                     } catch (error) {
                         console.error(`Error creating activity invitation:`, error.message);
+                    }
+                } else {
+                    // Update existing invitation
+                    try {
+                        await client.query(`
+                            UPDATE activity_invitations 
+                            SET status = $1, message = $2, updated_at = CURRENT_TIMESTAMP
+                            WHERE activity_id = $3 AND invited_parent_id = $4 AND child_id = $5
+                        `, [invitation.status, invitation.message, invitation.activity_id, invitation.invited_parent_id, invitation.child_id]);
+                        console.log(`✅ Updated demo activity invitation to: ${invitation.status}`);
+                    } catch (error) {
+                        console.error(`Error updating activity invitation:`, error.message);
                     }
                 }
             }
@@ -1800,11 +1815,19 @@ app.get('/api/calendar/pending-invitations', authenticateToken, async (req, res)
             WHERE ai.invited_parent_id = $1
               AND ai.status = 'pending'
               AND a.start_date <= $3
-              AND a.end_date >= $2
+              AND (a.end_date IS NULL OR a.end_date >= $2)
             ORDER BY a.start_date, a.start_time
         `;
         
+        console.log(`🔍 Pending invitations query for user ${req.user.id} (${start} to ${end})`);
         const result = await client.query(query, [req.user.id, start, end]);
+        console.log(`📊 Found ${result.rows.length} pending invitations:`, result.rows.map(r => ({
+            activity: r.name,
+            date: r.start_date,
+            invited_child: r.invited_child_name,
+            status: r.status
+        })));
+        
         client.release();
         
         res.json({ success: true, data: result.rows });
