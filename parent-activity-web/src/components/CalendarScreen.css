@@ -27,6 +27,48 @@
 .calendar-options {
   display: flex;
   align-items: center;
+  gap: 20px;
+}
+
+.invited-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.invited-toggle input[type="checkbox"] {
+  margin: 0;
+}
+
+.activity-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.activity-type {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 2px 8px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+}
+
+.invitation-message {
+  font-style: italic;
+  color: #666;
+  font-size: 14px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(253, 126, 20, 0.1);
+  border-radius: 8px;
+  border-left: 3px solid #fd7e14;
 }
 
 .connected-toggle {

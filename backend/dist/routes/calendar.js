@@ -211,4 +211,41 @@ router.get('/activities/:date', async (req, res) => {
         res.status(500).json({ error: 'Failed to get activities for date' });
     }
 });
+// Get activities from accepted invitations in a date range
+router.get('/invited-activities', async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        const { start, end } = req.query;
+        if (!start || !end) {
+            return res.status(400).json({ error: 'Start and end dates are required' });
+        }
+        // Get activities from accepted invitations
+        const invitedActivities = await database_1.DatabaseHelper.getMany(`SELECT DISTINCT a.id, a.name, a.start_date, a.end_date, a.start_time, a.end_time, 
+              a.website_url, a.created_at, a.updated_at, a.description, a.location, a.cost,
+              c.name as child_name, c.id as child_id,
+              u.username as host_parent_username,
+              ai.message as invitation_message
+       FROM Activities a
+       INNER JOIN Children c ON a.child_id = c.id
+       INNER JOIN Users u ON c.parent_id = u.id
+       INNER JOIN activity_invitations ai ON a.id = ai.activity_id
+       WHERE ai.invited_parent_id = @userId
+         AND ai.status = 'accepted'
+         AND a.start_date <= @end_date 
+         AND a.end_date >= @start_date
+       ORDER BY a.start_date, a.start_time`, {
+            userId,
+            start_date: start,
+            end_date: end
+        });
+        res.json({
+            success: true,
+            data: invitedActivities,
+        });
+    }
+    catch (error) {
+        console.error('Get invited activities error:', error);
+        res.status(500).json({ error: 'Failed to get invited activities' });
+    }
+});
 exports.default = router;

@@ -41,6 +41,11 @@ export interface Activity {
   invitation_status?: 'none' | 'pending' | 'accepted' | 'rejected';
   is_host?: boolean;
   is_cancelled?: boolean;
+  // Extended fields from backend joins (for connected and invited activities)
+  child_name?: string;
+  parent_username?: string;
+  host_parent_username?: string;
+  invitation_message?: string;
 }
 
 export interface Connection {

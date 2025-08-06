@@ -9,11 +9,11 @@ const mockDatabase_1 = __importDefault(require("../utils/mockDatabase"));
 class DatabaseService {
     constructor() {
         this.connectionPool = null;
-        this.currentMode = 'mock';
+        this.currentMode = 'production';
         this.databaseConfigs = new Map();
         this.currentConfig = null;
         this.mockDb = mockDatabase_1.default.getInstance();
-        this.currentMode = process.env.DATABASE_MODE || 'mock';
+        this.currentMode = process.env.DATABASE_MODE || 'production';
         this.loadConfigurationsFromEnv();
     }
     static getInstance() {

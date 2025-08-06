@@ -164,6 +164,10 @@ class ApiService {
     return this.request('get', `/api/calendar/connected-activities?start=${startDate}&end=${endDate}`);
   }
 
+  async getInvitedActivities(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
+    return this.request('get', `/api/calendar/invited-activities?start=${startDate}&end=${endDate}`);
+  }
+
   async getActivityCounts(startDate: string, endDate: string, includeConnected: boolean = false): Promise<ApiResponse<any[]>> {
     return this.request('get', `/api/calendar/activity-counts?start=${startDate}&end=${endDate}&include_connected=${includeConnected}`);
   }

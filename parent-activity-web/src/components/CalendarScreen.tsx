@@ -14,7 +14,9 @@ const CalendarScreen = () => {
   const [children, setChildren] = useState<Child[]>([]);
   const [connectionRequests, setConnectionRequests] = useState<any[]>([]);
   const [connectedActivities, setConnectedActivities] = useState<Activity[]>([]);
+  const [invitedActivities, setInvitedActivities] = useState<Activity[]>([]);
   const [includeConnected, setIncludeConnected] = useState(false);
+  const [includeInvited, setIncludeInvited] = useState(true);
   const { user } = useAuth();
   const apiService = ApiService.getInstance();
 
@@ -25,7 +27,10 @@ const CalendarScreen = () => {
     if (includeConnected) {
       loadConnectedActivities();
     }
-  }, [currentMonth, includeConnected]);
+    if (includeInvited) {
+      loadInvitedActivities();
+    }
+  }, [currentMonth, includeConnected, includeInvited]);
 
   useEffect(() => {
     if (selectedDate) {
@@ -39,9 +44,14 @@ const CalendarScreen = () => {
         (activity.start_date <= selectedDate && (activity.end_date || activity.start_date) >= selectedDate)
       ) : [];
 
-      setSelectedActivities([...ownActivities, ...connectedActivitiesForDay]);
+      const invitedActivitiesForDay = includeInvited ? invitedActivities.filter(activity => 
+        activity.start_date === selectedDate || 
+        (activity.start_date <= selectedDate && (activity.end_date || activity.start_date) >= selectedDate)
+      ) : [];
+
+      setSelectedActivities([...ownActivities, ...connectedActivitiesForDay, ...invitedActivitiesForDay]);
     }
-  }, [selectedDate, activities, connectedActivities, includeConnected]);
+  }, [selectedDate, activities, connectedActivities, invitedActivities, includeConnected, includeInvited]);
 
   const loadActivities = async () => {
     try {
@@ -110,6 +120,26 @@ const CalendarScreen = () => {
     }
   };
 
+  const loadInvitedActivities = async () => {
+    try {
+      const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+      const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+      
+      const startDate = startOfMonth.toISOString().split('T')[0];
+      const endDate = endOfMonth.toISOString().split('T')[0];
+      
+      const response = await apiService.getInvitedActivities(startDate, endDate);
+      if (response.success && response.data) {
+        setInvitedActivities(response.data);
+      } else {
+        setInvitedActivities([]);
+      }
+    } catch (error) {
+      console.error('Load invited activities error:', error);
+      setInvitedActivities([]);
+    }
+  };
+
   const getNotificationIcon = (status: string, isIncoming: boolean) => {
     if (status === 'pending') {
       return isIncoming ? '📩' : '📤'; // Incoming invite vs Outgoing invite
@@ -160,7 +190,12 @@ const CalendarScreen = () => {
         (activity.start_date <= dateString && (activity.end_date || activity.start_date) >= dateString)
       ) : [];
 
-      const dayActivities = [...ownActivities, ...connectedActivitiesForDay];
+      const invitedActivitiesForDay = includeInvited ? invitedActivities.filter(activity => 
+        activity.start_date === dateString || 
+        (activity.start_date <= dateString && (activity.end_date || activity.start_date) >= dateString)
+      ) : [];
+
+      const dayActivities = [...ownActivities, ...connectedActivitiesForDay, ...invitedActivitiesForDay];
       
       // Find connection requests for this date
       const dayNotifications = connectionRequests.filter(request => {
@@ -246,6 +281,14 @@ const CalendarScreen = () => {
             />
             <span>Show Connected Activities</span>
           </label>
+          <label className="invited-toggle">
+            <input
+              type="checkbox"
+              checked={includeInvited}
+              onChange={(e) => setIncludeInvited(e.target.checked)}
+            />
+            <span>Show Invited Activities</span>
+          </label>
         </div>
       </div>
 
@@ -326,26 +369,59 @@ const CalendarScreen = () => {
           
           {selectedActivities.length > 0 ? (
             <div className="activities-list">
-              {selectedActivities.map((activity, index) => (
-                <div key={index} className="activity-card">
-                  <div className="activity-header">
-                    <h4 className="activity-name">{activity.name}</h4>
-                    <span className="activity-time">{formatTime(activity)}</span>
+              {selectedActivities.map((activity, index) => {
+                // Determine activity type
+                const isOwn = activities.some(a => a.id === activity.id);
+                const isConnected = connectedActivities.some(a => a.id === activity.id);
+                const isInvited = invitedActivities.some(a => a.id === activity.id);
+                
+                let activityType = '';
+                let activityIcon = '';
+                let activityColor = '';
+                
+                if (isOwn) {
+                  activityType = 'Your Activity';
+                  activityIcon = '🏠';
+                  activityColor = '#007bff';
+                } else if (isConnected) {
+                  activityType = `Connected (${activity.parent_username || 'Friend'})`;
+                  activityIcon = '🤝';
+                  activityColor = '#28a745';
+                } else if (isInvited) {
+                  activityType = `Invited by ${activity.host_parent_username || 'Friend'}`;
+                  activityIcon = '📩';
+                  activityColor = '#fd7e14';
+                }
+
+                return (
+                  <div key={index} className="activity-card" style={{ borderLeft: `4px solid ${activityColor}` }}>
+                    <div className="activity-header">
+                      <div className="activity-title-row">
+                        <h4 className="activity-name">{activity.name}</h4>
+                        <div className="activity-type" style={{ color: activityColor }}>
+                          {activityIcon} {activityType}
+                        </div>
+                      </div>
+                      <span className="activity-time">{formatTime(activity)}</span>
+                    </div>
+                    {activity.description && (
+                      <p className="activity-description">{activity.description}</p>
+                    )}
+                    {activity.location && (
+                      <div className="activity-location">📍 {activity.location}</div>
+                    )}
+                    {activity.cost && (
+                      <div className="activity-cost">💰 ${activity.cost}</div>
+                    )}
+                    {activity.website_url && (
+                      <div className="activity-url">🌐 Website available</div>
+                    )}
+                    {activity.invitation_message && (
+                      <div className="invitation-message">💌 "{activity.invitation_message}"</div>
+                    )}
                   </div>
-                  {activity.description && (
-                    <p className="activity-description">{activity.description}</p>
-                  )}
-                  {activity.location && (
-                    <div className="activity-location">📍 {activity.location}</div>
-                  )}
-                  {activity.cost && (
-                    <div className="activity-cost">💰 ${activity.cost}</div>
-                  )}
-                  {activity.website_url && (
-                    <div className="activity-url">🌐 Website available</div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="no-activities">
