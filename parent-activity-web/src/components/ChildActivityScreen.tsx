@@ -89,6 +89,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             children.push({
               id: connection.child1_id,
               name: connection.child1_name,
+              parentId: connection.child1_parent_id,
               parentName: connection.child1_parent_name,
               connectionId: connection.id
             });
@@ -99,6 +100,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             children.push({
               id: connection.child2_id,
               name: connection.child2_name,
+              parentId: connection.child2_parent_id,
               parentName: connection.child2_parent_name,
               connectionId: connection.id
             });
@@ -282,12 +284,16 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         for (const activity of createdActivities) {
           for (const childId of selectedConnectedChildren) {
             try {
-              await apiService.sendActivityInvitation(
-                activity.id, 
-                childId, // This should be the parent ID, we'll need to map from child ID
-                childId,
-                `${child.name} would like to invite your child to join: ${activity.name}`
-              );
+              // Find the connected child data to get the parent ID
+              const connectedChild = connectedChildren.find(cc => cc.id === childId);
+              if (connectedChild) {
+                await apiService.sendActivityInvitation(
+                  activity.id, 
+                  connectedChild.parentId, // Use the correct parent ID
+                  childId, // The child ID for the invitation
+                  `${child.name} would like to invite your child to join: ${activity.name}`
+                );
+              }
             } catch (inviteError) {
               console.error('Failed to send invitation:', inviteError);
             }

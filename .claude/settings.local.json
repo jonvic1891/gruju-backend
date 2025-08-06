@@ -25,7 +25,8 @@
       "Bash(git commit:*)",
       "Bash(npm install)",
       "Bash(npm test:*)",
-      "Bash(heroku logs:*)"
+      "Bash(heroku logs:*)",
+      "Bash(heroku run:*)"
     ],
     "deny": []
   }

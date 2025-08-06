@@ -1115,7 +1115,9 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
         const result = await client.query(
-            `SELECT c.*, u1.username as child1_parent_name, u2.username as child2_parent_name,
+            `SELECT c.*, 
+                    u1.id as child1_parent_id, u1.username as child1_parent_name, 
+                    u2.id as child2_parent_id, u2.username as child2_parent_name,
                     ch1.name as child1_name, ch2.name as child2_name
              FROM connections c
              JOIN children ch1 ON c.child1_id = ch1.id
