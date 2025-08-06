@@ -78,6 +78,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       const endDate = endOfMonth.toISOString().split('T')[0];
       
       console.log(`📩 Loading invitations for ${child.name} from ${startDate} to ${endDate}`);
+      console.log(`🔗 API URL will be: /api/calendar/pending-invitations?start=${startDate}&end=${endDate}`);
       
       // Load pending invitations
       const pendingResponse = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
