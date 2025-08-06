@@ -1384,7 +1384,7 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
 
         const invitationResult = await client.query(
             `INSERT INTO activity_invitations 
-             (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status) 
+             (activity_id, inviter_parent_id, invited_parent_id, child_id, message, status) 
              VALUES ($1, $2, $3, $4, $5, 'pending') 
              RETURNING id`,
             [activityId, req.user.id, invited_parent_id, child_id, message]
