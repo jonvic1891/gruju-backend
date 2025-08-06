@@ -417,10 +417,12 @@ async function insertDemoConnections(client) {
         }
     }
 
-    // Note: Real Azure SQL has different connections table structure
-    // Only adding connection for accepted request (Sophie->Emma)
+    // Add more connections so families can invite each other
     const establishedConnections = [
-        [childMap['Sophie Thompson'], childMap['Emma Johnson']]
+        [childMap['Sophie Thompson'], childMap['Emma Johnson']],
+        [childMap['Jake Davis'], childMap['Emma Johnson']],
+        [childMap['Mia Wong'], childMap['Emma Johnson']],
+        [childMap['Ryan Wong'], childMap['Alex Johnson']]
     ];
 
     for (const [child1_id, child2_id] of establishedConnections) {
@@ -439,6 +441,68 @@ async function insertDemoConnections(client) {
                     console.log(`✅ Created original demo connection: ${child1_id} <-> ${child2_id}`);
                 } catch (error) {
                     console.error(`Error creating connection ${child1_id} <-> ${child2_id}:`, error.message);
+                }
+            }
+        }
+    }
+
+    // Create activity invitations with different statuses for testing
+    // First, find the "test 1" activity by Emma
+    const testActivity = await client.query(`
+        SELECT a.id 
+        FROM activities a 
+        INNER JOIN children c ON a.child_id = c.id 
+        WHERE a.name = 'test 1' AND c.name = 'Emma Johnson'
+    `);
+
+    if (testActivity.rows.length > 0) {
+        const activityId = testActivity.rows[0].id;
+        
+        // Create invitations with different statuses
+        const demoInvitations = [
+            {
+                activity_id: activityId,
+                inviter_parent_id: userMap['johnson@example.com'], // Emma's parent
+                invited_parent_id: userMap['davis@example.com'], // Jake's parent  
+                child_id: childMap['Jake Davis'],
+                status: 'pending',
+                message: 'Would Jake like to join us for this activity?'
+            },
+            {
+                activity_id: activityId,
+                inviter_parent_id: userMap['johnson@example.com'], // Emma's parent
+                invited_parent_id: userMap['wong@example.com'], // Mia's parent
+                child_id: childMap['Mia Wong'], 
+                status: 'accepted',
+                message: 'Mia would love to join Emma!'
+            },
+            {
+                activity_id: activityId,
+                inviter_parent_id: userMap['johnson@example.com'], // Emma's parent
+                invited_parent_id: userMap['thompson@example.com'], // Sophie's parent
+                child_id: childMap['Sophie Thompson'],
+                status: 'declined',  
+                message: 'Sorry, Sophie has a conflict that day.'
+            }
+        ];
+
+        for (const invitation of demoInvitations) {
+            if (invitation.activity_id && invitation.inviter_parent_id && invitation.invited_parent_id && invitation.child_id) {
+                const invitationExists = await client.query(`
+                    SELECT id FROM activity_invitations 
+                    WHERE activity_id = $1 AND invited_parent_id = $2 AND child_id = $3
+                `, [invitation.activity_id, invitation.invited_parent_id, invitation.child_id]);
+                
+                if (invitationExists.rows.length === 0) {
+                    try {
+                        await client.query(`
+                            INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, child_id, status, message)
+                            VALUES ($1, $2, $3, $4, $5, $6)
+                        `, [invitation.activity_id, invitation.inviter_parent_id, invitation.invited_parent_id, invitation.child_id, invitation.status, invitation.message]);
+                        console.log(`✅ Created demo activity invitation: ${invitation.status}`);
+                    } catch (error) {
+                        console.error(`Error creating activity invitation:`, error.message);
+                    }
                 }
             }
         }
@@ -1747,6 +1811,68 @@ app.get('/api/calendar/pending-invitations', authenticateToken, async (req, res)
     } catch (error) {
         console.error('Get pending invitations error:', error);
         res.status(500).json({ success: false, error: 'Failed to get pending invitations' });
+    }
+});
+
+// Get activity participants (all invitees and their status)
+app.get('/api/activities/:activityId/participants', authenticateToken, async (req, res) => {
+    try {
+        const { activityId } = req.params;
+        const client = await pool.connect();
+        
+        // First verify that the user has permission to view this activity (either host or invited)
+        const permissionCheck = await client.query(`
+            SELECT 1 FROM activities a
+            INNER JOIN children c ON a.child_id = c.id
+            WHERE a.id = $1 AND c.parent_id = $2
+            UNION
+            SELECT 1 FROM activity_invitations ai
+            WHERE ai.activity_id = $1 AND ai.invited_parent_id = $2
+        `, [activityId, req.user.id]);
+        
+        if (permissionCheck.rows.length === 0) {
+            client.release();
+            return res.status(403).json({ success: false, error: 'Permission denied' });
+        }
+        
+        // Get the activity host information
+        const hostQuery = await client.query(`
+            SELECT u.username as host_name, u.id as host_id, a.name as activity_name
+            FROM activities a
+            INNER JOIN children c ON a.child_id = c.id
+            INNER JOIN users u ON c.parent_id = u.id
+            WHERE a.id = $1
+        `, [activityId]);
+        
+        // Get all invitees for this activity
+        const participantsQuery = await client.query(`
+            SELECT ai.id as invitation_id,
+                   ai.status,
+                   ai.message,
+                   ai.created_at as invited_at,
+                   ai.updated_at as responded_at,
+                   u.username as parent_name,
+                   u.id as parent_id,
+                   c.name as child_name,
+                   c.id as child_id
+            FROM activity_invitations ai
+            INNER JOIN users u ON ai.invited_parent_id = u.id
+            LEFT JOIN children c ON ai.child_id = c.id
+            WHERE ai.activity_id = $1
+            ORDER BY ai.created_at DESC
+        `, [activityId]);
+        
+        client.release();
+        
+        const result = {
+            host: hostQuery.rows[0] || null,
+            participants: participantsQuery.rows || []
+        };
+        
+        res.json({ success: true, data: result });
+    } catch (error) {
+        console.error('Get activity participants error:', error);
+        res.status(500).json({ success: false, error: 'Failed to get activity participants' });
     }
 });
 
