@@ -447,12 +447,12 @@ async function insertDemoConnections(client) {
     }
 
     // Create activity invitations with different statuses for testing
-    // First, find the "test 1" activity by Emma
+    // First, find the "Soccer Practice" activity by Emma
     const testActivity = await client.query(`
         SELECT a.id 
         FROM activities a 
         INNER JOIN children c ON a.child_id = c.id 
-        WHERE a.name = 'test 1' AND c.name = 'Emma Johnson'
+        WHERE a.name = 'Soccer Practice' AND c.name = 'Emma Johnson'
     `);
 
     if (testActivity.rows.length > 0) {
