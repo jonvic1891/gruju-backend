@@ -84,7 +84,7 @@ router.post('/:invitationId/respond', async (req, res) => {
         }
         // Update invitation status
         await database_1.DatabaseHelper.executeQuery(`UPDATE activity_invitations 
-       SET status = @status, updated_at = GETUTCDATE()
+       SET status = @status, updated_at = NOW()
        WHERE id = @invitationId`, {
             status: action === 'accept' ? 'accepted' : 'rejected',
             invitationId: parseInt(invitationId),

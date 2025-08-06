@@ -286,7 +286,7 @@ router.post('/:activityId/invite', async (req: AuthenticatedRequest, res) => {
     // Create invitation
     const inviteId = await DatabaseHelper.insertAndGetId(
       `INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, child_id, status, message, created_at) 
-       VALUES (@activity_id, @inviter_parent_id, @invited_parent_id, @child_id, 'pending', @message, GETUTCDATE())`,
+       VALUES (@activity_id, @inviter_parent_id, @invited_parent_id, @child_id, 'pending', @message, NOW())`,
       {
         activity_id: parseInt(activityId),
         inviter_parent_id: userId,
