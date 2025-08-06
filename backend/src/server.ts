@@ -58,15 +58,15 @@ app.get('/health', async (req, res) => {
 });
 
 // API Routes
-app.use('/auth', authRoutes);
-app.use('/users', usersRoutes);
-app.use('/children', childrenRoutes);
-app.use('/activities', activitiesRoutes);
-app.use('/calendar', calendarRoutes);
-app.use('/connections', connectionsRoutes);
-app.use('/admin', adminRoutes);
-app.use('/sms', smsRoutes);
-app.use('/database', databaseRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/children', childrenRoutes);
+app.use('/api/activities', activitiesRoutes);
+app.use('/api/calendar', calendarRoutes);
+app.use('/api/connections', connectionsRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/sms', smsRoutes);
+app.use('/api/database', databaseRoutes);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

@@ -56,15 +56,15 @@ app.get('/health', async (req, res) => {
     });
 });
 // API Routes
-app.use('/auth', auth_1.default);
-app.use('/users', users_1.default);
-app.use('/children', children_1.default);
-app.use('/activities', activities_1.default);
-app.use('/calendar', calendar_1.default);
-app.use('/connections', connections_1.default);
-app.use('/admin', admin_1.default);
-app.use('/sms', sms_1.default);
-app.use('/database', database_1.default);
+app.use('/api/auth', auth_1.default);
+app.use('/api/users', users_1.default);
+app.use('/api/children', children_1.default);
+app.use('/api/activities', activities_1.default);
+app.use('/api/calendar', calendar_1.default);
+app.use('/api/connections', connections_1.default);
+app.use('/api/admin', admin_1.default);
+app.use('/api/sms', sms_1.default);
+app.use('/api/database', database_1.default);
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);
