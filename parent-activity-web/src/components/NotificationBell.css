@@ -181,6 +181,24 @@
   cursor: not-allowed;
 }
 
+.invitation-details {
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.invitation-details small {
+  color: #666;
+  font-size: 12px;
+  display: block;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
 @media (max-width: 768px) {
   .notification-dropdown {
     width: 280px;

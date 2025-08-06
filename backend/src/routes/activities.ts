@@ -249,4 +249,62 @@ router.post('/:activityId/duplicate', async (req: AuthenticatedRequest, res) => 
   }
 });
 
+// Send activity invitation
+router.post('/:activityId/invite', async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = req.user?.id;
+    const { activityId } = req.params;
+    const { invited_parent_id, child_id, message } = req.body;
+
+    if (!invited_parent_id) {
+      return res.status(400).json({ error: 'Invited parent ID is required' });
+    }
+
+    // Check if activity exists and user owns it
+    const activity = await DatabaseHelper.getOne(
+      `SELECT a.id, a.name FROM Activities a
+       INNER JOIN Children c ON a.child_id = c.id
+       WHERE a.id = @activityId AND c.parent_id = @userId`,
+      { activityId: parseInt(activityId), userId }
+    );
+
+    if (!activity) {
+      return res.status(404).json({ error: 'Activity not found or not owned by user' });
+    }
+
+    // Check if invitation already exists
+    const existingInvite = await DatabaseHelper.getOne(
+      `SELECT id FROM activity_invitations 
+       WHERE activity_id = @activityId AND invited_parent_id = @invited_parent_id`,
+      { activityId: parseInt(activityId), invited_parent_id }
+    );
+
+    if (existingInvite) {
+      return res.status(409).json({ error: 'Invitation already sent to this parent' });
+    }
+
+    // Create invitation
+    const inviteId = await DatabaseHelper.insertAndGetId(
+      `INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, child_id, status, message, created_at) 
+       VALUES (@activity_id, @inviter_parent_id, @invited_parent_id, @child_id, 'pending', @message, GETUTCDATE())`,
+      {
+        activity_id: parseInt(activityId),
+        inviter_parent_id: userId,
+        invited_parent_id: parseInt(invited_parent_id),
+        child_id: child_id ? parseInt(child_id) : null,
+        message: message || null
+      }
+    );
+
+    res.json({
+      success: true,
+      message: 'Invitation sent successfully',
+      data: { inviteId }
+    });
+  } catch (error) {
+    console.error('Send invitation error:', error);
+    res.status(500).json({ error: 'Failed to send invitation' });
+  }
+});
+
 export default router;
