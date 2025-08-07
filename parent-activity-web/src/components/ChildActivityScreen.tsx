@@ -12,6 +12,7 @@ interface ChildActivityScreenProps {
 
 const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [invitedActivities, setInvitedActivities] = useState<any[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
   const [declinedInvitations, setDeclinedInvitations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +56,25 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     loadConnectedChildren();
   }, [child.id]);
 
+  // Prevent body scroll when any modal is open
+  useEffect(() => {
+    const isAnyModalOpen = showAddModal || showActivityDetail || showEditModal || showDuplicateModal || showInviteModal;
+    
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.paddingRight = '0px'; // Prevent layout shift
+    } else {
+      document.body.style.overflow = 'unset';
+      document.body.style.paddingRight = 'unset';
+    }
+
+    // Cleanup on unmount
+    return () => {
+      document.body.style.overflow = 'unset';
+      document.body.style.paddingRight = 'unset';
+    };
+  }, [showAddModal, showActivityDetail, showEditModal, showDuplicateModal, showInviteModal]);
+
   const loadActivities = async () => {
     try {
       setLoading(true);
@@ -80,6 +100,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       console.log(`📩 Loading invitations for ${child.name} from ${startDate} to ${endDate}`);
       console.log(`🔗 API URL will be: /api/calendar/pending-invitations?start=${startDate}&end=${endDate}`);
       
+      // Load accepted/invited activities
+      const invitedResponse = await apiService.getInvitedActivities(startDate, endDate);
+      if (invitedResponse.success && invitedResponse.data) {
+        // Filter for this specific child
+        const childInvitedActivities = invitedResponse.data.filter((invitation: any) => 
+          invitation.invited_child_name === child.name
+        );
+        
+        console.log(`✅ Found ${childInvitedActivities.length} accepted invitations for ${child.name}`);
+        setInvitedActivities(childInvitedActivities);
+      } else {
+        console.error('Failed to load invited activities:', invitedResponse.error);
+        setInvitedActivities([]);
+      }
+      
       // Load pending invitations
       const pendingResponse = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
       if (pendingResponse.success && pendingResponse.data) {
@@ -95,15 +130,25 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         setPendingInvitations([]);
       }
       
-      // For now, we'll handle accepted invitations differently - they should show up as regular activities
-      // but we can add specific declined invitation loading if needed
-      
-      // TODO: Add declined invitation loading if backend supports it
-      setDeclinedInvitations([]);
+      // Load declined invitations
+      const declinedResponse = await apiService.getDeclinedInvitationsForCalendar(startDate, endDate);
+      if (declinedResponse.success && declinedResponse.data) {
+        // Filter for this specific child
+        const childDeclinedInvitations = declinedResponse.data.filter((invitation: any) => 
+          invitation.invited_child_name === child.name
+        );
+        
+        console.log(`❌ Found ${childDeclinedInvitations.length} declined invitations for ${child.name}`);
+        setDeclinedInvitations(childDeclinedInvitations);
+      } else {
+        console.error('Failed to load declined invitations:', declinedResponse.error);
+        setDeclinedInvitations([]);
+      }
       
     } catch (error) {
       console.error('Load activities error:', error);
       setActivities([]);
+      setInvitedActivities([]);
       setPendingInvitations([]);
       setDeclinedInvitations([]);
     } finally {
@@ -549,6 +594,24 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                (activityStartDate <= dateString && activityEndDate >= dateString);
       });
       
+      // Get invited activities for this day (convert to activity format)
+      const dayInvitedActivities = invitedActivities.filter(invitation => {
+        const invitationStartDate = invitation.start_date.split('T')[0];
+        return invitationStartDate === dateString;
+      }).map(invitation => ({
+        ...invitation,
+        id: `accepted-${invitation.id}`,
+        activity_id: invitation.id, // Original activity ID from backend for participants API
+        name: invitation.activity_name,
+        description: invitation.activity_description,
+        isAcceptedInvitation: true,
+        invitationId: invitation.invitation_id,
+        hostParent: invitation.host_parent_username,
+        host_child_name: invitation.child_name,
+        host_parent_name: invitation.host_parent_username,
+        is_shared: true // Mark as shared so it gets the blue color
+      }));
+
       // Get pending invitations for this day (convert to activity format)
       const dayPendingInvitations = pendingInvitations.filter(invitation => {
         const invitationStartDate = invitation.start_date.split('T')[0];
@@ -561,9 +624,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         description: invitation.activity_description,
         isPendingInvitation: true,
         invitationId: invitation.invitation_id,
-        hostParent: invitation.host_parent_name,
-        host_child_name: invitation.host_child_name,
-        host_parent_name: invitation.host_parent_name
+        hostParent: invitation.host_parent_username,
+        host_child_name: invitation.child_name,
+        host_parent_name: invitation.host_parent_username
       }));
       
       // Get declined invitations for this day (convert to activity format)
@@ -578,13 +641,13 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         description: invitation.activity_description,
         isDeclinedInvitation: true,
         invitationId: invitation.invitation_id,
-        hostParent: invitation.host_parent_name,
-        host_child_name: invitation.host_child_name,
-        host_parent_name: invitation.host_parent_name
+        hostParent: invitation.host_parent_username,
+        host_child_name: invitation.child_name,
+        host_parent_name: invitation.host_parent_username
       }));
       
       // Combine activities and all types of invitations
-      const allDayItems = [...dayActivities, ...dayPendingInvitations, ...dayDeclinedInvitations];
+      const allDayItems = [...dayActivities, ...dayInvitedActivities, ...dayPendingInvitations, ...dayDeclinedInvitations];
       
       // Sort all items by start time
       const sortedItems = allDayItems.sort((a, b) => {

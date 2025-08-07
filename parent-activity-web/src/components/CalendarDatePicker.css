@@ -21,11 +21,16 @@
   background: none;
   border: none;
   color: white;
-  font-size: 24px;
+  font-size: 20px;
   cursor: pointer;
-  padding: 8px 12px;
+  padding: 12px;
   border-radius: 6px;
   transition: background-color 0.2s;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nav-btn:hover {
@@ -110,7 +115,7 @@
   border-radius: 6px;
   transition: all 0.2s;
   color: #2d3748;
-  min-height: 36px;
+  min-height: 44px;
 }
 
 .day-cell:hover:not(.disabled) {
@@ -183,15 +188,16 @@
   color: white;
   font-size: 14px;
   cursor: pointer;
-  padding: 0;
+  padding: 8px;
   line-height: 1;
   border-radius: 50%;
-  width: 16px;
-  height: 16px;
+  min-width: 32px;
+  min-height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-left: 2px;
+  margin-left: 4px;
+  transition: background-color 0.2s;
 }
 
 .remove-date:hover {

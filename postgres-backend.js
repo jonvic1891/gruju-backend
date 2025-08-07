@@ -1759,46 +1759,13 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
     }
 });
 
-// Get activities from accepted invitations in a date range
-app.get('/api/calendar/invited-activities', authenticateToken, async (req, res) => {
-    try {
-        const { start, end } = req.query;
-        
-        if (!start || !end) {
-            return res.status(400).json({ success: false, error: 'Start and end dates are required' });
-        }
-        
-        const client = await pool.connect();
-        
-        const query = `
-            SELECT DISTINCT a.id, a.name, a.start_date, a.end_date, a.start_time, a.end_time, 
-                    a.website_url, a.created_at, a.updated_at, a.description, a.location, a.cost,
-                    c.name as child_name, c.id as child_id,
-                    u.username as host_parent_username,
-                    ai.message as invitation_message
-            FROM activities a
-            INNER JOIN children c ON a.child_id = c.id
-            INNER JOIN users u ON c.parent_id = u.id
-            INNER JOIN activity_invitations ai ON a.id = ai.activity_id
-            WHERE ai.invited_parent_id = $1
-              AND ai.status = 'accepted'
-              AND a.start_date <= $3
-              AND a.end_date >= $2
-            ORDER BY a.start_date, a.start_time
-        `;
-        
-        const result = await client.query(query, [req.user.id, start, end]);
-        client.release();
-        
-        res.json({ success: true, data: result.rows });
-    } catch (error) {
-        console.error('Get invited activities error:', error);
-        res.status(500).json({ success: false, error: 'Failed to get invited activities' });
-    }
-});
+// REMOVED: Replaced with unified /api/calendar/invitations endpoint
+// - /api/calendar/invited-activities (accepted)
+// - /api/calendar/pending-invitations (pending)  
+// - /api/calendar/declined-invitations (declined)
 
-// Calendar endpoint for pending invitations
-app.get('/api/calendar/pending-invitations', authenticateToken, async (req, res) => {
+// Unified calendar endpoint for all invitations (pending, accepted, declined)
+app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
     try {
         const { start, end } = req.query;
         
@@ -1809,8 +1776,9 @@ app.get('/api/calendar/pending-invitations', authenticateToken, async (req, res)
         const client = await pool.connect();
         
         const query = `
-            SELECT DISTINCT a.id, a.name, a.start_date, a.end_date, a.start_time, a.end_time, 
-                    a.website_url, a.created_at, a.updated_at, a.description, a.location, a.cost,
+            SELECT DISTINCT a.id, a.name as activity_name, a.start_date, a.end_date, a.start_time, a.end_time, 
+                    a.website_url, a.created_at, a.updated_at, a.description as activity_description, 
+                    a.location, a.cost,
                     c.name as child_name, c.id as child_id,
                     u.username as host_parent_username,
                     ai.message as invitation_message,
@@ -1823,18 +1791,17 @@ app.get('/api/calendar/pending-invitations', authenticateToken, async (req, res)
             INNER JOIN activity_invitations ai ON a.id = ai.activity_id
             LEFT JOIN children c_invited ON ai.child_id = c_invited.id
             WHERE ai.invited_parent_id = $1
-              AND ai.status = 'pending'
               AND a.start_date <= $3
               AND (a.end_date IS NULL OR a.end_date >= $2)
-            ORDER BY a.start_date, a.start_time
+            ORDER BY a.start_date, a.start_time, ai.status
         `;
         
-        console.log(`🔍 Pending invitations query for user ${req.user.id} (${start} to ${end})`);
+        console.log(`🔍 All invitations query for user ${req.user.id} (${start} to ${end})`);
         const result = await client.query(query, [req.user.id, start, end]);
-        console.log(`📊 Found ${result.rows.length} pending invitations:`, result.rows.map(r => ({
-            activity: r.name,
+        console.log(`📊 Found ${result.rows.length} total invitations:`, result.rows.map(r => ({
+            activity: r.activity_name,
             date: r.start_date,
-            invited_child: r.invited_child_name,
+            child: r.invited_child_name,
             status: r.status
         })));
         
@@ -1842,8 +1809,8 @@ app.get('/api/calendar/pending-invitations', authenticateToken, async (req, res)
         
         res.json({ success: true, data: result.rows });
     } catch (error) {
-        console.error('Get pending invitations error:', error);
-        res.status(500).json({ success: false, error: 'Failed to get pending invitations' });
+        console.error('Get invitations error:', error);
+        res.status(500).json({ success: false, error: 'Failed to get invitations' });
     }
 });
 

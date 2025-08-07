@@ -8,6 +8,19 @@
 - Always deploy changes before asking user to test
 - When user says "I don't see the changes" = immediately deploy to Firebase
 
+## MOBILE-FIRST DESIGN REQUIREMENTS
+- **CRITICAL**: This app must be fully optimized for mobile devices (phones and tablets)
+- All components must be responsive and work seamlessly on screens from 320px to 1200px+
+- Touch targets must be minimum 44px for proper finger navigation
+- Font sizes must be minimum 16px on inputs to prevent iOS zoom
+- Modals must be full-screen or near full-screen on mobile devices
+- Navigation must be thumb-friendly with proper spacing
+- No horizontal scrolling should occur on any screen size
+- Loading states and interactions must be optimized for touch devices
+- All text must be readable without zooming on mobile devices
+- Forms must be easy to use with on-screen keyboards
+- Calendar and grid layouts must adapt properly to mobile screens
+
 ## standard Workflow
 
 1. First think through the problem, read the codebase for relevant files, and write a plan to projectplan.md

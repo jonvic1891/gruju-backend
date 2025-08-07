@@ -164,8 +164,23 @@ class ApiService {
     return this.request('get', `/api/calendar/connected-activities?start=${startDate}&end=${endDate}`);
   }
 
+  // Unified method to get all invitations (replaces separate accepted/pending/declined methods)
+  async getAllInvitations(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
+    return this.request('get', `/api/calendar/invitations?start=${startDate}&end=${endDate}`);
+  }
+
+  // Helper methods to filter invitations by status
   async getInvitedActivities(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
-    return this.request('get', `/api/calendar/invited-activities?start=${startDate}&end=${endDate}`);
+    const allInvitationsResponse = await this.getAllInvitations(startDate, endDate);
+    if (!allInvitationsResponse.success) {
+      return allInvitationsResponse;
+    }
+    
+    const acceptedInvitations = allInvitationsResponse.data?.filter(invitation => invitation.status === 'accepted') || [];
+    return {
+      success: true,
+      data: acceptedInvitations
+    };
   }
 
   async getActivityCounts(startDate: string, endDate: string, includeConnected: boolean = false): Promise<ApiResponse<any[]>> {
@@ -211,7 +226,29 @@ class ApiService {
   }
 
   async getPendingInvitationsForCalendar(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
-    return this.request('get', `/api/calendar/pending-invitations?start=${startDate}&end=${endDate}`);
+    const allInvitationsResponse = await this.getAllInvitations(startDate, endDate);
+    if (!allInvitationsResponse.success) {
+      return allInvitationsResponse;
+    }
+    
+    const pendingInvitations = allInvitationsResponse.data?.filter(invitation => invitation.status === 'pending') || [];
+    return {
+      success: true,
+      data: pendingInvitations
+    };
+  }
+
+  async getDeclinedInvitationsForCalendar(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
+    const allInvitationsResponse = await this.getAllInvitations(startDate, endDate);
+    if (!allInvitationsResponse.success) {
+      return allInvitationsResponse;
+    }
+    
+    const declinedInvitations = allInvitationsResponse.data?.filter(invitation => invitation.status === 'declined') || [];
+    return {
+      success: true,
+      data: declinedInvitations
+    };
   }
 
   async respondToActivityInvitation(invitationId: number, action: 'accept' | 'reject'): Promise<ApiResponse<any>> {

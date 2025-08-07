@@ -105,7 +105,7 @@
 
 .activities-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 20px;
 }
 
@@ -210,11 +210,51 @@
   font-size: 16px;
 }
 
+/* Global Input Font Size Fix - Prevent iOS Zoom */
+.modal input, .modal textarea, .modal select,
+input[type="text"], input[type="email"], input[type="password"],
+input[type="number"], input[type="date"], input[type="time"],
+input[type="url"], input[type="tel"], textarea, select {
+  font-size: 16px !important;
+}
+
+/* Global Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
+/* Base Modal Styles */
+.modal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  padding: 24px;
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
+}
+
 /* Modal Styles */
 .activity-modal {
   max-width: 600px;
+  width: 95vw;
   max-height: 90vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-form {
@@ -222,13 +262,16 @@
   flex-direction: column;
   gap: 15px;
   margin: 20px 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .modal-textarea {
   padding: 12px;
   border: 1px solid #dee2e6;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 16px;
   font-family: inherit;
   resize: vertical;
   min-height: 80px;
@@ -451,13 +494,19 @@
 
 /* Activity Detail Modal Styles */
 .activity-detail-modal {
-  max-width: 500px;
-  max-height: 80vh;
-  overflow-y: auto;
+  max-width: 700px;
+  width: 95vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .activity-detail-content {
   margin: 20px 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding-right: 8px;
 }
 
 .detail-item {
@@ -507,12 +556,17 @@
 /* Duplicate Activity Modal */
 .activity-duplicate-modal {
   max-width: 500px;
-  max-height: 80vh;
-  overflow-y: auto;
+  width: 95vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .duplicate-content {
   margin: 20px 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .duplicate-content p {
@@ -679,6 +733,7 @@
   
   .activities-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
   }
   
   .date-row, .time-row, .number-row {
@@ -824,6 +879,7 @@
   background: white;
   border-radius: 6px;
   border: 1px solid #dee2e6;
+  -webkit-overflow-scrolling: touch;
 }
 
 .child-checkbox {
@@ -1008,29 +1064,165 @@
   text-decoration: underline;
 }
 
-/* Enhanced Activity Detail Modal */
-.activity-detail-modal {
-  max-width: 700px;
-  width: 90vw;
-  max-height: 85vh;
-  overflow-y: auto;
-}
+/* Enhanced Activity Detail Modal - Remove Duplicate */
+/* Styles moved up to line 457 */
 
-.activity-detail-content {
-  max-height: calc(85vh - 120px);
-  overflow-y: auto;
-  padding-right: 8px;
+/* Modal Actions - Always visible at bottom */
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 20px 0 0 0;
+  border-top: 1px solid #e9ecef;
+  margin-top: auto;
+  flex-shrink: 0;
 }
 
 /* Responsive design for form rows */
+/* Tablet specific improvements */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .activities-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  
+  .week-calendar-container {
+    padding: 20px;
+  }
+}
+
 @media (max-width: 768px) {
   .form-row-group {
     grid-template-columns: 1fr;
     gap: 12px;
   }
   
-  .activity-detail-modal {
+  .activity-modal, .activity-detail-modal, .activity-duplicate-modal {
     width: 95vw;
-    margin: 20px auto;
+    max-width: none;
+    margin: 10px;
+    max-height: calc(100vh - 20px);
+  }
+  
+  .activities-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .modal-actions button {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+  }
+  
+  /* Improve mobile touch targets */
+  .inline-edit-input, .inline-edit-textarea {
+    font-size: 16px; /* Prevent zoom on iOS */
+    padding: 12px;
+  }
+  
+  /* Better mobile calendar grid */
+  .week-calendar-container {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  
+  .week-day {
+    min-height: 200px;
+    padding: 8px;
+  }
+  
+  .activity-block {
+    padding: 8px;
+    margin-bottom: 4px;
+  }
+  
+  .activity-name {
+    font-size: 12px;
+  }
+  
+  .activity-time {
+    font-size: 10px;
+  }
+}
+
+/* Extra small screens (phones) */
+@media (max-width: 480px) {
+  .modal-overlay {
+    padding: 10px;
+    align-items: flex-start;
+    padding-top: 20px;
+  }
+  
+  .activity-modal, .activity-detail-modal, .activity-duplicate-modal {
+    width: 100vw;
+    max-width: 100vw;
+    margin: 0;
+    border-radius: 0;
+    max-height: calc(100vh - 20px);
+    min-height: 300px;
+  }
+  
+  .modal h3 {
+    font-size: 18px;
+    margin-bottom: 15px;
+    text-align: left;
+  }
+  
+  .form-row label {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  
+  .inline-edit-input, .inline-edit-textarea, .modal-input {
+    font-size: 16px; /* Prevent zoom on iOS */
+    padding: 14px;
+    border-radius: 8px;
+  }
+  
+  .children-list {
+    max-height: 150px;
+  }
+  
+  .child-checkbox {
+    padding: 12px 8px;
+    font-size: 14px;
+  }
+  
+  /* Stack modal buttons vertically on very small screens */
+  .modal-actions {
+    gap: 10px;
+    padding-top: 15px;
+  }
+  
+  .modal-actions button {
+    padding: 14px;
+    font-size: 16px;
+    border-radius: 8px;
+  }
+  
+  /* Better calendar grid for phones */
+  .week-calendar-container {
+    padding: 12px;
+  }
+  
+  .week-days {
+    gap: 4px;
+  }
+  
+  .week-day {
+    min-height: 150px;
+    padding: 6px;
+  }
+  
+  .activity-block {
+    padding: 6px;
+    margin-bottom: 3px;
+    border-radius: 8px;
   }
 }
