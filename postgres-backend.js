@@ -1734,14 +1734,22 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
         const client = await pool.connect();
         
         // Verify the invitation exists and belongs to this user
+        // Allow responding to pending invitations and changing accepted invitations to declined
         const invitation = await client.query(
-            'SELECT * FROM activity_invitations WHERE id = $1 AND invited_parent_id = $2 AND status = $3',
-            [invitationId, req.user.id, 'pending']
+            'SELECT * FROM activity_invitations WHERE id = $1 AND invited_parent_id = $2 AND status IN ($3, $4)',
+            [invitationId, req.user.id, 'pending', 'accepted']
         );
 
         if (invitation.rows.length === 0) {
             client.release();
-            return res.status(404).json({ success: false, error: 'Activity invitation not found' });
+            return res.status(404).json({ success: false, error: 'Activity invitation not found or cannot be modified' });
+        }
+
+        // Don't allow accepting an already accepted invitation
+        const currentStatus = invitation.rows[0].status;
+        if (currentStatus === 'accepted' && action === 'accept') {
+            client.release();
+            return res.status(400).json({ success: false, error: 'Invitation is already accepted' });
         }
 
         const status = action === 'accept' ? 'accepted' : 'declined';
