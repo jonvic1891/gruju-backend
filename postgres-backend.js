@@ -1753,16 +1753,21 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
         }
 
         const status = action === 'accept' ? 'accepted' : 'declined';
-        await client.query(
+        
+        console.log(`📝 Updating invitation ${invitationId}: ${currentStatus} -> ${status}`);
+        const updateResult = await client.query(
             'UPDATE activity_invitations SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             [status, invitationId]
         );
+        console.log(`✅ Update result: ${updateResult.rowCount} rows affected`);
 
         client.release();
 
         res.json({ success: true, message: `Activity invitation ${status}` });
     } catch (error) {
         console.error('Respond to activity invitation error:', error);
+        console.error('Error details:', error.message);
+        console.error('Error stack:', error.stack);
         res.status(500).json({ success: false, error: 'Failed to respond to activity invitation' });
     }
 });
