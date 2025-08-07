@@ -766,7 +766,7 @@ const CalendarScreen = () => {
                                   {participant.status === 'accepted' && (
                                     <span style={{ color: '#48bb78', fontSize: '12px' }}>✅ Accepted</span>
                                   )}
-                                  {participant.status === 'declined' && (
+                                  {participant.status === 'rejected' && (
                                     <span style={{ color: '#a0aec0', fontSize: '12px' }}>❌ Declined</span>
                                   )}
                                 </div>
