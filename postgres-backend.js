@@ -1736,7 +1736,7 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
         // Verify the invitation exists and belongs to this user
         // Allow responding to pending invitations and changing accepted invitations to declined
         const invitation = await client.query(
-            'SELECT * FROM activity_invitations WHERE id = $1 AND invited_parent_id = $2 AND status IN ($3, $4)',
+            'SELECT * FROM activity_invitations WHERE id = $1 AND invited_parent_id = $2 AND (status = $3 OR status = $4)',
             [invitationId, req.user.id, 'pending', 'accepted']
         );
 
