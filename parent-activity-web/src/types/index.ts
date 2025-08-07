@@ -50,6 +50,7 @@ export interface Activity {
   activity_id?: number; // Original activity ID for invitations (to load participants)
   // Additional fields for invitation handling in frontend
   isPendingInvitation?: boolean;
+  isAcceptedInvitation?: boolean;
   isDeclinedInvitation?: boolean;
   invitationId?: number;
   hostParent?: string;

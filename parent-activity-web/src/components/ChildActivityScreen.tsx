@@ -22,10 +22,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [showActivityDetail, setShowActivityDetail] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
-  const [duplicatingActivity, setDuplicatingActivity] = useState<Activity | null>(null);
-  const [duplicateDate, setDuplicateDate] = useState('');
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [invitingActivity, setInvitingActivity] = useState<Activity | null>(null);
   const [connectedFamilies, setConnectedFamilies] = useState<any[]>([]);
@@ -58,7 +55,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   // Prevent body scroll when any modal is open
   useEffect(() => {
-    const isAnyModalOpen = showAddModal || showActivityDetail || showEditModal || showDuplicateModal || showInviteModal;
+    const isAnyModalOpen = showAddModal || showActivityDetail || showEditModal || showInviteModal;
     
     if (isAnyModalOpen) {
       document.body.style.overflow = 'hidden';
@@ -73,7 +70,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       document.body.style.overflow = 'unset';
       document.body.style.paddingRight = 'unset';
     };
-  }, [showAddModal, showActivityDetail, showEditModal, showDuplicateModal, showInviteModal]);
+  }, [showAddModal, showActivityDetail, showEditModal, showInviteModal]);
 
   const loadActivities = async () => {
     try {
@@ -267,7 +264,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     
     // Load participants for any activity that has a real backend activity ID
     // For invitations, we need to get the original activity ID from the backend
-    if (activity.isPendingInvitation || activity.isDeclinedInvitation) {
+    if (activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) {
       // For invitations, we need to load participants using the original activity ID
       // The invitation data should contain the original activity_id
       const originalActivityId = (activity as any).activity_id || (activity as any).id;
@@ -355,43 +352,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   };
 
-  const handleDuplicateActivity = (activity: Activity) => {
-    setDuplicatingActivity(activity);
-    setDuplicateDate(new Date().toISOString().split('T')[0]);
-    setShowActivityDetail(false);
-    setShowDuplicateModal(true);
-  };
-
-  const handleConfirmDuplicate = async () => {
-    if (!duplicatingActivity || !duplicateDate) {
-      alert('Please select a date for the duplicate activity');
-      return;
-    }
-
-    setAddingActivity(true);
-    try {
-      const response = await apiService.duplicateActivity(
-        duplicatingActivity.id, 
-        duplicateDate, 
-        duplicateDate
-      );
-      
-      if (response.success) {
-        setShowDuplicateModal(false);
-        setDuplicatingActivity(null);
-        setDuplicateDate('');
-        loadActivities();
-        alert('Activity duplicated successfully');
-      } else {
-        alert(`Error: ${response.error || 'Failed to duplicate activity'}`);
-      }
-    } catch (error) {
-      alert('Failed to duplicate activity');
-      console.error('Duplicate activity error:', error);
-    } finally {
-      setAddingActivity(false);
-    }
-  };
 
   const handleCreateActivity = async () => {
     if (!newActivity.name.trim()) {
@@ -544,6 +504,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       return {
         background: 'linear-gradient(135deg, #48bb78, #68d391)',
         borderColor: '#38a169'
+      };
+    }
+    
+    // Light blue for accepted invitations 
+    if (activity.isAcceptedInvitation) {
+      return {
+        background: 'linear-gradient(135deg, #4299e1, #63b3ed)',
+        borderColor: '#3182ce'
       };
     }
     
@@ -811,9 +779,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                           <div className="activity-name">
                             {activity.name}
                             {activity.isPendingInvitation && <span className="invitation-badge">📩</span>}
+                            {activity.isAcceptedInvitation && <span className="invitation-badge">✅</span>}
                             {activity.isDeclinedInvitation && <span className="invitation-badge">❌</span>}
                           </div>
-                          {(activity.isPendingInvitation || activity.isDeclinedInvitation) && (
+                          {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) && (
                             <div className="activity-host">from {activity.host_child_name || activity.hostParent}</div>
                           )}
                           {activity.location && (
@@ -1088,7 +1057,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           <div className="modal activity-detail-modal" onClick={(e) => e.stopPropagation()}>
             <h3>Activity Details</h3>
             <div className="activity-detail-content">
-              {(selectedActivity.isPendingInvitation || selectedActivity.isDeclinedInvitation) && (
+              {(selectedActivity.isPendingInvitation || selectedActivity.isAcceptedInvitation || selectedActivity.isDeclinedInvitation) && (
                 <div className="invitation-info">
                   <div className="detail-item">
                     <strong>Invitation from:</strong>
@@ -1098,9 +1067,16 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     <strong>Status:</strong>
                     <p>
                       {selectedActivity.isPendingInvitation && <span style={{ color: '#48bb78' }}>📩 Pending</span>}
+                      {selectedActivity.isAcceptedInvitation && <span style={{ color: '#4299e1' }}>✅ Accepted</span>}
                       {selectedActivity.isDeclinedInvitation && <span style={{ color: '#a0aec0' }}>❌ Declined</span>}
                     </p>
                   </div>
+                  {selectedActivity.invitation_message && (
+                    <div className="detail-item">
+                      <strong>Message:</strong>
+                      <p style={{ fontStyle: 'italic' }}>"{selectedActivity.invitation_message}"</p>
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -1108,7 +1084,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               <div className="activity-details-form">
                 <div className="form-row">
                   <label><strong>Activity Name:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
                     <input
                       type="text"
                       value={newActivity.name}
@@ -1123,7 +1099,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
                 <div className="form-row">
                   <label><strong>Description:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
                     <textarea
                       value={newActivity.description}
                       onChange={(e) => setNewActivity({...newActivity, description: e.target.value})}
@@ -1138,7 +1114,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
                 <div className="form-row">
                   <label><strong>Start Date:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
                     <input
                       type="date"
                       value={newActivity.start_date}
@@ -1152,7 +1128,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
                 <div className="form-row">
                   <label><strong>End Date:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
                     <input
                       type="date"
                       value={newActivity.end_date}
@@ -1167,7 +1143,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 <div className="form-row-group">
                   <div className="form-row">
                     <label><strong>Start Time:</strong></label>
-                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
                       <TimePickerDropdown
                         value={newActivity.start_time}
                         onChange={(time) => setNewActivity({...newActivity, start_time: time})}
@@ -1180,7 +1156,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
                   <div className="form-row">
                     <label><strong>End Time:</strong></label>
-                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
                       <TimePickerDropdown
                         value={newActivity.end_time}
                         onChange={(time) => setNewActivity({...newActivity, end_time: time})}
@@ -1194,7 +1170,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
                 <div className="form-row">
                   <label><strong>Location:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
                     <input
                       type="text"
                       value={newActivity.location}
@@ -1209,7 +1185,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
                 <div className="form-row">
                   <label><strong>Website:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
                     <input
                       type="url"
                       value={newActivity.website_url}
@@ -1233,7 +1209,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 <div className="form-row-group">
                   <div className="form-row">
                     <label><strong>Cost:</strong></label>
-                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
                       <input
                         type="number"
                         value={newActivity.cost}
@@ -1250,7 +1226,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
                   <div className="form-row">
                     <label><strong>Max Participants:</strong></label>
-                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation ? (
+                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
                       <input
                         type="number"
                         value={newActivity.max_participants}
@@ -1343,8 +1319,19 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 </>
               )}
               
+              {/* Show decline button for accepted invitations */}
+              {selectedActivity.isAcceptedInvitation && selectedActivity.invitationId && (
+                <button
+                  onClick={() => handleInvitationResponse(selectedActivity.invitationId!, 'reject')}
+                  className="delete-btn"
+                  style={{ background: 'linear-gradient(135deg, #e53e3e, #fc8181)', color: 'white' }}
+                >
+                  ❌ Change to Declined
+                </button>
+              )}
+              
               {/* Show enhanced buttons for activity host */}
-              {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation && (
+              {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation && (
                 <>
                   <button
                     onClick={handleUpdateActivity}
@@ -1361,12 +1348,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     ➕ Invite More
                   </button>
                   <button
-                    onClick={() => handleDuplicateActivity(selectedActivity)}
-                    className="add-btn"
-                  >
-                    📋 Duplicate
-                  </button>
-                  <button
                     onClick={() => handleDeleteActivity(selectedActivity)}
                     className="delete-btn"
                   >
@@ -1375,21 +1356,13 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 </>
               )}
               
-              {/* For non-host activities, show limited actions */}
-              {!selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isDeclinedInvitation && (
-                <>
-                  <button
-                    onClick={() => handleDuplicateActivity(selectedActivity)}
-                    className="add-btn"
-                  >
-                    📋 Duplicate
-                  </button>
-                  <div className="host-info">
-                    <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
-                      Only the activity host can edit this activity
-                    </p>
-                  </div>
-                </>
+              {/* For non-host activities, show informational text */}
+              {!selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation && (
+                <div className="host-info">
+                  <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                    Only the activity host can edit this activity
+                  </p>
+                </div>
               )}
               
               {/* For declined invitations, show informational text */}
@@ -1528,56 +1501,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         </div>
       )}
 
-      {/* Duplicate Activity Modal */}
-      {showDuplicateModal && duplicatingActivity && (
-        <div className="modal-overlay" onClick={() => setShowDuplicateModal(false)}>
-          <div className="modal activity-duplicate-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Duplicate Activity: {duplicatingActivity.name}</h3>
-            <div className="duplicate-content">
-              <p>Create a copy of this activity on a new date:</p>
-              <div className="input-group">
-                <label>New Date</label>
-                <input
-                  type="date"
-                  value={duplicateDate}
-                  onChange={(e) => setDuplicateDate(e.target.value)}
-                  className="modal-input"
-                  autoFocus
-                />
-              </div>
-              <div className="activity-preview">
-                <strong>Activity Details:</strong>
-                <p>Name: {duplicatingActivity.name}</p>
-                {duplicatingActivity.description && <p>Description: {duplicatingActivity.description}</p>}
-                {duplicatingActivity.start_time && (
-                  <p>Time: {formatTime(duplicatingActivity.start_time)}
-                  {duplicatingActivity.end_time && ` - ${formatTime(duplicatingActivity.end_time)}`}</p>
-                )}
-                {duplicatingActivity.location && <p>Location: {duplicatingActivity.location}</p>}
-              </div>
-            </div>
-            <div className="modal-actions">
-              <button
-                onClick={() => {
-                  setShowDuplicateModal(false);
-                  setDuplicatingActivity(null);
-                  setDuplicateDate('');
-                }}
-                className="cancel-btn"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDuplicate}
-                disabled={addingActivity || !duplicateDate}
-                className={`confirm-btn ${addingActivity || !duplicateDate ? 'disabled' : ''}`}
-              >
-                {addingActivity ? 'Duplicating...' : 'Duplicate Activity'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Invite Activity Modal */}
       {showInviteModal && invitingActivity && (
