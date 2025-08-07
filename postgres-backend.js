@@ -1397,7 +1397,7 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
             return res.status(404).json({ success: false, error: 'Connection request not found' });
         }
 
-        const status = action === 'accept' ? 'accepted' : 'declined';
+        const status = action === 'accept' ? 'accepted' : 'rejected';
         await client.query(
             'UPDATE connection_requests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             [status, requestId]
@@ -1752,7 +1752,7 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
             return res.status(400).json({ success: false, error: 'Invitation is already accepted' });
         }
 
-        const status = action === 'accept' ? 'accepted' : 'declined';
+        const status = action === 'accept' ? 'accepted' : 'rejected';
         
         console.log(`📝 Updating invitation ${invitationId}: ${currentStatus} -> ${status}`);
         const updateResult = await client.query(
