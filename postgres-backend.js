@@ -1416,7 +1416,7 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
             });
         }
 
-        const status = action === 'accept' ? 'accepted' : 'rejected';
+        const status = action === 'accept' ? 'accepted' : 'declined';
         console.log('🔄 Updating request status to:', status);
         
         const updateResult = await client.query(
