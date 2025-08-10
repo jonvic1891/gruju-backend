@@ -34,6 +34,35 @@ const pool = new Pool({
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
+// Run database migrations
+async function runMigrations() {
+    const client = await pool.connect();
+    try {
+        console.log('🔧 Running database migrations...');
+        
+        // Migration 1: Add auto_notify_new_connections column to activities table
+        try {
+            await client.query(`
+                ALTER TABLE activities 
+                ADD COLUMN IF NOT EXISTS auto_notify_new_connections BOOLEAN DEFAULT false
+            `);
+            console.log('✅ Migration: Added auto_notify_new_connections column to activities table');
+        } catch (error) {
+            if (error.code === '42701') {
+                console.log('✅ Migration: auto_notify_new_connections column already exists');
+            } else {
+                throw error;
+            }
+        }
+        
+    } catch (error) {
+        console.error('❌ Migration failed:', error);
+        throw error;
+    } finally {
+        client.release();
+    }
+}
+
 // Test database connection
 async function initializeDatabase() {
     try {
@@ -51,6 +80,9 @@ async function initializeDatabase() {
         // Create tables if they don't exist
         // await createTables(client);
         // client.release();
+
+        // Run migrations
+        await runMigrations();
         
         return true;
     } catch (error) {
@@ -1377,6 +1409,7 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
 
 app.post('/api/connections/respond/:requestId', authenticateToken, async (req, res) => {
     try {
+        console.log('🚨 ENDPOINT HIT: /api/connections/respond/:requestId');
         const requestId = parseInt(req.params.requestId);
         const { action } = req.body;
 
