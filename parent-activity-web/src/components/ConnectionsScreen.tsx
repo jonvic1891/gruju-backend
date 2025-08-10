@@ -117,14 +117,8 @@ const ConnectionsScreen = () => {
           // Reload active connections to show the new connection immediately
           loadActiveConnections();
           
-          // Auto-notify: Send accepting user's auto-notify activities to the requesting user
-          if (acceptedRequest) {
-            await notifyNewConnectionAboutFutureActivities(
-              acceptedRequest.requester_id, 
-              acceptedRequest.child_id,
-              acceptedRequest.target_child_id
-            );
-          }
+          // Auto-notify: Now handled on backend for bidirectional notifications
+          console.log('🔔 Auto-notification now handled on backend for both directions');
           
           alert('Connection request accepted!');
         } else {
