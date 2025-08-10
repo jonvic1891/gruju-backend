@@ -1456,7 +1456,7 @@ app.delete('/api/connections/:connectionId', authenticateToken, async (req, res)
 
         // Update connection status to deleted (soft delete)
         await client.query(
-            'UPDATE connections SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            'UPDATE connections SET status = $1 WHERE id = $2',
             ['deleted', connectionId]
         );
 
