@@ -1485,10 +1485,10 @@ app.delete('/api/connections/:connectionId', authenticateToken, async (req, res)
         const connData = connection.rows[0];
         console.log('✅ Connection to delete:', connData);
 
-        // Update connection status to deleted (soft delete)
+        // Update connection status to blocked (soft delete)
         const updateResult = await client.query(
             'UPDATE connections SET status = $1 WHERE id = $2',
-            ['deleted', connectionId]
+            ['blocked', connectionId]
         );
 
         console.log('🔄 Update result:', updateResult);
