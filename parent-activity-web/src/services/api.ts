@@ -281,7 +281,7 @@ class ApiService {
       return allInvitationsResponse;
     }
     
-    const declinedInvitations = allInvitationsResponse.data?.filter(invitation => invitation.status === 'rejected') || [];
+    const declinedInvitations = allInvitationsResponse.data?.filter(invitation => invitation.status === 'declined') || [];
     return {
       success: true,
       data: declinedInvitations

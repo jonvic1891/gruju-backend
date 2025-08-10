@@ -38,7 +38,7 @@ export interface Activity {
   updated_at: string;
   // Extended fields for activity status/sharing
   is_shared?: boolean;
-  invitation_status?: 'none' | 'pending' | 'accepted' | 'rejected';
+  invitation_status?: 'none' | 'pending' | 'accepted' | 'declined';
   is_host?: boolean;
   is_cancelled?: boolean;
   // Extended fields from backend joins (for connected and invited activities)
@@ -100,7 +100,7 @@ export interface ActivityInvitation {
   inviter_parent_id: number;
   invited_parent_id: number;
   child_id?: number;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'declined';
   message?: string;
   created_at: string;
   updated_at: string;

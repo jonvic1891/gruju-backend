@@ -14,7 +14,7 @@ interface ActivityInvitation {
   start_time?: string;
   end_time?: string;
   location?: string;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'declined';
   host_parent_name: string;
   host_parent_email: string;
   invited_child_name?: string;

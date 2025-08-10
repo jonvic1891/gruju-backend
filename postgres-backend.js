@@ -170,7 +170,7 @@ async function createTables(client) {
                     invited_parent_id INTEGER NOT NULL,
                     invited_child_id INTEGER,
                     message TEXT,
-                    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
+                    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
@@ -1869,7 +1869,7 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
             return res.status(400).json({ success: false, error: 'Invitation is already accepted' });
         }
 
-        const status = action === 'accept' ? 'accepted' : 'rejected';
+        const status = action === 'accept' ? 'accepted' : 'declined';
         
         await client.query(
             'UPDATE activity_invitations SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',

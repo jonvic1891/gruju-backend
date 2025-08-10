@@ -32,7 +32,7 @@ interface ActivityInvitation {
   start_time?: string;
   end_time?: string;
   location?: string;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'declined';
   inviter_name: string;
   inviter_email: string;
   message?: string;
