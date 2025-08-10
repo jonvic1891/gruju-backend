@@ -1879,7 +1879,7 @@ app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
             JOIN activities a ON ai.activity_id = a.id
             JOIN children c_host ON a.child_id = c_host.id
             JOIN users u_host ON c_host.parent_id = u_host.id
-            LEFT JOIN children c_invited ON ai.child_id = c_invited.id
+            LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
             WHERE ai.invited_parent_id = $1
             AND ai.status = 'pending'
             ORDER BY ai.created_at DESC
@@ -1972,7 +1972,7 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
             INNER JOIN children c ON a.child_id = c.id
             INNER JOIN users u ON c.parent_id = u.id
             INNER JOIN activity_invitations ai ON a.id = ai.activity_id
-            LEFT JOIN children c_invited ON ai.child_id = c_invited.id
+            LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
             WHERE ai.invited_parent_id = $1
               AND a.start_date <= $3
               AND (a.end_date IS NULL OR a.end_date >= $2)
