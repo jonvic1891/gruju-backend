@@ -12,6 +12,7 @@ const ProfileScreen = () => {
   const [loading, setLoading] = useState(false);
   const apiService = ApiService.getInstance();
 
+
   const handleSaveProfile = async () => {
     if (!username.trim() || !email.trim() || !phone.trim()) {
       alert('Please fill in all fields');

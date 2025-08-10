@@ -73,7 +73,7 @@ export interface ConnectionRequest {
   target_parent_id: number;
   child_id: number;
   target_child_id?: number;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'declined';
   message?: string;
   created_at: string;
   updated_at: string;

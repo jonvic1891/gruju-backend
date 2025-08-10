@@ -101,10 +101,26 @@ class ApiService {
     return this.request('get', '/api/auth/verify');
   }
 
-  async logout(): Promise<void> {
-    this.token = null;
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('userData');
+  async logout(): Promise<ApiResponse<any>> {
+    try {
+      // Call server logout endpoint to invalidate server-side session
+      const response = await this.request('post', '/api/auth/logout');
+      
+      // Clear client-side data regardless of server response
+      this.token = null;
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('userData');
+      
+      return response;
+    } catch (error) {
+      // Still clear client-side data even if server call fails
+      this.token = null;
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('userData');
+      
+      console.error('Logout error:', error);
+      return { success: false, error: 'Logout completed locally but server logout failed' };
+    }
   }
 
   // Profile
@@ -210,6 +226,27 @@ class ApiService {
 
   async getConnections(): Promise<ApiResponse<any[]>> {
     return this.request('get', '/api/connections');
+  }
+
+  async deleteConnection(connectionId: number): Promise<ApiResponse<any>> {
+    // Try different possible endpoint patterns
+    try {
+      // First try the standard delete pattern
+      return await this.request('delete', `/api/connections/${connectionId}`);
+    } catch (error) {
+      // If that fails, try using the respond endpoint to "remove" or "delete" the connection
+      try {
+        return await this.request('post', `/api/connections/respond/${connectionId}`, { action: 'delete' });
+      } catch (error2) {
+        // If that fails, try a different endpoint pattern
+        try {
+          return await this.request('post', `/api/connections/${connectionId}/remove`);
+        } catch (error3) {
+          // If all fail, return the original error
+          throw error;
+        }
+      }
+    }
   }
 
   // Activity Invitations

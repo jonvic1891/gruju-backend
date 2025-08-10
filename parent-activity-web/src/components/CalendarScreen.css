@@ -345,7 +345,17 @@
 
 .activity-url {
   font-size: 12px;
-  color: #6c757d;
+}
+
+.activity-url a {
+  color: #007bff;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.activity-url a:hover {
+  text-decoration: underline;
+  color: #0056b3;
 }
 
 .no-activities {
@@ -413,12 +423,37 @@
 }
 
 @media (max-width: 768px) {
+  .calendar-screen {
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .calendar-header {
+    margin-bottom: 0;
+    padding: 12px;
+    background: white;
+    border-radius: 0;
+    box-shadow: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .calendar-header h2 {
+    font-size: 18px;
+    color: #1f2937;
+  }
+  
+  .calendar-container {
+    border-radius: 0;
+    margin-bottom: 0;
+  }
+  
   .calendar-nav {
-    padding: 16px;
+    padding: 12px;
   }
   
   .month-year {
-    font-size: 20px;
+    font-size: 18px;
   }
   
   .nav-btn {
@@ -428,12 +463,12 @@
   }
   
   .calendar-grid {
-    padding: 16px;
+    padding: 8px;
   }
   
   .day {
-    min-height: 60px;
-    padding: 6px;
+    min-height: 50px;
+    padding: 4px;
   }
   
   .day-number {
@@ -447,7 +482,7 @@
   }
   
   .weekday {
-    padding: 8px;
+    padding: 6px;
     font-size: 12px;
   }
   
@@ -458,7 +493,25 @@
   }
   
   .selected-date-section {
-    padding: 16px;
+    padding: 12px;
+    border-radius: 0;
+    margin-bottom: 0;
+  }
+  
+  .instructions {
+    padding: 12px;
+    border-radius: 0;
+  }
+  
+  /* Remove constraints from invitation info and detail items on mobile */
+  .invitation-info {
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  
+  .detail-item {
+    margin-bottom: 12px;
   }
 }
 

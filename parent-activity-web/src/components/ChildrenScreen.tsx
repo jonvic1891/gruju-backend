@@ -218,12 +218,33 @@ const ChildrenScreen = () => {
     }
   };
 
+  // Handle browser back button for child selection
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state && event.state.selectedChildId) {
+        const child = children.find(c => c.id === event.state.selectedChildId);
+        setSelectedChild(child || null);
+      } else {
+        setSelectedChild(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [children]);
+
   const handleChildClick = (child: Child) => {
     setSelectedChild(child);
+    // Push state for child selection
+    window.history.pushState({ selectedChildId: child.id }, '', window.location.href);
   };
 
   const handleBackToChildren = () => {
-    setSelectedChild(null);
+    // Use browser back functionality
+    window.history.back();
   };
 
   if (loading) {

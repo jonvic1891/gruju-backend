@@ -427,7 +427,60 @@
   background: #0056b3;
 }
 
+/* Remove connection button */
+.request-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.remove-connection-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.remove-connection-btn:hover {
+  background: #c82333;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+}
+
 @media (max-width: 768px) {
+  .connections-screen {
+    padding: 0;
+    margin: 0;
+    max-width: 100%;
+  }
+  
+  .connections-header {
+    margin-bottom: 0;
+    padding: 12px;
+    border-bottom: 1px solid #e5e7eb;
+    background: white;
+  }
+  
+  .connections-header h2 {
+    font-size: 18px;
+    color: #1f2937;
+  }
+  
+  .search-section {
+    border-radius: 0;
+    margin-bottom: 0;
+    padding: 16px 12px;
+    box-shadow: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
   .search-form {
     flex-direction: column;
   }
@@ -440,11 +493,17 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   }
   
   .modal {
     margin: 20px;
     width: calc(100% - 40px);
+  }
+  
+  .connections-list {
+    padding: 12px;
   }
   
   .child-selector {

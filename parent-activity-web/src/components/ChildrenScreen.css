@@ -416,15 +416,37 @@
 }
 
 @media (max-width: 768px) {
+  .children-screen {
+    padding: 0;
+    margin: 0;
+    max-width: 100%;
+  }
+  
   .children-header {
     flex-direction: column;
     gap: 16px;
     align-items: stretch;
+    margin-bottom: 0;
+    padding: 12px;
+    border-bottom: 1px solid #e5e7eb;
+    background: white;
+  }
+  
+  .children-header h2 {
+    font-size: 18px;
+    color: #1f2937;
   }
   
   .children-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 12px;
+    padding: 12px;
+  }
+  
+  .child-card {
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   }
   
   .modal {
@@ -438,5 +460,16 @@
   
   .invitation-accept-btn, .invitation-reject-btn {
     flex: none;
+  }
+  
+  .empty-state {
+    padding: 20px 12px;
+    border-radius: 8px;
+    margin: 12px;
+  }
+  
+  .loading {
+    padding: 20px 12px;
+    background: white;
   }
 }

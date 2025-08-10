@@ -140,10 +140,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       setIsLoading(true);
-      await apiService.logout();
+      const response = await apiService.logout();
+      if (!response.success) {
+        console.warn('Server logout failed:', response.error);
+      }
       setUser(null);
     } catch (error) {
       console.error('Logout error:', error);
+      // Still clear user state even if logout fails
+      setUser(null);
     } finally {
       setIsLoading(false);
     }

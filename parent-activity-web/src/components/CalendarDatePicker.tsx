@@ -164,14 +164,16 @@ const CalendarDatePicker: React.FC<CalendarDatePickerProps> = ({
           <strong>Selected Dates ({selectedDates.length}):</strong>
           <div className="date-tags">
             {selectedDates.map(date => {
-              const dateObj = new Date(date + 'T00:00:00');
+              // Parse date more reliably to avoid timezone issues
+              const [year, month, day] = date.split('-').map(Number);
+              const dateObj = new Date(year, month - 1, day); // month is 0-indexed
               const dayName = dayNames[dateObj.getDay()];
               const monthName = monthNames[dateObj.getMonth()];
-              const day = dateObj.getDate();
+              const dayNum = dateObj.getDate();
               
               return (
                 <span key={date} className="date-tag">
-                  {dayName}, {monthName} {day}
+                  {dayName}, {monthName} {dayNum}
                   <button
                     type="button"
                     onClick={() => onChange(selectedDates.filter(d => d !== date))}

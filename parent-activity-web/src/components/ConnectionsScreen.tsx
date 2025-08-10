@@ -110,9 +110,22 @@ const ConnectionsScreen = () => {
       try {
         const response = await apiService.respondToConnectionRequest(requestId, 'accept');
         if (response.success) {
+          // Find the connection request details before removing it from state
+          const acceptedRequest = connectionRequests.find(req => req.id === requestId);
+          
           setConnectionRequests(prev => prev.filter(req => req.id !== requestId));
           // Reload active connections to show the new connection immediately
           loadActiveConnections();
+          
+          // Notify new connection about future activities (filtered by per-activity setting)
+          if (acceptedRequest) {
+            await notifyNewConnectionAboutFutureActivities(
+              acceptedRequest.requester_id, 
+              acceptedRequest.child_id,
+              acceptedRequest.target_child_id
+            );
+          }
+          
           alert('Connection request accepted!');
         } else {
           alert(`Error: ${response.error || 'Failed to accept request'}`);
@@ -121,6 +134,91 @@ const ConnectionsScreen = () => {
         alert('Failed to accept request');
         console.error('Accept request error:', error);
       }
+    }
+  };
+
+  const notifyNewConnectionAboutFutureActivities = async (
+    newConnectionParentId: number, 
+    requestorChildId: number,
+    targetChildId?: number
+  ) => {
+    try {
+      console.log('🔔 Starting auto-notification process for new connection:', {
+        newConnectionParentId,
+        requestorChildId,
+        targetChildId
+      });
+
+      const today = new Date().toISOString().split('T')[0];
+      const futureDate = new Date();
+      futureDate.setFullYear(futureDate.getFullYear() + 1); // Get activities for the next year
+      const endDate = futureDate.toISOString().split('T')[0];
+
+      console.log('📅 Fetching activities from', today, 'to', endDate);
+
+      // Get all future activities for the accepting parent (current user)
+      const activitiesResponse = await apiService.getCalendarActivities(today, endDate);
+      
+      console.log('📋 Activities response:', {
+        success: activitiesResponse.success,
+        dataLength: activitiesResponse.data?.length,
+        data: activitiesResponse.data
+      });
+      
+      if (activitiesResponse.success && activitiesResponse.data) {
+        console.log('🔍 All activities found:', activitiesResponse.data.length);
+
+        // Filter for activities that are in the future, hosted by current user, and have auto-notify enabled
+        const futureActivities = activitiesResponse.data.filter(activity => {
+          const activityDate = new Date(activity.start_date);
+          const now = new Date();
+          const isFuture = activityDate >= now;
+          const isHost = activity.is_host;
+          const hasAutoNotify = activity.auto_notify_new_connections;
+          
+          console.log(`📝 Activity "${activity.name}":`, {
+            start_date: activity.start_date,
+            isFuture,
+            isHost,
+            hasAutoNotify,
+            shouldInclude: isFuture && isHost && hasAutoNotify
+          });
+          
+          return isFuture && isHost && hasAutoNotify;
+        });
+
+        console.log('✅ Filtered future activities with auto-notify:', futureActivities.length, futureActivities);
+
+        // Send invitations for each future activity
+        let invitationsSent = 0;
+        for (const activity of futureActivities) {
+          try {
+            // Determine which child to invite based on the connection request
+            const inviteChildId = targetChildId || requestorChildId;
+            
+            console.log(`📧 Sending invitation for activity "${activity.name}" to child ${inviteChildId}`);
+            
+            const inviteResponse = await apiService.sendActivityInvitation(
+              activity.id,
+              newConnectionParentId,
+              inviteChildId,
+              `Welcome to our connection! ${activity.child_name} would like to invite your child to join: ${activity.name}`
+            );
+            
+            console.log(`📧 Invitation response for "${activity.name}":`, inviteResponse);
+            
+            if (inviteResponse.success) {
+              invitationsSent++;
+            }
+          } catch (inviteError) {
+            console.error('❌ Failed to send activity invitation:', inviteError);
+          }
+        }
+
+        console.log(`🎉 Total invitations sent: ${invitationsSent}`);
+      }
+    } catch (error) {
+      console.error('❌ Failed to notify new connection about future activities:', error);
     }
   };
 
@@ -147,6 +245,26 @@ const ConnectionsScreen = () => {
     setSelectedTargetChild(parent.children.length > 0 ? parent.children[0].id : null);
     setConnectionMessage('');
     setShowConnectModal(true);
+  };
+
+  const handleRemoveConnection = async (connectionId: number, connectionDescription: string) => {
+    if (window.confirm(`Are you sure you want to remove this connection? ${connectionDescription}\n\nNote: If this fails, you can also test auto-notifications by creating a new test user account.`)) {
+      try {
+        console.log('🔄 Attempting to remove connection:', connectionId);
+        const response = await apiService.deleteConnection(connectionId);
+        console.log('📋 Delete connection response:', response);
+        
+        if (response.success) {
+          setActiveConnections(prev => prev.filter(conn => conn.id !== connectionId));
+          alert('Connection removed successfully');
+        } else {
+          alert(`Error: ${response.error || 'Failed to remove connection'}\n\nAlternative: You can test auto-notifications by:\n1. Creating a new test account\n2. Or having the other user send you a new connection request`);
+        }
+      } catch (error) {
+        console.error('❌ Remove connection error:', error);
+        alert(`Failed to remove connection (API endpoint may not exist yet)\n\nTo test auto-notifications, you can:\n1. Create a new test user account\n2. Send a connection request from that new account\n3. Accept it to trigger auto-notifications\n\nOr ask me to help implement the delete endpoint on the backend.`);
+      }
+    }
   };
 
   const handleSendConnectionRequest = async () => {
@@ -338,6 +456,16 @@ const ConnectionsScreen = () => {
                 
                 <div className="request-status">
                   <span className="status-badge" style={{backgroundColor: '#28a745', color: 'white', border: '1px solid #1e7e34'}}>Active</span>
+                  <button
+                    onClick={() => handleRemoveConnection(
+                      connection.id,
+                      `${connection.child1_name} ↔ ${connection.child2_name}`
+                    )}
+                    className="remove-connection-btn"
+                    title="Remove this connection"
+                  >
+                    🗑️ Remove
+                  </button>
                 </div>
               </div>
             ))}

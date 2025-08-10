@@ -12,14 +12,15 @@ type Tab = 'children' | 'calendar' | 'connections' | 'profile' | 'admin';
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState<Tab>('children');
-  const { user, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
 
-  const handleLogout = () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      logout();
-    }
+
+  const handleMobileNavClick = (tab: Tab) => {
+    setActiveTab(tab);
+    setMobileMenuOpen(false);
   };
 
   const renderContent = () => {
@@ -43,19 +44,27 @@ const Dashboard = () => {
     <div className="dashboard">
       <header className="dashboard-header">
         <div className="header-content">
-          <h1>Parent Activity App</h1>
+          <div className="header-left">
+            <button 
+              className="mobile-menu-btn"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              <span className="burger-line"></span>
+              <span className="burger-line"></span>
+              <span className="burger-line"></span>
+            </button>
+            <h1>Parent Activity App</h1>
+          </div>
           <div className="header-user">
             <NotificationBell />
-            <span>Welcome, {user?.username}!</span>
-            <button onClick={handleLogout} className="logout-btn">
-              Logout
-            </button>
+            <span className="welcome-text">Welcome, {user?.username}!</span>
           </div>
         </div>
       </header>
 
       <div className="dashboard-body">
-        <nav className="dashboard-nav">
+        {/* Desktop Navigation */}
+        <nav className="dashboard-nav desktop-nav">
           <button
             className={`nav-item ${activeTab === 'children' ? 'active' : ''}`}
             onClick={() => setActiveTab('children')}
@@ -101,6 +110,59 @@ const Dashboard = () => {
             </button>
           )}
         </nav>
+
+        {/* Mobile Navigation Overlay */}
+        {mobileMenuOpen && (
+          <>
+            <div className="mobile-menu-overlay" onClick={() => setMobileMenuOpen(false)}></div>
+            <nav className="mobile-nav">
+              <button
+                className={`nav-item ${activeTab === 'children' ? 'active' : ''}`}
+                onClick={() => handleMobileNavClick('children')}
+              >
+                <span className="nav-icon">👶</span>
+                <span className="nav-label">My Children</span>
+              </button>
+              
+              <button
+                className={`nav-item ${activeTab === 'calendar' ? 'active' : ''}`}
+                onClick={() => handleMobileNavClick('calendar')}
+              >
+                <span className="nav-icon">📅</span>
+                <span className="nav-label">Calendar</span>
+              </button>
+              
+              <button
+                className={`nav-item ${activeTab === 'connections' ? 'active' : ''}`}
+                onClick={() => handleMobileNavClick('connections')}
+              >
+                <span className="nav-icon">🤝</span>
+                <span className="nav-label">Connections</span>
+              </button>
+              
+              <button
+                className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`}
+                onClick={() => handleMobileNavClick('profile')}
+              >
+                <span className="nav-icon">👤</span>
+                <span className="nav-label">Profile</span>
+              </button>
+              
+              {isAdmin && (
+                <button
+                  className={`nav-item ${activeTab === 'admin' ? 'active' : ''}`}
+                  onClick={() => handleMobileNavClick('admin')}
+                >
+                  <span className="nav-icon">⚙️</span>
+                  <span className="nav-label">Admin</span>
+                  <span className="admin-badge">
+                    {user?.role === 'super_admin' ? 'SA' : 'A'}
+                  </span>
+                </button>
+              )}
+            </nav>
+          </>
+        )}
 
         <main className="dashboard-content">
           {renderContent()}

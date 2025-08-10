@@ -213,3 +213,48 @@
   text-align: center;
   font-style: italic;
 }
+
+/* Mobile optimization */
+@media (max-width: 768px) {
+  .login-container {
+    background: white;
+    padding: 12px;
+  }
+  
+  .login-card {
+    padding: 20px;
+    border-radius: 0;
+    box-shadow: none;
+    max-width: 100%;
+  }
+  
+  .demo-container {
+    border-radius: 0;
+    margin: 12px -12px;
+    max-width: calc(100vw - 24px);
+  }
+  
+  .demo-account {
+    margin-left: 0;
+    margin-right: 0;
+    padding: 12px;
+  }
+  
+  .demo-header {
+    flex-wrap: wrap;
+  }
+  
+  .demo-info {
+    min-width: 0; /* Allow text to wrap */
+  }
+  
+  .demo-type, .demo-email {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+  
+  .demo-description {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+}

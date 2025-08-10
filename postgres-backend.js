@@ -170,7 +170,7 @@ async function createTables(client) {
                     invited_parent_id INTEGER NOT NULL,
                     invited_child_id INTEGER,
                     message TEXT,
-                    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
+                    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,

@@ -118,7 +118,7 @@
   min-height: 44px;
 }
 
-.day-cell:hover:not(.disabled) {
+.day-cell:hover:not(.disabled):not(.selected) {
   background: #edf2f7;
 }
 
@@ -134,15 +134,23 @@
 }
 
 .day-cell.selected {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
   font-weight: 700;
   box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+  transform: scale(1.05);
+}
+
+.day-cell.selected:hover {
+  background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%) !important;
+  transform: scale(1.08);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
 }
 
 .day-cell.selected.today {
-  background: linear-gradient(135deg, #38b2ac 0%, #319795 100%);
+  background: linear-gradient(135deg, #38b2ac 0%, #319795 100%) !important;
   border-color: #2c7a7b;
+  color: white !important;
 }
 
 .day-cell.disabled {

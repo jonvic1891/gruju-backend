@@ -617,7 +617,11 @@ const CalendarScreen = () => {
                       <div className="activity-cost">💰 ${activity.cost}</div>
                     )}
                     {activity.website_url && (
-                      <div className="activity-url">🌐 Website available</div>
+                      <div className="activity-url">
+                        <a href={activity.website_url} target="_blank" rel="noopener noreferrer">
+                          🌐 Visit Website
+                        </a>
+                      </div>
                     )}
                     {activity.invitation_message && (
                       <div className="invitation-message">💌 "{activity.invitation_message}"</div>
@@ -695,18 +699,9 @@ const CalendarScreen = () => {
                 </div>
               )}
               <div className="detail-item">
-                <strong>Date:</strong>
-                <p>{formatDate(selectedActivity.start_date)}</p>
+                <strong>Date & Time:</strong>
+                <p>📅 {formatDate(selectedActivity.start_date)} {selectedActivity.start_time && `🕐 ${selectedActivity.start_time}${selectedActivity.end_time ? ` - ${selectedActivity.end_time}` : ''}`}</p>
               </div>
-              {selectedActivity.start_time && (
-                <div className="detail-item">
-                  <strong>Time:</strong>
-                  <p>
-                    {selectedActivity.start_time}
-                    {selectedActivity.end_time && ` - ${selectedActivity.end_time}`}
-                  </p>
-                </div>
-              )}
               {selectedActivity.location && (
                 <div className="detail-item">
                   <strong>Location:</strong>

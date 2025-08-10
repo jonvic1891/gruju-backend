@@ -16,19 +16,17 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
   const [declinedInvitations, setDeclinedInvitations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState<'main' | 'add-activity' | 'activity-detail' | 'edit-activity' | 'invite-activity'>('main');
   const [calendarView, setCalendarView] = useState<'5day' | '7day'>('5day');
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
-  const [showActivityDetail, setShowActivityDetail] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
-  const [showInviteModal, setShowInviteModal] = useState(false);
   const [invitingActivity, setInvitingActivity] = useState<Activity | null>(null);
   const [connectedFamilies, setConnectedFamilies] = useState<any[]>([]);
   const [invitationMessage, setInvitationMessage] = useState('');
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [isSharedActivity, setIsSharedActivity] = useState(false);
+  const [autoNotifyNewConnections, setAutoNotifyNewConnections] = useState(false);
   const [selectedConnectedChildren, setSelectedConnectedChildren] = useState<number[]>([]);
   const [connectedChildren, setConnectedChildren] = useState<any[]>([]);
   const [newActivity, setNewActivity] = useState({
@@ -41,7 +39,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     location: '',
     website_url: '',
     cost: '',
-    max_participants: ''
+    max_participants: '',
+    auto_notify_new_connections: false
   });
   const [addingActivity, setAddingActivity] = useState(false);
   const [activityParticipants, setActivityParticipants] = useState<any>(null);
@@ -53,24 +52,33 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     loadConnectedChildren();
   }, [child.id]);
 
-  // Prevent body scroll when any modal is open
+  // Handle browser back button and internal navigation
   useEffect(() => {
-    const isAnyModalOpen = showAddModal || showActivityDetail || showEditModal || showInviteModal;
-    
-    if (isAnyModalOpen) {
-      document.body.style.overflow = 'hidden';
-      document.body.style.paddingRight = '0px'; // Prevent layout shift
-    } else {
-      document.body.style.overflow = 'unset';
-      document.body.style.paddingRight = 'unset';
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state && event.state.page) {
+        setCurrentPage(event.state.page);
+      } else {
+        // If no state and we're at the main page, go back to children screen
+        if (currentPage === 'main') {
+          onBack();
+        } else {
+          setCurrentPage('main');
+        }
+      }
+    };
+
+    // Add event listener for browser back button
+    window.addEventListener('popstate', handlePopState);
+
+    // Push initial state for main page
+    if (window.history.state === null) {
+      window.history.replaceState({ page: 'main', childActivity: true }, '', window.location.href);
     }
 
-    // Cleanup on unmount
     return () => {
-      document.body.style.overflow = 'unset';
-      document.body.style.paddingRight = 'unset';
+      window.removeEventListener('popstate', handlePopState);
     };
-  }, [showAddModal, showActivityDetail, showEditModal, showInviteModal]);
+  }, [currentPage, onBack]);
 
   const loadActivities = async () => {
     try {
@@ -167,7 +175,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         loadActivities();
         
         // Close the detail modal
-        setShowActivityDetail(false);
+        navigateToPage('main');
       } else {
         alert(`Error: ${response.error || 'Failed to respond to invitation'}`);
       }
@@ -223,7 +231,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const handleAddActivity = () => {
-    setShowAddModal(true);
+    navigateToPage('add-activity');
   };
 
   const loadActivityParticipants = async (activityId: number) => {
@@ -246,21 +254,47 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   const handleActivityClick = (activity: Activity) => {
     setSelectedActivity(activity);
-    setShowActivityDetail(true);
+    navigateToPage('activity-detail');
     
     // Populate newActivity state with selected activity data for inline editing
     setNewActivity({
       name: activity.name || '',
       description: activity.description || '',
-      start_date: activity.start_date || '',
-      end_date: activity.end_date || '',
+      start_date: activity.start_date ? activity.start_date.split('T')[0] : '',
+      end_date: activity.end_date ? activity.end_date.split('T')[0] : '',
       start_time: activity.start_time || '',
       end_time: activity.end_time || '',
       location: activity.location || '',
       website_url: activity.website_url || '',
       cost: activity.cost ? activity.cost.toString() : '',
-      max_participants: activity.max_participants ? activity.max_participants.toString() : ''
+      max_participants: activity.max_participants ? activity.max_participants.toString() : '',
+      auto_notify_new_connections: (activity as any).auto_notify_new_connections || false
     });
+
+    // Set the auto-notification checkbox state
+    setAutoNotifyNewConnections((activity as any).auto_notify_new_connections || false);
+
+    // Initialize selectedDates for calendar picker based on activity dates
+    const activityDates: string[] = [];
+    if (activity.start_date) {
+      const startDate = activity.start_date.split('T')[0];
+      activityDates.push(startDate);
+      
+      // If there's an end date and it's different from start date, add all dates in between
+      if (activity.end_date && activity.end_date.split('T')[0] !== startDate) {
+        const endDate = activity.end_date.split('T')[0];
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const current = new Date(start);
+        current.setDate(current.getDate() + 1); // Start from day after start date
+        
+        while (current <= end) {
+          activityDates.push(current.toISOString().split('T')[0]);
+          current.setDate(current.getDate() + 1);
+        }
+      }
+    }
+    setSelectedDates(activityDates);
     
     // Load participants for any activity that has a real backend activity ID
     // For invitations, we need to get the original activity ID from the backend
@@ -279,6 +313,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     } else {
       setActivityParticipants(null);
     }
+    
+    // Load connected children for host activities to show uninvited children
+    if (activity.is_host) {
+      loadConnectedChildren();
+    }
   };
 
   const handleEditActivity = (activity: Activity) => {
@@ -293,36 +332,84 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       location: activity.location || '',
       website_url: activity.website_url || '',
       cost: activity.cost ? activity.cost.toString() : '',
-      max_participants: activity.max_participants ? activity.max_participants.toString() : ''
+      max_participants: activity.max_participants ? activity.max_participants.toString() : '',
+      auto_notify_new_connections: (activity as any).auto_notify_new_connections || false
     });
-    setShowActivityDetail(false);
-    setShowEditModal(true);
+    setAutoNotifyNewConnections((activity as any).auto_notify_new_connections || false);
+    navigateToPage('edit-activity');
   };
 
   const handleUpdateActivity = async () => {
-    if (!selectedActivity || !newActivity.name.trim() || !newActivity.start_date) {
-      alert('Please enter activity name and start date');
+    if (!selectedActivity || !newActivity.name.trim()) {
+      alert('Please enter activity name');
+      return;
+    }
+
+    if (selectedDates.length === 0) {
+      alert('Please select at least one date from the calendar');
       return;
     }
 
     setAddingActivity(true);
     try {
-      const activityData = {
-        ...newActivity,
+      const originalDate = selectedActivity.start_date.split('T')[0];
+      const selectedDatesSorted = [...selectedDates].sort();
+      const firstSelectedDate = selectedDatesSorted[0];
+
+      // Base activity data (without dates)
+      const baseActivityData = {
+        name: newActivity.name,
+        description: newActivity.description,
+        start_time: newActivity.start_time,
+        end_time: newActivity.end_time,
+        location: newActivity.location,
+        website_url: newActivity.website_url,
         cost: newActivity.cost ? parseFloat(newActivity.cost) : undefined,
-        max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : undefined
+        max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : undefined,
+        auto_notify_new_connections: isSharedActivity ? autoNotifyNewConnections : false
       };
 
-      const response = await apiService.updateActivity(selectedActivity.id, activityData);
+      // Update the original activity with the first selected date
+      const mainActivityData = {
+        ...baseActivityData,
+        start_date: firstSelectedDate,
+        end_date: firstSelectedDate
+      };
+
+      const response = await apiService.updateActivity(selectedActivity.id, mainActivityData);
       
       if (response.success) {
-        // Update the selected activity with new data for immediate UI update
-        const updatedActivity = { ...selectedActivity, ...activityData };
-        setSelectedActivity(updatedActivity);
-        
-        alert('Activity updated successfully!');
+        let successMessage = 'Activity updated successfully!';
+        let additionalActivitiesCreated = 0;
+
+        // If there are additional dates selected, create new activities for them
+        if (selectedDatesSorted.length > 1) {
+          for (let i = 1; i < selectedDatesSorted.length; i++) {
+            const additionalDate = selectedDatesSorted[i];
+            const additionalActivityData = {
+              ...baseActivityData,
+              start_date: additionalDate,
+              end_date: additionalDate
+            };
+
+            try {
+              const createResponse = await apiService.createActivity(child.id, additionalActivityData);
+              if (createResponse.success) {
+                additionalActivitiesCreated++;
+              }
+            } catch (error) {
+              console.error(`Failed to create activity for ${additionalDate}:`, error);
+            }
+          }
+          
+          if (additionalActivitiesCreated > 0) {
+            successMessage += ` ${additionalActivitiesCreated} additional activity${additionalActivitiesCreated > 1 ? 'ies' : 'y'} created for other selected dates.`;
+          }
+        }
+
+        alert(successMessage);
         loadActivities(); // Reload activities to reflect changes
-        // Keep modal open to see updated data
+        navigateToPage('main'); // Go back to main page
       } else {
         alert(`Error: ${response.error || 'Failed to update activity'}`);
       }
@@ -339,7 +426,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       try {
         const response = await apiService.deleteActivity(activity.id);
         if (response.success) {
-          setShowActivityDetail(false);
+          navigateToPage('main');
           loadActivities();
           alert('Activity deleted successfully');
         } else {
@@ -351,7 +438,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       }
     }
   };
-
 
   const handleCreateActivity = async () => {
     if (!newActivity.name.trim()) {
@@ -377,7 +463,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           start_date: date,
           end_date: date, // Single day activities for each date
           cost: newActivity.cost ? parseFloat(newActivity.cost) : undefined,
-          max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : undefined
+          max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : undefined,
+          auto_notify_new_connections: isSharedActivity ? autoNotifyNewConnections : false
         };
 
         const response = await apiService.createActivity(child.id, activityData);
@@ -422,12 +509,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         location: '',
         website_url: '',
         cost: '',
-        max_participants: ''
+        max_participants: '',
+        auto_notify_new_connections: false
       });
       setSelectedDates([]);
       setIsSharedActivity(false);
+      setAutoNotifyNewConnections(false);
       setSelectedConnectedChildren([]);
-      setShowAddModal(false);
+      navigateToPage('main');
       loadActivities();
       
       const message = createdActivities.length === 1 
@@ -451,7 +540,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         setConnectedFamilies(response.data);
         setInvitingActivity(activity);
         setInvitationMessage(`Hi! I'd like to invite you to join us for "${activity.name}" on ${formatDate(activity.start_date)}. Let me know if you're interested!`);
-        setShowInviteModal(true);
+        navigateToPage('invite-activity');
       } else {
         alert('Failed to load connected families');
       }
@@ -474,7 +563,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       
       if (response.success) {
         alert('Invitation sent successfully!');
-        setShowInviteModal(false);
+        navigateToPage('main');
         setInvitingActivity(null);
         setInvitationMessage('');
       } else {
@@ -483,6 +572,53 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     } catch (error) {
       console.error('Send invitation error:', error);
       alert('Failed to send invitation');
+    }
+  };
+
+  const handleInviteSpecificChild = async (activity: Activity, child: any) => {
+    try {
+      const response = await apiService.sendActivityInvitation(
+        activity.id,
+        child.parentId,
+        child.id,
+        `Hi! I'd like to invite ${child.name} to join us for "${activity.name}" on ${formatDate(activity.start_date)}. Let me know if you're interested!`
+      );
+      
+      if (response.success) {
+        alert(`Invitation sent to ${child.name}!`);
+        // Reload participants to show the new invitation
+        if (activityParticipants) {
+          loadActivityParticipants(activity.id);
+        }
+      } else {
+        alert(`Failed to send invitation: ${response.error}`);
+      }
+    } catch (error) {
+      console.error('Send invitation error:', error);
+      alert('Failed to send invitation');
+    }
+  };
+
+  const handleHostCantAttend = async (activity: Activity) => {
+    if (!window.confirm('Are you sure you can\'t attend this activity? The activity will remain active for invited children, but will be marked that you can\'t attend.')) {
+      return;
+    }
+
+    try {
+      // Instead of deleting, we'll mark the host as can't attend
+      // This would require a backend endpoint to update host attendance status
+      // For now, we'll show an alert about the feature
+      alert('This feature will be implemented to mark you as unable to attend while keeping the activity active for invited children.');
+      
+      // TODO: Implement backend endpoint for host can't attend
+      // const response = await apiService.markHostCantAttend(activity.id);
+      // if (response.success) {
+      //   loadActivities();
+      //   setCurrentPage('main');
+      // }
+    } catch (error) {
+      console.error('Host can\'t attend error:', error);
+      alert('Failed to update attendance status');
     }
   };
 
@@ -672,12 +808,810 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     );
   }
 
+  // Page navigation function
+
+  const navigateToPage = (page: typeof currentPage) => {
+    if (page !== currentPage) {
+      setCurrentPage(page);
+      // Push new state to history
+      window.history.pushState({ page }, '', window.location.href);
+    }
+  };
+
+  const goBack = () => {
+    // Use browser's back functionality
+    window.history.back();
+  };
+
+  // Render different pages based on currentPage state
+  if (currentPage === 'activity-detail' && selectedActivity) {
+    return (
+      <div className="child-activity-screen">
+        <div className="activity-header">
+          <div className="child-info">
+            <h2>Activity Details</h2>
+          </div>
+        </div>
+        <div className="page-content">
+          <div className="activity-detail-content">
+            {((selectedActivity as any).isPendingInvitation || (selectedActivity as any).isAcceptedInvitation || (selectedActivity as any).isDeclinedInvitation) && (
+              <div className="invitation-info">
+                <div className="detail-item">
+                  <strong>Invitation from:</strong>
+                  <p>👤 {selectedActivity.host_child_name || selectedActivity.child_name}</p>
+                </div>
+                <div className="detail-item">
+                  <strong>Status:</strong>
+                  <p>
+                    {(selectedActivity as any).isPendingInvitation && <span style={{ color: '#48bb78' }}>📩 Pending</span>}
+                    {(selectedActivity as any).isAcceptedInvitation && <span style={{ color: '#4299e1' }}>✅ Accepted</span>}
+                    {(selectedActivity as any).isDeclinedInvitation && <span style={{ color: '#a0aec0' }}>❌ Declined</span>}
+                  </p>
+                </div>
+                {selectedActivity.invitation_message && (
+                  <div className="detail-item">
+                    <strong>Message:</strong>
+                    <p style={{ fontStyle: 'italic' }}>"{selectedActivity.invitation_message}"</p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Activity Details Form - Always Editable for Host */}
+            <div className="activity-details-form">
+              <div className="form-row">
+                <label><strong>Activity Name:</strong></label>
+                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                  <input
+                    type="text"
+                    value={newActivity.name}
+                    onChange={(e) => setNewActivity({...newActivity, name: e.target.value})}
+                    className="inline-edit-input"
+                    placeholder="Activity name"
+                  />
+                ) : (
+                  <span className="readonly-value">{selectedActivity.name}</span>
+                )}
+              </div>
+
+              <div className="form-row">
+                <label><strong>Description:</strong></label>
+                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                  <textarea
+                    value={newActivity.description}
+                    onChange={(e) => setNewActivity({...newActivity, description: e.target.value})}
+                    className="inline-edit-textarea"
+                    placeholder="Activity description"
+                    rows={2}
+                  />
+                ) : (
+                  <span className="readonly-value">{selectedActivity.description || 'No description'}</span>
+                )}
+              </div>
+
+              {/* Date Selection Section */}
+              {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                <div className="date-selection-section">
+                  <label className="section-label">Select Activity Dates</label>
+                  <p className="section-description">Click dates to select/deselect them. You can choose multiple dates for recurring activities.</p>
+                  <CalendarDatePicker
+                    selectedDates={selectedDates}
+                    onChange={setSelectedDates}
+                    minDate={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+              ) : (
+                <div className="form-row">
+                  <label><strong>Activity Dates:</strong></label>
+                  <span className="readonly-value">
+                    📅 {formatDate(selectedActivity.start_date)}
+                    {selectedActivity.end_date && selectedActivity.end_date.split('T')[0] !== selectedActivity.start_date.split('T')[0] && 
+                      ` - ${formatDate(selectedActivity.end_date)}`
+                    }
+                  </span>
+                </div>
+              )}
+
+              <div className="form-row-group">
+                <div className="form-row">
+                  <label><strong>Start Time:</strong></label>
+                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                    <TimePickerDropdown
+                      value={newActivity.start_time}
+                      onChange={(time) => setNewActivity({...newActivity, start_time: time})}
+                      placeholder="Start time"
+                    />
+                  ) : (
+                    <span className="readonly-value">🕐 {selectedActivity.start_time ? formatTime(selectedActivity.start_time) : 'All day'}</span>
+                  )}
+                </div>
+
+                <div className="form-row">
+                  <label><strong>End Time:</strong></label>
+                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                    <TimePickerDropdown
+                      value={newActivity.end_time}
+                      onChange={(time) => setNewActivity({...newActivity, end_time: time})}
+                      placeholder="End time"
+                    />
+                  ) : (
+                    <span className="readonly-value">{selectedActivity.end_time ? formatTime(selectedActivity.end_time) : 'Not set'}</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="form-row">
+                <label><strong>Location:</strong></label>
+                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                  <input
+                    type="text"
+                    value={newActivity.location}
+                    onChange={(e) => setNewActivity({...newActivity, location: e.target.value})}
+                    className="inline-edit-input"
+                    placeholder="Activity location"
+                  />
+                ) : (
+                  <span className="readonly-value">📍 {selectedActivity.location || 'No location specified'}</span>
+                )}
+              </div>
+
+              <div className="form-row">
+                <label><strong>Website:</strong></label>
+                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                  <input
+                    type="url"
+                    value={newActivity.website_url}
+                    onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
+                    className="inline-edit-input"
+                    placeholder="Website URL"
+                  />
+                ) : (
+                  <span className="readonly-value">
+                    {selectedActivity.website_url ? (
+                      <a href={selectedActivity.website_url} target="_blank" rel="noopener noreferrer">
+                        🌐 {selectedActivity.website_url}
+                      </a>
+                    ) : (
+                      'No website'
+                    )}
+                  </span>
+                )}
+              </div>
+
+              <div className="form-row-group">
+                <div className="form-row">
+                  <label><strong>Cost:</strong></label>
+                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                    <input
+                      type="number"
+                      value={newActivity.cost}
+                      onChange={(e) => setNewActivity({...newActivity, cost: e.target.value})}
+                      className="inline-edit-input"
+                      placeholder="Cost ($)"
+                      min="0"
+                      step="0.01"
+                    />
+                  ) : (
+                    <span className="readonly-value">💰 {selectedActivity.cost ? `$${selectedActivity.cost}` : 'Free'}</span>
+                  )}
+                </div>
+
+                <div className="form-row">
+                  <label><strong>Max Participants:</strong></label>
+                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                    <input
+                      type="number"
+                      value={newActivity.max_participants}
+                      onChange={(e) => setNewActivity({...newActivity, max_participants: e.target.value})}
+                      className="inline-edit-input"
+                      placeholder="Max participants"
+                      min="1"
+                    />
+                  ) : (
+                    <span className="readonly-value">{selectedActivity.max_participants || 'No limit'}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            {/* Activity Participants Section */}
+            <div className="participants-section">
+              <div className="detail-item">
+                <strong>Who's Invited:</strong>
+                {loadingParticipants ? (
+                  <p>Loading participants...</p>
+                ) : activityParticipants ? (
+                  <div className="participants-list">
+                    <div className="host-info">
+                      <p>👤 <strong>{activityParticipants.host?.host_name} (Host)</strong></p>
+                    </div>
+                    {activityParticipants.participants?.length > 0 ? (
+                      <div className="invited-participants">
+                        <h4>Invited Children:</h4>
+                        {activityParticipants.participants.map((participant: any, index: number) => (
+                          <div key={index} className="participant-item">
+                            <div className="participant-info">
+                              <span className="participant-name">👤 {participant.child_name || participant.parent_name}</span>
+                            </div>
+                            <div className="participant-status">
+                              {participant.status === 'pending' && (
+                                <span style={{ color: '#fd7e14', fontSize: '12px' }}>📩 Pending</span>
+                              )}
+                              {participant.status === 'accepted' && (
+                                <span style={{ color: '#48bb78', fontSize: '12px' }}>✅ Accepted</span>
+                              )}
+                              {participant.status === 'rejected' && (
+                                <span style={{ color: '#a0aec0', fontSize: '12px' }}>❌ Declined</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                        No other children invited yet
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '14px', color: '#666' }}>
+                    Unable to load participant information
+                  </p>
+                )}
+              </div>
+            </div>
+            
+            {/* Show uninvited connected children for host activities */}
+            {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation && (
+              <div className="uninvited-children-section">
+                <div className="detail-item">
+                  <strong>Invite More Children:</strong>
+                  {loadingParticipants ? (
+                    <p>Loading connections...</p>
+                  ) : connectedChildren.length > 0 ? (
+                    <div className="uninvited-children-list">
+                      {connectedChildren
+                        .filter(child => !activityParticipants?.participants?.some((p: any) => p.child_id === child.id))
+                        .map((child: any, index: number) => (
+                          <div key={index} className="uninvited-child-item">
+                            <div className="participant-info">
+                              <span className="child-name">👤 {child.name}</span>
+                            </div>
+                            <button
+                              onClick={() => handleInviteSpecificChild(selectedActivity, child)}
+                              className="invite-child-btn"
+                            >
+                              📩 Invite
+                            </button>
+                          </div>
+                        ))}
+                      {connectedChildren.filter(child => !activityParticipants?.participants?.some((p: any) => p.child_id === child.id)).length === 0 && (
+                        <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                          All connected children have already been invited
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                      No connected children found. Connect with other families first to invite their children.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="page-actions">
+            <button
+              onClick={goBack}
+              className="cancel-btn"
+            >
+              Close
+            </button>
+            
+            {/* Show accept/decline buttons for pending invitations */}
+            {(selectedActivity as any).isPendingInvitation && (selectedActivity as any).invitationId && (
+              <>
+                <button
+                  onClick={() => handleInvitationResponse((selectedActivity as any).invitationId!, 'accept')}
+                  className="confirm-btn"
+                  style={{ background: 'linear-gradient(135deg, #48bb78, #68d391)', marginRight: '8px' }}
+                >
+                  ✅ Accept Invitation
+                </button>
+                <button
+                  onClick={() => handleInvitationResponse((selectedActivity as any).invitationId!, 'reject')}
+                  className="delete-btn"
+                >
+                  ❌ Decline Invitation
+                </button>
+              </>
+            )}
+            
+            {/* Show decline button for accepted invitations */}
+            {(selectedActivity as any).isAcceptedInvitation && (selectedActivity as any).invitationId && (
+              <button
+                onClick={() => handleInvitationResponse((selectedActivity as any).invitationId!, 'reject')}
+                className="delete-btn"
+                style={{ background: 'linear-gradient(135deg, #e53e3e, #fc8181)', color: 'white' }}
+              >
+                ❌ Change to Declined
+              </button>
+            )}
+            
+            {/* Show enhanced buttons for activity host */}
+            {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation && (
+              <>
+                <button
+                  onClick={handleUpdateActivity}
+                  className="confirm-btn"
+                  style={{ background: 'linear-gradient(135deg, #28a745, #34ce57)' }}
+                >
+                  💾 Save Changes
+                </button>
+                <button
+                  onClick={() => handleHostCantAttend(selectedActivity)}
+                  className="delete-btn"
+                  style={{ background: 'linear-gradient(135deg, #ff8c00, #ffa500)' }}
+                >
+                  😞 Can't Attend
+                </button>
+              </>
+            )}
+            
+            {/* For non-host activities, show informational text */}
+            {!selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation && (
+              <div className="host-info">
+                <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                  Only the activity host can edit this activity
+                </p>
+              </div>
+            )}
+            
+            {/* For declined invitations, show informational text */}
+            {(selectedActivity as any).isDeclinedInvitation && (
+              <div className="declined-info">
+                <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                  This invitation has been declined. Contact the host if you'd like to reconsider.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPage === 'add-activity') {
+    return (
+      <div className="child-activity-screen">
+        <div className="activity-header">
+          <div className="child-info">
+            <h2>Add New Activity for {child.name}</h2>
+          </div>
+        </div>
+        <div className="page-content">
+          <div className="page-form">
+            <input
+              type="text"
+              placeholder="Activity name *"
+              value={newActivity.name}
+              onChange={(e) => setNewActivity({...newActivity, name: e.target.value})}
+              className="modal-input"
+              autoFocus
+            />
+            <textarea
+              placeholder="Description"
+              value={newActivity.description}
+              onChange={(e) => setNewActivity({...newActivity, description: e.target.value})}
+              className="modal-textarea"
+              rows={3}
+            />
+            
+            <div className="date-selection-section">
+              <label className="section-label">Select Activity Dates</label>
+              <p className="section-description">Click dates to select/deselect them. You can choose multiple dates for recurring activities.</p>
+              <CalendarDatePicker
+                selectedDates={selectedDates}
+                onChange={setSelectedDates}
+                minDate={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+            <div className="time-row">
+              <div className="time-field">
+                <label>Start Time</label>
+                <TimePickerDropdown
+                  value={newActivity.start_time}
+                  onChange={(time) => setNewActivity({...newActivity, start_time: time})}
+                  placeholder="Start time"
+                />
+              </div>
+              <div className="time-field">
+                <label>End Time</label>
+                <TimePickerDropdown
+                  value={newActivity.end_time}
+                  onChange={(time) => setNewActivity({...newActivity, end_time: time})}
+                  placeholder="End time"
+                />
+              </div>
+            </div>
+            <input
+              type="text"
+              placeholder="Location"
+              value={newActivity.location}
+              onChange={(e) => setNewActivity({...newActivity, location: e.target.value})}
+              className="modal-input"
+            />
+            <input
+              type="url"
+              placeholder="Website URL"
+              value={newActivity.website_url}
+              onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
+              className="modal-input"
+            />
+            <div className="number-row">
+              <input
+                type="number"
+                placeholder="Cost ($)"
+                value={newActivity.cost}
+                onChange={(e) => setNewActivity({...newActivity, cost: e.target.value})}
+                className="modal-input"
+                min="0"
+                step="0.01"
+              />
+              <input
+                type="number"
+                placeholder="Max participants"
+                value={newActivity.max_participants}
+                onChange={(e) => setNewActivity({...newActivity, max_participants: e.target.value})}
+                className="modal-input"
+                min="1"
+              />
+            </div>
+            
+            <div className="privacy-section">
+              <label className="section-label">Activity Privacy</label>
+              <div className="privacy-options">
+                <label className="radio-option">
+                  <input
+                    type="radio"
+                    name="privacyMode"
+                    checked={!isSharedActivity}
+                    onChange={() => setIsSharedActivity(false)}
+                  />
+                  🔒 Private (Only you and {child.name})
+                </label>
+                <label className="radio-option">
+                  <input
+                    type="radio"
+                    name="privacyMode"
+                    checked={isSharedActivity}
+                    onChange={() => setIsSharedActivity(true)}
+                  />
+                  🌐 Shared (Invite connected children)
+                </label>
+              </div>
+              
+              {isSharedActivity && (
+                <div className="connected-children-section">
+                  <div className="children-selection-header">
+                    <label>Invite Children:</label>
+                    {connectedChildren.length > 0 && (
+                      <div className="selection-controls">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allChildrenSelected = connectedChildren.every(child => 
+                              selectedConnectedChildren.includes(child.id)
+                            );
+                            if (allChildrenSelected) {
+                              setSelectedConnectedChildren([]);
+                            } else {
+                              setSelectedConnectedChildren(connectedChildren.map(child => child.id));
+                            }
+                          }}
+                          className="select-all-btn"
+                        >
+                          {connectedChildren.every(child => selectedConnectedChildren.includes(child.id)) 
+                            ? 'Deselect All' 
+                            : 'Select All'
+                          } ({connectedChildren.length})
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {connectedChildren.length === 0 ? (
+                    <p className="no-connections">No connected children found. Add connections first!</p>
+                  ) : (
+                    <div className="children-list">
+                      {connectedChildren.map((connectedChild) => (
+                        <label key={connectedChild.id} className="child-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={selectedConnectedChildren.includes(connectedChild.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedConnectedChildren([...selectedConnectedChildren, connectedChild.id]);
+                              } else {
+                                setSelectedConnectedChildren(
+                                  selectedConnectedChildren.filter(id => id !== connectedChild.id)
+                                );
+                              }
+                            }}
+                          />
+                          {connectedChild.name} ({connectedChild.parentName})
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Auto-notification setting for shared activities */}
+                  <div className="auto-notify-section">
+                    <label className="auto-notify-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={autoNotifyNewConnections}
+                        onChange={(e) => setAutoNotifyNewConnections(e.target.checked)}
+                      />
+                      <span>Auto-notify new connections about this activity</span>
+                    </label>
+                    <p className="auto-notify-description">
+                      When you accept new connection requests in the future, automatically send them invitations for this activity (if it's still upcoming).
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="page-actions">
+            <button
+              onClick={() => {
+                goBack();
+                setNewActivity({
+                  name: '',
+                  description: '',
+                  start_date: '',
+                  end_date: '',
+                  start_time: '',
+                  end_time: '',
+                  location: '',
+                  website_url: '',
+                  cost: '',
+                  max_participants: '',
+                  auto_notify_new_connections: false
+                });
+                setSelectedDates([]);
+                setIsSharedActivity(false);
+                setAutoNotifyNewConnections(false);
+                setSelectedConnectedChildren([]);
+              }}
+              className="cancel-btn"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreateActivity}
+              disabled={addingActivity}
+              className={`confirm-btn ${addingActivity ? 'disabled' : ''}`}
+            >
+              {addingActivity ? 'Adding...' : 'Add Activity'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPage === 'edit-activity' && editingActivity) {
+    return (
+      <div className="child-activity-screen">
+        <div className="activity-header">
+          <div className="child-info">
+            <h2>Edit Activity: {editingActivity.name}</h2>
+          </div>
+        </div>
+        <div className="page-content">
+          <div className="page-form">
+            <input
+              type="text"
+              placeholder="Activity name *"
+              value={newActivity.name}
+              onChange={(e) => setNewActivity({...newActivity, name: e.target.value})}
+              className="modal-input"
+              autoFocus
+            />
+            <textarea
+              placeholder="Description"
+              value={newActivity.description}
+              onChange={(e) => setNewActivity({...newActivity, description: e.target.value})}
+              className="modal-textarea"
+              rows={3}
+            />
+            
+            <div className="date-selection-section">
+              <label className="section-label">Select Activity Dates</label>
+              <p className="section-description">Click dates to select/deselect them. You can choose multiple dates for recurring activities.</p>
+              <CalendarDatePicker
+                selectedDates={selectedDates}
+                onChange={setSelectedDates}
+                minDate={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+            
+            <div className="time-row">
+              <div className="time-field">
+                <label>Start Time</label>
+                <TimePickerDropdown
+                  value={newActivity.start_time}
+                  onChange={(time) => setNewActivity({...newActivity, start_time: time})}
+                  placeholder="Start time"
+                />
+              </div>
+              <div className="time-field">
+                <label>End Time</label>
+                <TimePickerDropdown
+                  value={newActivity.end_time}
+                  onChange={(time) => setNewActivity({...newActivity, end_time: time})}
+                  placeholder="End time"
+                />
+              </div>
+            </div>
+            <input
+              type="text"
+              placeholder="Location"
+              value={newActivity.location}
+              onChange={(e) => setNewActivity({...newActivity, location: e.target.value})}
+              className="modal-input"
+            />
+            <input
+              type="url"
+              placeholder="Website URL"
+              value={newActivity.website_url}
+              onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
+              className="modal-input"
+            />
+            <div className="number-row">
+              <input
+                type="number"
+                placeholder="Cost ($)"
+                value={newActivity.cost}
+                onChange={(e) => setNewActivity({...newActivity, cost: e.target.value})}
+                className="modal-input"
+                min="0"
+                step="0.01"
+              />
+              <input
+                type="number"
+                placeholder="Max participants"
+                value={newActivity.max_participants}
+                onChange={(e) => setNewActivity({...newActivity, max_participants: e.target.value})}
+                className="modal-input"
+                min="1"
+              />
+            </div>
+          </div>
+          <div className="page-actions">
+            <button
+              onClick={() => {
+                goBack();
+                setEditingActivity(null);
+                setNewActivity({
+                  name: '',
+                  description: '',
+                  start_date: '',
+                  end_date: '',
+                  start_time: '',
+                  end_time: '',
+                  location: '',
+                  website_url: '',
+                  cost: '',
+                  max_participants: '',
+                  auto_notify_new_connections: false
+                });
+                setAutoNotifyNewConnections(false);
+              }}
+              className="cancel-btn"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleUpdateActivity}
+              disabled={addingActivity}
+              className={`confirm-btn ${addingActivity ? 'disabled' : ''}`}
+            >
+              {addingActivity ? 'Updating...' : 'Update Activity'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPage === 'invite-activity' && invitingActivity) {
+    return (
+      <div className="child-activity-screen">
+        <div className="activity-header">
+          <div className="child-info">
+            <h2>Invite Others to: {invitingActivity.name}</h2>
+          </div>
+        </div>
+        <div className="page-content">
+          <div className="duplicate-content">
+            <div className="activity-preview">
+              <strong>Activity Details:</strong>
+              <p>📅 {formatDate(invitingActivity.start_date)} {invitingActivity.start_time && `🕐 ${formatTime(invitingActivity.start_time)}${invitingActivity.end_time ? ` - ${formatTime(invitingActivity.end_time)}` : ''}`}</p>
+              {invitingActivity.location && <p>📍 {invitingActivity.location}</p>}
+              {invitingActivity.cost && <p>💰 ${invitingActivity.cost}</p>}
+            </div>
+            
+            <div className="input-group">
+              <label>Invitation Message</label>
+              <textarea
+                value={invitationMessage}
+                onChange={(e) => setInvitationMessage(e.target.value)}
+                className="modal-textarea"
+                rows={3}
+                placeholder="Add a personal message to your invitation..."
+              />
+            </div>
+
+            <div className="input-group">
+              <strong>Connected Children:</strong>
+              {connectedFamilies.length > 0 ? (
+                <div className="connected-families-list">
+                  {connectedFamilies.map((connection: any) => (
+                    <div key={connection.id} className="family-item">
+                      <div className="family-info">
+                        <strong>{connection.parent_name}</strong>
+                        <span className="family-email">{connection.parent_email}</span>
+                        {connection.children?.map((child: any) => (
+                          <div key={child.id} className="child-item">
+                            👶 {child.name}
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => handleSendInvitation(connection.parent_id)}
+                        className="confirm-btn"
+                        style={{ 
+                          background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                          padding: '8px 16px',
+                          fontSize: '14px'
+                        }}
+                      >
+                        Invite
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: '#666', fontStyle: 'italic' }}>
+                  No connected children found. Connect with other parents first to send invitations.
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="page-actions">
+            <button
+              onClick={() => {
+                goBack();
+                setInvitingActivity(null);
+                setInvitationMessage('');
+                setConnectedFamilies([]);
+              }}
+              className="cancel-btn"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Main page
   return (
     <div className="child-activity-screen">
       <div className="activity-header">
-        <button onClick={onBack} className="back-btn">
-          ← Back to Children
-        </button>
         <div className="child-info">
           <h2>{child.name}'s Activities</h2>
           <p>
@@ -838,8 +1772,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                       borderLeftColor: colors.borderColor
                     }}
                     onClick={() => {
-                      setSelectedActivity(activity);
-                      setShowActivityDetail(true);
+                      handleActivityClick(activity);
                     }}
                   >
                     <h4 className="activity-name">{activity.name}</h4>
@@ -874,714 +1807,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           </div>
         )}
       </div>
-
-
-      {/* Add Activity Modal */}
-      {showAddModal && (
-        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="modal activity-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Add New Activity for {child.name}</h3>
-            <div className="modal-form">
-              <input
-                type="text"
-                placeholder="Activity name *"
-                value={newActivity.name}
-                onChange={(e) => setNewActivity({...newActivity, name: e.target.value})}
-                className="modal-input"
-                autoFocus
-              />
-              <textarea
-                placeholder="Description"
-                value={newActivity.description}
-                onChange={(e) => setNewActivity({...newActivity, description: e.target.value})}
-                className="modal-textarea"
-                rows={3}
-              />
-              
-              {/* Date Selection Section */}
-              <div className="date-selection-section">
-                <label className="section-label">Select Activity Dates</label>
-                <p className="section-description">Click dates to select/deselect them. You can choose multiple dates for recurring activities.</p>
-                <CalendarDatePicker
-                  selectedDates={selectedDates}
-                  onChange={setSelectedDates}
-                  minDate={new Date().toISOString().split('T')[0]}
-                />
-              </div>
-              <div className="time-row">
-                <div className="time-field">
-                  <label>Start Time</label>
-                  <TimePickerDropdown
-                    value={newActivity.start_time}
-                    onChange={(time) => setNewActivity({...newActivity, start_time: time})}
-                    placeholder="Start time"
-                  />
-                </div>
-                <div className="time-field">
-                  <label>End Time</label>
-                  <TimePickerDropdown
-                    value={newActivity.end_time}
-                    onChange={(time) => setNewActivity({...newActivity, end_time: time})}
-                    placeholder="End time"
-                  />
-                </div>
-              </div>
-              <input
-                type="text"
-                placeholder="Location"
-                value={newActivity.location}
-                onChange={(e) => setNewActivity({...newActivity, location: e.target.value})}
-                className="modal-input"
-              />
-              <input
-                type="url"
-                placeholder="Website URL"
-                value={newActivity.website_url}
-                onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
-                className="modal-input"
-              />
-              <div className="number-row">
-                <input
-                  type="number"
-                  placeholder="Cost ($)"
-                  value={newActivity.cost}
-                  onChange={(e) => setNewActivity({...newActivity, cost: e.target.value})}
-                  className="modal-input"
-                  min="0"
-                  step="0.01"
-                />
-                <input
-                  type="number"
-                  placeholder="Max participants"
-                  value={newActivity.max_participants}
-                  onChange={(e) => setNewActivity({...newActivity, max_participants: e.target.value})}
-                  className="modal-input"
-                  min="1"
-                />
-              </div>
-              
-              {/* Privacy and Sharing Section */}
-              <div className="privacy-section">
-                <label className="section-label">Activity Privacy</label>
-                <div className="privacy-options">
-                  <label className="radio-option">
-                    <input
-                      type="radio"
-                      name="privacyMode"
-                      checked={!isSharedActivity}
-                      onChange={() => setIsSharedActivity(false)}
-                    />
-                    🔒 Private (Only you and {child.name})
-                  </label>
-                  <label className="radio-option">
-                    <input
-                      type="radio"
-                      name="privacyMode"
-                      checked={isSharedActivity}
-                      onChange={() => setIsSharedActivity(true)}
-                    />
-                    🌐 Shared (Invite connected families)
-                  </label>
-                </div>
-                
-                {isSharedActivity && (
-                  <div className="connected-children-section">
-                    <label>Invite Children:</label>
-                    {connectedChildren.length === 0 ? (
-                      <p className="no-connections">No connected families found. Add connections first!</p>
-                    ) : (
-                      <div className="children-list">
-                        {connectedChildren.map((connectedChild) => (
-                          <label key={connectedChild.id} className="child-checkbox">
-                            <input
-                              type="checkbox"
-                              checked={selectedConnectedChildren.includes(connectedChild.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedConnectedChildren([...selectedConnectedChildren, connectedChild.id]);
-                                } else {
-                                  setSelectedConnectedChildren(
-                                    selectedConnectedChildren.filter(id => id !== connectedChild.id)
-                                  );
-                                }
-                              }}
-                            />
-                            {connectedChild.name} ({connectedChild.parentName})
-                          </label>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="modal-actions">
-              <button
-                onClick={() => {
-                  setShowAddModal(false);
-                  setNewActivity({
-                    name: '',
-                    description: '',
-                    start_date: '',
-                    end_date: '',
-                    start_time: '',
-                    end_time: '',
-                    location: '',
-                    website_url: '',
-                    cost: '',
-                    max_participants: ''
-                  });
-                  setSelectedDates([]);
-                  setIsSharedActivity(false);
-                  setSelectedConnectedChildren([]);
-                }}
-                className="cancel-btn"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateActivity}
-                disabled={addingActivity}
-                className={`confirm-btn ${addingActivity ? 'disabled' : ''}`}
-              >
-                {addingActivity ? 'Adding...' : 'Add Activity'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Enhanced Activity Detail Modal with Inline Editing */}
-      {showActivityDetail && selectedActivity && (
-        <div className="modal-overlay" onClick={() => setShowActivityDetail(false)}>
-          <div className="modal activity-detail-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Activity Details</h3>
-            <div className="activity-detail-content">
-              {(selectedActivity.isPendingInvitation || selectedActivity.isAcceptedInvitation || selectedActivity.isDeclinedInvitation) && (
-                <div className="invitation-info">
-                  <div className="detail-item">
-                    <strong>Invitation from:</strong>
-                    <p>👤 {selectedActivity.host_child_name || selectedActivity.child_name} ({selectedActivity.host_parent_name || selectedActivity.host_parent_username})</p>
-                  </div>
-                  <div className="detail-item">
-                    <strong>Status:</strong>
-                    <p>
-                      {selectedActivity.isPendingInvitation && <span style={{ color: '#48bb78' }}>📩 Pending</span>}
-                      {selectedActivity.isAcceptedInvitation && <span style={{ color: '#4299e1' }}>✅ Accepted</span>}
-                      {selectedActivity.isDeclinedInvitation && <span style={{ color: '#a0aec0' }}>❌ Declined</span>}
-                    </p>
-                  </div>
-                  {selectedActivity.invitation_message && (
-                    <div className="detail-item">
-                      <strong>Message:</strong>
-                      <p style={{ fontStyle: 'italic' }}>"{selectedActivity.invitation_message}"</p>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {/* Activity Details Form - Always Editable for Host */}
-              <div className="activity-details-form">
-                <div className="form-row">
-                  <label><strong>Activity Name:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
-                    <input
-                      type="text"
-                      value={newActivity.name}
-                      onChange={(e) => setNewActivity({...newActivity, name: e.target.value})}
-                      className="inline-edit-input"
-                      placeholder="Activity name"
-                    />
-                  ) : (
-                    <span className="readonly-value">{selectedActivity.name}</span>
-                  )}
-                </div>
-
-                <div className="form-row">
-                  <label><strong>Description:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
-                    <textarea
-                      value={newActivity.description}
-                      onChange={(e) => setNewActivity({...newActivity, description: e.target.value})}
-                      className="inline-edit-textarea"
-                      placeholder="Activity description"
-                      rows={2}
-                    />
-                  ) : (
-                    <span className="readonly-value">{selectedActivity.description || 'No description'}</span>
-                  )}
-                </div>
-
-                <div className="form-row">
-                  <label><strong>Start Date:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
-                    <input
-                      type="date"
-                      value={newActivity.start_date}
-                      onChange={(e) => setNewActivity({...newActivity, start_date: e.target.value})}
-                      className="inline-edit-input"
-                    />
-                  ) : (
-                    <span className="readonly-value">📅 {formatDate(selectedActivity.start_date)}</span>
-                  )}
-                </div>
-
-                <div className="form-row">
-                  <label><strong>End Date:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
-                    <input
-                      type="date"
-                      value={newActivity.end_date}
-                      onChange={(e) => setNewActivity({...newActivity, end_date: e.target.value})}
-                      className="inline-edit-input"
-                    />
-                  ) : (
-                    <span className="readonly-value">{selectedActivity.end_date ? formatDate(selectedActivity.end_date) : 'Same day'}</span>
-                  )}
-                </div>
-
-                <div className="form-row-group">
-                  <div className="form-row">
-                    <label><strong>Start Time:</strong></label>
-                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
-                      <TimePickerDropdown
-                        value={newActivity.start_time}
-                        onChange={(time) => setNewActivity({...newActivity, start_time: time})}
-                        placeholder="Start time"
-                      />
-                    ) : (
-                      <span className="readonly-value">🕐 {selectedActivity.start_time ? formatTime(selectedActivity.start_time) : 'All day'}</span>
-                    )}
-                  </div>
-
-                  <div className="form-row">
-                    <label><strong>End Time:</strong></label>
-                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
-                      <TimePickerDropdown
-                        value={newActivity.end_time}
-                        onChange={(time) => setNewActivity({...newActivity, end_time: time})}
-                        placeholder="End time"
-                      />
-                    ) : (
-                      <span className="readonly-value">{selectedActivity.end_time ? formatTime(selectedActivity.end_time) : 'Not set'}</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="form-row">
-                  <label><strong>Location:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
-                    <input
-                      type="text"
-                      value={newActivity.location}
-                      onChange={(e) => setNewActivity({...newActivity, location: e.target.value})}
-                      className="inline-edit-input"
-                      placeholder="Activity location"
-                    />
-                  ) : (
-                    <span className="readonly-value">📍 {selectedActivity.location || 'No location specified'}</span>
-                  )}
-                </div>
-
-                <div className="form-row">
-                  <label><strong>Website:</strong></label>
-                  {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
-                    <input
-                      type="url"
-                      value={newActivity.website_url}
-                      onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
-                      className="inline-edit-input"
-                      placeholder="Website URL"
-                    />
-                  ) : (
-                    <span className="readonly-value">
-                      {selectedActivity.website_url ? (
-                        <a href={selectedActivity.website_url} target="_blank" rel="noopener noreferrer">
-                          🌐 {selectedActivity.website_url}
-                        </a>
-                      ) : (
-                        'No website'
-                      )}
-                    </span>
-                  )}
-                </div>
-
-                <div className="form-row-group">
-                  <div className="form-row">
-                    <label><strong>Cost:</strong></label>
-                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
-                      <input
-                        type="number"
-                        value={newActivity.cost}
-                        onChange={(e) => setNewActivity({...newActivity, cost: e.target.value})}
-                        className="inline-edit-input"
-                        placeholder="Cost ($)"
-                        min="0"
-                        step="0.01"
-                      />
-                    ) : (
-                      <span className="readonly-value">💰 {selectedActivity.cost ? `$${selectedActivity.cost}` : 'Free'}</span>
-                    )}
-                  </div>
-
-                  <div className="form-row">
-                    <label><strong>Max Participants:</strong></label>
-                    {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation ? (
-                      <input
-                        type="number"
-                        value={newActivity.max_participants}
-                        onChange={(e) => setNewActivity({...newActivity, max_participants: e.target.value})}
-                        className="inline-edit-input"
-                        placeholder="Max participants"
-                        min="1"
-                      />
-                    ) : (
-                      <span className="readonly-value">{selectedActivity.max_participants || 'No limit'}</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Activity Participants Section */}
-              <div className="participants-section">
-                <div className="detail-item">
-                  <strong>Who's Invited:</strong>
-                  {loadingParticipants ? (
-                    <p>Loading participants...</p>
-                  ) : activityParticipants ? (
-                    <div className="participants-list">
-                      <div className="host-info">
-                        <p>👤 <strong>{activityParticipants.host?.host_name} (Host)</strong></p>
-                      </div>
-                      {activityParticipants.participants?.length > 0 ? (
-                        <div className="invited-participants">
-                          <h4>Invited Children & Families:</h4>
-                          {activityParticipants.participants.map((participant: any, index: number) => (
-                            <div key={index} className="participant-item">
-                              <div className="participant-info">
-                                <span className="participant-name">👤 {participant.parent_name}</span>
-                                {participant.child_name && (
-                                  <span className="participant-child"> ({participant.child_name})</span>
-                                )}
-                              </div>
-                              <div className="participant-status">
-                                {participant.status === 'pending' && (
-                                  <span style={{ color: '#fd7e14', fontSize: '12px' }}>📩 Pending</span>
-                                )}
-                                {participant.status === 'accepted' && (
-                                  <span style={{ color: '#48bb78', fontSize: '12px' }}>✅ Accepted</span>
-                                )}
-                                {participant.status === 'rejected' && (
-                                  <span style={{ color: '#a0aec0', fontSize: '12px' }}>❌ Declined</span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
-                          No other families invited yet
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: '14px', color: '#666' }}>
-                      Unable to load participant information
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="modal-actions">
-              <button
-                onClick={() => setShowActivityDetail(false)}
-                className="cancel-btn"
-              >
-                Close
-              </button>
-              
-              {/* Show accept/decline buttons for pending invitations */}
-              {selectedActivity.isPendingInvitation && selectedActivity.invitationId && (
-                <>
-                  <button
-                    onClick={() => handleInvitationResponse(selectedActivity.invitationId!, 'accept')}
-                    className="confirm-btn"
-                    style={{ background: 'linear-gradient(135deg, #48bb78, #68d391)', marginRight: '8px' }}
-                  >
-                    ✅ Accept Invitation
-                  </button>
-                  <button
-                    onClick={() => handleInvitationResponse(selectedActivity.invitationId!, 'reject')}
-                    className="delete-btn"
-                  >
-                    ❌ Decline Invitation
-                  </button>
-                </>
-              )}
-              
-              {/* Show decline button for accepted invitations */}
-              {selectedActivity.isAcceptedInvitation && selectedActivity.invitationId && (
-                <button
-                  onClick={() => handleInvitationResponse(selectedActivity.invitationId!, 'reject')}
-                  className="delete-btn"
-                  style={{ background: 'linear-gradient(135deg, #e53e3e, #fc8181)', color: 'white' }}
-                >
-                  ❌ Change to Declined
-                </button>
-              )}
-              
-              {/* Show enhanced buttons for activity host */}
-              {selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation && (
-                <>
-                  <button
-                    onClick={handleUpdateActivity}
-                    className="confirm-btn"
-                    style={{ background: 'linear-gradient(135deg, #28a745, #34ce57)' }}
-                  >
-                    💾 Save Changes
-                  </button>
-                  <button
-                    onClick={() => handleInviteActivity(selectedActivity)}
-                    className="confirm-btn"
-                    style={{ background: 'linear-gradient(135deg, #667eea, #764ba2)' }}
-                  >
-                    ➕ Invite More
-                  </button>
-                  <button
-                    onClick={() => handleDeleteActivity(selectedActivity)}
-                    className="delete-btn"
-                  >
-                    🗑️ Delete
-                  </button>
-                </>
-              )}
-              
-              {/* For non-host activities, show informational text */}
-              {!selectedActivity.is_host && !selectedActivity.isPendingInvitation && !selectedActivity.isAcceptedInvitation && !selectedActivity.isDeclinedInvitation && (
-                <div className="host-info">
-                  <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
-                    Only the activity host can edit this activity
-                  </p>
-                </div>
-              )}
-              
-              {/* For declined invitations, show informational text */}
-              {selectedActivity.isDeclinedInvitation && (
-                <div className="declined-info">
-                  <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
-                    This invitation has been declined. Contact the host if you'd like to reconsider.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Activity Modal */}
-      {showEditModal && editingActivity && (
-        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
-          <div className="modal activity-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Edit Activity: {editingActivity.name}</h3>
-            <div className="modal-form">
-              <input
-                type="text"
-                placeholder="Activity name *"
-                value={newActivity.name}
-                onChange={(e) => setNewActivity({...newActivity, name: e.target.value})}
-                className="modal-input"
-                autoFocus
-              />
-              <textarea
-                placeholder="Description"
-                value={newActivity.description}
-                onChange={(e) => setNewActivity({...newActivity, description: e.target.value})}
-                className="modal-textarea"
-                rows={3}
-              />
-              <div className="date-row">
-                <input
-                  type="date"
-                  placeholder="Start date *"
-                  value={newActivity.start_date}
-                  onChange={(e) => setNewActivity({...newActivity, start_date: e.target.value})}
-                  className="modal-input"
-                />
-                <input
-                  type="date"
-                  placeholder="End date"
-                  value={newActivity.end_date}
-                  onChange={(e) => setNewActivity({...newActivity, end_date: e.target.value})}
-                  className="modal-input"
-                />
-              </div>
-              <div className="time-row">
-                <div className="time-field">
-                  <label>Start Time</label>
-                  <TimePickerDropdown
-                    value={newActivity.start_time}
-                    onChange={(time) => setNewActivity({...newActivity, start_time: time})}
-                    placeholder="Start time"
-                  />
-                </div>
-                <div className="time-field">
-                  <label>End Time</label>
-                  <TimePickerDropdown
-                    value={newActivity.end_time}
-                    onChange={(time) => setNewActivity({...newActivity, end_time: time})}
-                    placeholder="End time"
-                  />
-                </div>
-              </div>
-              <input
-                type="text"
-                placeholder="Location"
-                value={newActivity.location}
-                onChange={(e) => setNewActivity({...newActivity, location: e.target.value})}
-                className="modal-input"
-              />
-              <input
-                type="url"
-                placeholder="Website URL"
-                value={newActivity.website_url}
-                onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
-                className="modal-input"
-              />
-              <div className="number-row">
-                <input
-                  type="number"
-                  placeholder="Cost ($)"
-                  value={newActivity.cost}
-                  onChange={(e) => setNewActivity({...newActivity, cost: e.target.value})}
-                  className="modal-input"
-                  min="0"
-                  step="0.01"
-                />
-                <input
-                  type="number"
-                  placeholder="Max participants"
-                  value={newActivity.max_participants}
-                  onChange={(e) => setNewActivity({...newActivity, max_participants: e.target.value})}
-                  className="modal-input"
-                  min="1"
-                />
-              </div>
-            </div>
-            <div className="modal-actions">
-              <button
-                onClick={() => {
-                  setShowEditModal(false);
-                  setEditingActivity(null);
-                  setNewActivity({
-                    name: '',
-                    description: '',
-                    start_date: '',
-                    end_date: '',
-                    start_time: '',
-                    end_time: '',
-                    location: '',
-                    website_url: '',
-                    cost: '',
-                    max_participants: ''
-                  });
-                }}
-                className="cancel-btn"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpdateActivity}
-                disabled={addingActivity}
-                className={`confirm-btn ${addingActivity ? 'disabled' : ''}`}
-              >
-                {addingActivity ? 'Updating...' : 'Update Activity'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-
-      {/* Invite Activity Modal */}
-      {showInviteModal && invitingActivity && (
-        <div className="modal-overlay" onClick={() => setShowInviteModal(false)}>
-          <div className="modal activity-duplicate-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Invite Others to: {invitingActivity.name}</h3>
-            <div className="duplicate-content">
-              <div className="activity-preview">
-                <strong>Activity Details:</strong>
-                <p>Date: {formatDate(invitingActivity.start_date)}</p>
-                {invitingActivity.start_time && (
-                  <p>Time: {formatTime(invitingActivity.start_time)}
-                  {invitingActivity.end_time && ` - ${formatTime(invitingActivity.end_time)}`}</p>
-                )}
-                {invitingActivity.location && <p>Location: {invitingActivity.location}</p>}
-                {invitingActivity.cost && <p>Cost: ${invitingActivity.cost}</p>}
-              </div>
-              
-              <div className="input-group">
-                <label>Invitation Message</label>
-                <textarea
-                  value={invitationMessage}
-                  onChange={(e) => setInvitationMessage(e.target.value)}
-                  className="modal-textarea"
-                  rows={3}
-                  placeholder="Add a personal message to your invitation..."
-                />
-              </div>
-
-              <div className="input-group">
-                <strong>Connected Families:</strong>
-                {connectedFamilies.length > 0 ? (
-                  <div className="connected-families-list">
-                    {connectedFamilies.map((connection: any) => (
-                      <div key={connection.id} className="family-item">
-                        <div className="family-info">
-                          <strong>{connection.parent_name}</strong>
-                          <span className="family-email">{connection.parent_email}</span>
-                          {connection.children?.map((child: any) => (
-                            <div key={child.id} className="child-item">
-                              👶 {child.name}
-                            </div>
-                          ))}
-                        </div>
-                        <button
-                          onClick={() => handleSendInvitation(connection.parent_id)}
-                          className="confirm-btn"
-                          style={{ 
-                            background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                            padding: '8px 16px',
-                            fontSize: '14px'
-                          }}
-                        >
-                          Invite
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p style={{ color: '#666', fontStyle: 'italic' }}>
-                    No connected families found. Connect with other parents first to send invitations.
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="modal-actions">
-              <button
-                onClick={() => {
-                  setShowInviteModal(false);
-                  setInvitingActivity(null);
-                  setInvitationMessage('');
-                  setConnectedFamilies([]);
-                }}
-                className="cancel-btn"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

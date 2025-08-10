@@ -45,3 +45,20 @@ body {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* Mobile optimization - remove grey background */
+@media (max-width: 768px) {
+  body {
+    background: white;
+    overflow-x: hidden; /* Prevent horizontal scrolling */
+  }
+  
+  .App {
+    overflow-x: hidden; /* Prevent horizontal scrolling */
+    width: 100vw; /* Full viewport width */
+  }
+  
+  .app-loading {
+    background: white;
+  }
+}
