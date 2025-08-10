@@ -1083,11 +1083,13 @@ function getDateForWeekday(currentDate, targetDay) {
 app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
     try {
         const childId = parseInt(req.params.childId);
-        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants } = req.body;
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections } = req.body;
 
         if (!name || !name.trim() || !start_date) {
             return res.status(400).json({ success: false, error: 'Activity name and start date are required' });
         }
+
+        console.log('🔔 Creating activity with auto-notify:', auto_notify_new_connections);
 
         const client = await pool.connect();
         
@@ -1110,8 +1112,8 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
 
         const result = await client.query(
-            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
-            [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants]
+            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *',
+            [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false]
         );
         client.release();
 
