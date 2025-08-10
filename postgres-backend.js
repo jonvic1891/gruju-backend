@@ -54,6 +54,21 @@ async function runMigrations() {
                 throw error;
             }
         }
+
+        // Migration 2: Add invited_child_id column to activity_invitations table
+        try {
+            await client.query(`
+                ALTER TABLE activity_invitations 
+                ADD COLUMN IF NOT EXISTS invited_child_id INTEGER REFERENCES children(id)
+            `);
+            console.log('✅ Migration: Added invited_child_id column to activity_invitations table');
+        } catch (error) {
+            if (error.code === '42701') {
+                console.log('✅ Migration: invited_child_id column already exists');
+            } else {
+                throw error;
+            }
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
