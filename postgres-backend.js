@@ -1433,15 +1433,32 @@ app.delete('/api/connections/:connectionId', authenticateToken, async (req, res)
         const connectionId = parseInt(req.params.connectionId);
         const userId = req.user.id;
 
+        console.log('🗑️ DELETE connection request:', { connectionId, userId });
+
         if (!connectionId || isNaN(connectionId)) {
             return res.status(400).json({ success: false, error: 'Invalid connection ID' });
         }
 
         const client = await pool.connect();
         
-        // Verify user owns one of the children in the connection
+        // First, let's see what connections exist for this user
+        const allUserConnections = await client.query(`
+            SELECT c.*, 
+                   ch1.name as child1_name, ch1.parent_id as child1_parent_id,
+                   ch2.name as child2_name, ch2.parent_id as child2_parent_id
+            FROM connections c
+            LEFT JOIN children ch1 ON c.child1_id = ch1.id
+            LEFT JOIN children ch2 ON c.child2_id = ch2.id  
+            WHERE (ch1.parent_id = $1 OR ch2.parent_id = $1)
+        `, [userId]);
+        
+        console.log('📋 All connections for user:', allUserConnections.rows);
+        
+        // Now try to find the specific connection
         const connection = await client.query(`
-            SELECT c.* 
+            SELECT c.*, 
+                   ch1.name as child1_name, ch1.parent_id as child1_parent_id,
+                   ch2.name as child2_name, ch2.parent_id as child2_parent_id
             FROM connections c
             JOIN children ch1 ON c.child1_id = ch1.id
             JOIN children ch2 ON c.child2_id = ch2.id  
@@ -1450,26 +1467,50 @@ app.delete('/api/connections/:connectionId', authenticateToken, async (req, res)
               AND c.status = 'active'
         `, [connectionId, userId]);
 
+        console.log('🔍 Specific connection found:', connection.rows);
+
         if (connection.rows.length === 0) {
             client.release();
-            return res.status(404).json({ success: false, error: 'Connection not found' });
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Connection not found',
+                debug: {
+                    connectionId,
+                    userId,
+                    allUserConnections: allUserConnections.rows
+                }
+            });
         }
 
+        const connData = connection.rows[0];
+        console.log('✅ Connection to delete:', connData);
+
         // Update connection status to deleted (soft delete)
-        await client.query(
+        const updateResult = await client.query(
             'UPDATE connections SET status = $1 WHERE id = $2',
             ['deleted', connectionId]
         );
+
+        console.log('🔄 Update result:', updateResult);
 
         client.release();
 
         res.json({
             success: true,
             message: 'Connection deleted successfully',
+            deleted_connection: {
+                id: connData.id,
+                child1_name: connData.child1_name,
+                child2_name: connData.child2_name
+            }
         });
     } catch (error) {
-        console.error('Delete connection error:', error);
-        res.status(500).json({ success: false, error: 'Failed to delete connection' });
+        console.error('❌ Delete connection error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to delete connection',
+            debug: error.message 
+        });
     }
 });
 
