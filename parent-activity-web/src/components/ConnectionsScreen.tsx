@@ -117,7 +117,7 @@ const ConnectionsScreen = () => {
           // Reload active connections to show the new connection immediately
           loadActiveConnections();
           
-          // Notify new connection about future activities (filtered by per-activity setting)
+          // Auto-notify: Send accepting user's auto-notify activities to the requesting user
           if (acceptedRequest) {
             await notifyNewConnectionAboutFutureActivities(
               acceptedRequest.requester_id, 
@@ -143,10 +143,11 @@ const ConnectionsScreen = () => {
     targetChildId?: number
   ) => {
     try {
-      console.log('🔔 Starting auto-notification process for new connection:', {
+      console.log('🔔 Starting auto-notification process:', {
         newConnectionParentId,
-        requestorChildId,
-        targetChildId
+        requestorChildId,  
+        targetChildId,
+        note: 'Sending current user auto-notify activities to new connection'
       });
 
       const today = new Date().toISOString().split('T')[0];
@@ -189,6 +190,14 @@ const ConnectionsScreen = () => {
 
         console.log('✅ Filtered future activities with auto-notify:', futureActivities.length, futureActivities);
 
+        if (futureActivities.length === 0) {
+          console.log('⚠️ No qualifying activities found. Possible reasons:');
+          console.log('   - No activities are in the future');
+          console.log('   - No activities have auto_notify_new_connections: true');
+          console.log('   - Current user is not the host of any activities');
+          console.log('   - Activities exist but were filtered out');
+        }
+
         // Send invitations for each future activity
         let invitationsSent = 0;
         for (const activity of futureActivities) {
@@ -221,6 +230,7 @@ const ConnectionsScreen = () => {
       console.error('❌ Failed to notify new connection about future activities:', error);
     }
   };
+
 
   const handleRejectRequest = async (requestId: number) => {
     if (window.confirm('Are you sure you want to reject this connection request?')) {
