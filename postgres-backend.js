@@ -1380,11 +1380,20 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
         const requestId = parseInt(req.params.requestId);
         const { action } = req.body;
 
+        console.log('📝 Connection request response:', { requestId, action, userId: req.user.id });
+
         if (!['accept', 'reject'].includes(action)) {
             return res.status(400).json({ success: false, error: 'Invalid action' });
         }
 
         const client = await pool.connect();
+        
+        // First, let's see all connection requests for this user
+        const allRequests = await client.query(
+            'SELECT * FROM connection_requests WHERE target_parent_id = $1',
+            [req.user.id]
+        );
+        console.log('📋 All connection requests for user:', allRequests.rows);
         
         // Verify the request is for this user
         const request = await client.query(
@@ -1392,25 +1401,42 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
             [requestId, req.user.id, 'pending']
         );
 
+        console.log('🔍 Specific request found:', request.rows);
+
         if (request.rows.length === 0) {
             client.release();
-            return res.status(404).json({ success: false, error: 'Connection request not found' });
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Connection request not found',
+                debug: {
+                    requestId,
+                    userId: req.user.id,
+                    allRequests: allRequests.rows
+                }
+            });
         }
 
         const status = action === 'accept' ? 'accepted' : 'rejected';
-        await client.query(
+        console.log('🔄 Updating request status to:', status);
+        
+        const updateResult = await client.query(
             'UPDATE connection_requests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
             [status, requestId]
         );
+        
+        console.log('✅ Update result:', updateResult);
 
         // If accepted, create the connection
         if (action === 'accept') {
             const req_data = request.rows[0];
+            console.log('🤝 Creating connection for accepted request:', req_data);
+            
             if (req_data.target_child_id) {
-                await client.query(
+                const connectionResult = await client.query(
                     'INSERT INTO connections (child1_id, child2_id, status) VALUES ($1, $2, $3)',
                     [req_data.child_id, req_data.target_child_id, 'active']
                 );
+                console.log('🔗 Connection created:', connectionResult);
             } else {
                 // For general connection requests without specific target child,
                 // we don't create a connection until a specific child is chosen
@@ -1420,10 +1446,14 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
 
         client.release();
 
-        res.json({ success: true });
+        res.json({ success: true, action, status });
     } catch (error) {
-        console.error('Respond to connection request error:', error);
-        res.status(500).json({ success: false, error: 'Failed to respond to connection request' });
+        console.error('❌ Respond to connection request error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to respond to connection request',
+            debug: error.message 
+        });
     }
 });
 
