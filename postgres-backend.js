@@ -1430,6 +1430,7 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
         if (action === 'accept') {
             const req_data = request.rows[0];
             console.log('🤝 Creating connection for accepted request:', req_data);
+            console.log('🔍 DEBUGGING v2 - Auto-notification check - target_child_id:', req_data.target_child_id);
             
             if (req_data.target_child_id) {
                 const connectionResult = await client.query(
@@ -1437,10 +1438,16 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
                     [req_data.child_id, req_data.target_child_id, 'active']
                 );
                 console.log('🔗 Connection created:', connectionResult);
+                
+                // 🔔 AUTO-NOTIFICATION: Send auto-notify activities from both users to each other
+                console.log('🔔 STARTING auto-notification processing...');
+                await processAutoNotifications(client, req_data.requester_id, req_data.target_parent_id, req_data.child_id, req_data.target_child_id);
+                console.log('🔔 COMPLETED auto-notification processing');
             } else {
                 // For general connection requests without specific target child,
                 // we don't create a connection until a specific child is chosen
-                console.log('Connection request accepted but no specific target child - connection will be created when activity invitation is sent');
+                console.log('❌ Connection request accepted but no specific target child - connection will be created when activity invitation is sent');
+                console.log('❌ AUTO-NOTIFICATION SKIPPED - no target_child_id');
             }
         }
 
@@ -2037,5 +2044,92 @@ process.on('SIGTERM', async () => {
     }
     process.exit(0);
 });
+
+// 🔔 AUTO-NOTIFICATION: Bidirectional auto-notify function
+async function processAutoNotifications(client, requesterId, targetParentId, requesterChildId, targetChildId) {
+    console.log('🔔 Processing bidirectional auto-notifications:', {
+        requesterId,
+        targetParentId,
+        requesterChildId,
+        targetChildId
+    });
+
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const oneYearLater = new Date();
+        oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+        const endDate = oneYearLater.toISOString().split('T')[0];
+
+        // Direction 1: Get requester's auto-notify activities and send to target parent
+        console.log('🔄 Direction 1: Requester → Target');
+        const requesterActivities = await client.query(`
+            SELECT a.*, c.name as child_name FROM activities a
+            JOIN children c ON a.child_id = c.id
+            WHERE c.parent_id = $1 
+              AND a.start_date >= $2
+              AND a.start_date <= $3
+              AND a.auto_notify_new_connections = true
+        `, [requesterId, today, endDate]);
+
+        console.log(`📋 Found ${requesterActivities.rows.length} auto-notify activities from requester`);
+
+        for (const activity of requesterActivities.rows) {
+            try {
+                console.log(`📧 Sending invitation for "${activity.name}" to target parent ${targetParentId}`);
+                await client.query(`
+                    INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                `, [
+                    activity.id,
+                    requesterId,
+                    targetParentId,
+                    targetChildId,
+                    `Welcome to our connection! ${activity.child_name || 'Your child'} would like to invite your child to join: ${activity.name}`,
+                    'pending'
+                ]);
+                console.log(`✅ Invitation sent for "${activity.name}"`);
+            } catch (inviteError) {
+                console.error(`❌ Failed to send invitation for "${activity.name}":`, inviteError);
+            }
+        }
+
+        // Direction 2: Get target parent's auto-notify activities and send to requester
+        console.log('🔄 Direction 2: Target → Requester');
+        const targetActivities = await client.query(`
+            SELECT a.*, c.name as child_name FROM activities a
+            JOIN children c ON a.child_id = c.id
+            WHERE c.parent_id = $1 
+              AND a.start_date >= $2
+              AND a.start_date <= $3
+              AND a.auto_notify_new_connections = true
+        `, [targetParentId, today, endDate]);
+
+        console.log(`📋 Found ${targetActivities.rows.length} auto-notify activities from target parent`);
+
+        for (const activity of targetActivities.rows) {
+            try {
+                console.log(`📧 Sending invitation for "${activity.name}" to requester ${requesterId}`);
+                await client.query(`
+                    INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                `, [
+                    activity.id,
+                    targetParentId,
+                    requesterId,
+                    requesterChildId,
+                    `Welcome to our connection! ${activity.child_name || 'Your child'} would like to invite your child to join: ${activity.name}`,
+                    'pending'
+                ]);
+                console.log(`✅ Invitation sent for "${activity.name}"`);
+            } catch (inviteError) {
+                console.error(`❌ Failed to send invitation for "${activity.name}":`, inviteError);
+            }
+        }
+
+        console.log('🎉 Bidirectional auto-notifications complete');
+    } catch (error) {
+        console.error('❌ Auto-notification processing failed:', error);
+    }
+}
 
 startServer();
