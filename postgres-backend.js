@@ -1441,12 +1441,13 @@ app.delete('/api/connections/:connectionId', authenticateToken, async (req, res)
         
         // Verify user owns one of the children in the connection
         const connection = await client.query(`
-            SELECT conn.* FROM connections conn
-            INNER JOIN children c1 ON conn.child1_id = c1.id
-            INNER JOIN children c2 ON conn.child2_id = c2.id
-            WHERE conn.id = $1 
-              AND (c1.parent_id = $2 OR c2.parent_id = $2)
-              AND conn.status = 'active'
+            SELECT c.* 
+            FROM connections c
+            JOIN children ch1 ON c.child1_id = ch1.id
+            JOIN children ch2 ON c.child2_id = ch2.id  
+            WHERE c.id = $1 
+              AND (ch1.parent_id = $2 OR ch2.parent_id = $2) 
+              AND c.status = 'active'
         `, [connectionId, userId]);
 
         if (connection.rows.length === 0) {
