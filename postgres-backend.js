@@ -1427,6 +1427,51 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
     }
 });
 
+// Delete connection endpoint
+app.delete('/api/connections/:connectionId', authenticateToken, async (req, res) => {
+    try {
+        const connectionId = parseInt(req.params.connectionId);
+        const userId = req.user.id;
+
+        if (!connectionId || isNaN(connectionId)) {
+            return res.status(400).json({ success: false, error: 'Invalid connection ID' });
+        }
+
+        const client = await pool.connect();
+        
+        // Verify user owns one of the children in the connection
+        const connection = await client.query(`
+            SELECT conn.* FROM connections conn
+            INNER JOIN children c1 ON conn.child1_id = c1.id
+            INNER JOIN children c2 ON conn.child2_id = c2.id
+            WHERE conn.id = $1 
+              AND (c1.parent_id = $2 OR c2.parent_id = $2)
+              AND conn.status = 'active'
+        `, [connectionId, userId]);
+
+        if (connection.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Connection not found' });
+        }
+
+        // Update connection status to deleted (soft delete)
+        await client.query(
+            'UPDATE connections SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            ['deleted', connectionId]
+        );
+
+        client.release();
+
+        res.json({
+            success: true,
+            message: 'Connection deleted successfully',
+        });
+    } catch (error) {
+        console.error('Delete connection error:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete connection' });
+    }
+});
+
 // Activity Invitation endpoint
 app.post('/api/activities/:activityId/invite', authenticateToken, async (req, res) => {
     try {
