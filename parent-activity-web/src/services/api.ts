@@ -205,7 +205,9 @@ class ApiService {
 
   // Connections
   async getConnectionRequests(): Promise<ApiResponse<any[]>> {
-    return this.request('get', '/api/connections/requests');
+    // Add cache-busting parameter to force fresh request
+    const timestamp = Date.now();
+    return this.request('get', `/api/connections/requests?_t=${timestamp}`);
   }
 
   async getSentConnectionRequests(): Promise<ApiResponse<any[]>> {
