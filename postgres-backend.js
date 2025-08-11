@@ -62,6 +62,17 @@ async function runMigrations() {
                 ADD COLUMN IF NOT EXISTS invited_child_id INTEGER REFERENCES children(id)
             `);
             console.log('✅ Migration: Added invited_child_id column to activity_invitations table');
+
+            // Remove old child_id column if it exists (causes confusion with invited_child_id)
+            try {
+                await client.query(`
+                    ALTER TABLE activity_invitations 
+                    DROP COLUMN IF EXISTS child_id
+                `);
+                console.log('✅ Migration: Removed old child_id column from activity_invitations table');
+            } catch (error) {
+                console.log('Note: child_id column may not exist or already removed');
+            }
         } catch (error) {
             if (error.code === '42701') {
                 console.log('✅ Migration: invited_child_id column already exists');
@@ -589,7 +600,7 @@ async function insertDemoConnections(client) {
                 if (invitationExists.rows.length === 0) {
                     try {
                         await client.query(`
-                            INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, child_id, status, message)
+                            INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, status, message)
                             VALUES ($1, $2, $3, $4, $5, $6)
                         `, [invitation.activity_id, invitation.inviter_parent_id, invitation.invited_parent_id, invitation.child_id, invitation.status, invitation.message]);
                         console.log(`✅ Created demo activity invitation: ${invitation.status}`);
@@ -973,6 +984,65 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Update profile error:', error);
         res.status(500).json({ error: 'Failed to update profile' });
+    }
+});
+
+// Change password endpoint  
+app.put('/api/users/change-password', authenticateToken, async (req, res) => {
+    console.log('🔒 Change password endpoint hit');
+    try {
+        const { currentPassword, newPassword } = req.body;
+
+        // Validate input
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ error: 'Current password and new password are required' });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+        }
+
+        const client = await pool.connect();
+        
+        // Get current user with password hash
+        const userResult = await client.query(
+            'SELECT id, password FROM users WHERE id = $1',
+            [req.user.id]
+        );
+
+        if (userResult.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const user = userResult.rows[0];
+
+        // Verify current password
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+        if (!isCurrentPasswordValid) {
+            client.release();
+            return res.status(400).json({ error: 'Current password is incorrect' });
+        }
+
+        // Hash new password
+        const saltRounds = 10;
+        const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+
+        // Update password
+        await client.query(
+            'UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2',
+            [newPasswordHash, req.user.id]
+        );
+        
+        client.release();
+
+        res.json({
+            success: true,
+            message: 'Password changed successfully'
+        });
+    } catch (error) {
+        console.error('Change password error:', error);
+        res.status(500).json({ error: 'Failed to change password' });
     }
 });
 
@@ -1391,12 +1461,36 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
 // Get sent connection requests (for the requester to track their pending requests)
 app.get('/api/connections/sent-requests', authenticateToken, async (req, res) => {
     try {
+        console.log(`📤 GET /api/connections/sent-requests - User ID: ${req.user.id}, Email: ${req.user.email}`);
+        
         const client = await pool.connect();
         const result = await client.query(
             `SELECT cr.*, 
                     u.username as target_parent_name, u.email as target_parent_email, u.family_name as target_family_name,
-                    c1.name as child_name, c1.age as child_age, c1.grade as child_grade, c1.school as child_school,
-                    c2.name as target_child_name, c2.age as target_child_age, c2.grade as target_child_grade, c2.school as target_child_school
+                    COALESCE(
+                        CASE 
+                            WHEN c1.first_name IS NOT NULL THEN 
+                                CASE WHEN c1.last_name IS NOT NULL AND c1.last_name != '' 
+                                     THEN c1.first_name || ' ' || c1.last_name
+                                     ELSE c1.first_name
+                                END
+                            ELSE c1.name
+                        END, 
+                        c1.name
+                    ) as child_name, 
+                    c1.age as child_age, c1.grade as child_grade, c1.school as child_school,
+                    COALESCE(
+                        CASE 
+                            WHEN c2.first_name IS NOT NULL THEN 
+                                CASE WHEN c2.last_name IS NOT NULL AND c2.last_name != '' 
+                                     THEN c2.first_name || ' ' || c2.last_name
+                                     ELSE c2.first_name
+                                END
+                            ELSE c2.name
+                        END, 
+                        c2.name
+                    ) as target_child_name,
+                    c2.age as target_child_age, c2.grade as target_child_grade, c2.school as target_child_school
              FROM connection_requests cr
              JOIN users u ON cr.target_parent_id = u.id
              JOIN children c1 ON cr.child_id = c1.id
@@ -1405,7 +1499,13 @@ app.get('/api/connections/sent-requests', authenticateToken, async (req, res) =>
              ORDER BY cr.created_at DESC`,
             [req.user.id]
         );
+        console.log(`📤 Found ${result.rows.length} sent requests:`, result.rows);
+        
         client.release();
+
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
 
         res.json({
             success: true,
@@ -1741,7 +1841,7 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
 
         const invitationResult = await client.query(
             `INSERT INTO activity_invitations 
-             (activity_id, inviter_parent_id, invited_parent_id, child_id, message, status) 
+             (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status) 
              VALUES ($1, $2, $3, $4, $5, 'pending') 
              RETURNING id`,
             [activityId, req.user.id, invited_parent_id, child_id, message]
@@ -1964,6 +2064,7 @@ app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
                 a.end_time,
                 a.location,
                 c_host.name as host_child_name,
+                u_host.family_name as host_family_name,
                 u_host.username as host_parent_name,
                 u_host.email as host_parent_email,
                 c_invited.name as invited_child_name
