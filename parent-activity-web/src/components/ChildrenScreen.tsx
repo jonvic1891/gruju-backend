@@ -25,6 +25,16 @@ interface ActivityInvitation {
   created_at: string;
 }
 
+interface ConnectionRequest {
+  id: number;
+  requester_name: string;
+  requester_email: string;
+  child_name?: string;
+  target_child_name?: string;
+  message?: string;
+  created_at: string;
+}
+
 const ChildrenScreen = () => {
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +45,9 @@ const ChildrenScreen = () => {
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [childActivityCounts, setChildActivityCounts] = useState<Record<number, number>>({});
   const [childInvitations, setChildInvitations] = useState<Record<number, ActivityInvitation[]>>({});
+  const [childConnections, setChildConnections] = useState<Record<number, ConnectionRequest[]>>({});
   const [processingInvitation, setProcessingInvitation] = useState<number | null>(null);
+  const [processingConnection, setProcessingConnection] = useState<number | null>(null);
   const apiService = ApiService.getInstance();
 
 
@@ -55,9 +67,10 @@ const ChildrenScreen = () => {
           : (response.data as any)?.data || [];
         setChildren(childrenData);
         
-        // Load activity counts and invitations for each child
+        // Load activity counts, invitations, and connection requests for each child
         await loadActivityCounts(childrenData);
         await loadInvitationsForChildren(childrenData);
+        await loadConnectionRequestsForChildren(childrenData);
       } else {
         console.error('Failed to load children:', response.error);
         alert(`Error: ${response.error || 'Failed to load children'}`);
@@ -102,19 +115,6 @@ const ChildrenScreen = () => {
       // Get all activity invitations for this parent
       const response = await apiService.getActivityInvitations();
       if (response.success && response.data) {
-        console.log('ChildrenScreen: All activity invitations:', response.data.length);
-        console.log('ChildrenScreen: All invitations data:', response.data);
-        console.log('ChildrenScreen: Children data:', childrenData);
-        
-        // Find Emma specifically for debugging
-        const emma = childrenData.find(child => 
-          (child.display_name && child.display_name.toLowerCase().includes('emma')) ||
-          (child.name && child.name.toLowerCase().includes('emma')) ||
-          (child.first_name && child.first_name.toLowerCase().includes('emma'))
-        );
-        if (emma) {
-          console.log('ChildrenScreen: Found Emma with ID:', emma.id, emma);
-        }
         
         // Group invitations by child
         const invitationsByChild: Record<number, ActivityInvitation[]> = {};
@@ -125,27 +125,14 @@ const ChildrenScreen = () => {
         });
         
         // Group invitations by the child they're for
-        let matchedCount = 0;
-        let unmatchedCount = 0;
-        
         response.data.forEach((invitation: any) => {
           if (invitation.status === 'pending') {
-            console.log('Processing pending invitation:', {
-              id: invitation.id,
-              activity_name: invitation.activity_name,
-              invited_child_id: invitation.invited_child_id,
-              invited_child_name: invitation.invited_child_name
-            });
-            
             // Find the child this invitation is for using child ID
             const targetChild = childrenData.find(child => 
               child.id === invitation.invited_child_id
             );
             
             if (targetChild) {
-              console.log('Matched invitation to child:', targetChild.name || targetChild.display_name);
-              matchedCount++;
-              
               // Add to the child's invitations
               invitationsByChild[targetChild.id].push({
                 id: invitation.id,
@@ -167,24 +154,54 @@ const ChildrenScreen = () => {
                 message: invitation.message,
                 created_at: invitation.created_at
               });
-            } else {
-              console.log('Could not match invitation - no child found with ID:', invitation.invited_child_id);
-              unmatchedCount++;
             }
           }
         });
-        
-        console.log(`ChildrenScreen: Invitation matching results: ${matchedCount} matched, ${unmatchedCount} unmatched`);
-        
-        // Log Emma's specific invitations
-        if (emma && invitationsByChild[emma.id]) {
-          console.log(`ChildrenScreen: Emma (ID: ${emma.id}) has ${invitationsByChild[emma.id].length} invitations:`, invitationsByChild[emma.id]);
-        }
         
         setChildInvitations(invitationsByChild);
       }
     } catch (error) {
       console.error('Failed to load invitations:', error);
+    }
+  };
+
+  const loadConnectionRequestsForChildren = async (childrenData: Child[]) => {
+    try {
+      // Get all connection requests for this parent
+      const response = await apiService.getConnectionRequests();
+      if (response.success && response.data) {
+        // Group connection requests by child
+        const connectionsByChild: Record<number, ConnectionRequest[]> = {};
+        
+        // Initialize empty arrays for each child
+        childrenData.forEach(child => {
+          connectionsByChild[child.id] = [];
+        });
+        
+        // Group connection requests by the target child
+        response.data.forEach((request: any) => {
+          // Find the child this connection request is for
+          const targetChild = childrenData.find(child => 
+            (child.display_name || child.name) === request.target_child_name
+          );
+          
+          if (targetChild) {
+            connectionsByChild[targetChild.id].push({
+              id: request.id,
+              requester_name: request.requester_name,
+              requester_email: request.requester_email,
+              child_name: request.child_name,
+              target_child_name: request.target_child_name,
+              message: request.message,
+              created_at: request.created_at
+            });
+          }
+        });
+        
+        setChildConnections(connectionsByChild);
+      }
+    } catch (error) {
+      console.error('Failed to load connection requests:', error);
     }
   };
 
@@ -215,6 +232,36 @@ const ChildrenScreen = () => {
       alert('Failed to respond to invitation');
     } finally {
       setProcessingInvitation(null);
+    }
+  };
+
+  const handleConnectionResponse = async (connectionId: number, action: 'accept' | 'reject') => {
+    try {
+      setProcessingConnection(connectionId);
+      const response = await apiService.respondToConnectionRequest(connectionId, action);
+      
+      if (response.success) {
+        // Remove the connection request from the child's list
+        setChildConnections(prev => {
+          const updated = { ...prev };
+          Object.keys(updated).forEach(childId => {
+            updated[parseInt(childId)] = updated[parseInt(childId)].filter(req => req.id !== connectionId);
+          });
+          return updated;
+        });
+        
+        const message = action === 'accept' 
+          ? 'Connection request accepted!' 
+          : 'Connection request declined.';
+        alert(message);
+      } else {
+        alert(`Error: ${response.error || 'Failed to respond to connection request'}`);
+      }
+    } catch (error) {
+      console.error('Failed to respond to connection request:', error);
+      alert('Failed to respond to connection request');
+    } finally {
+      setProcessingConnection(null);
     }
   };
 
@@ -359,13 +406,47 @@ const ChildrenScreen = () => {
                   {childActivityCounts[child.id] || 0} {childActivityCounts[child.id] === 1 ? 'Activity' : 'Activities'}
                 </div>
 
-                {/* Activity Invitations - Optimized Layout */}
-                {childInvitations[child.id] && childInvitations[child.id].length > 0 && (
+                {/* Notifications - Activity Invitations and Connection Requests */}
+                {((childInvitations[child.id] && childInvitations[child.id].length > 0) || 
+                  (childConnections[child.id] && childConnections[child.id].length > 0)) && (
                   <div className="child-invitations">
                     <div className="invitations-header">
-                      📩 {childInvitations[child.id].length} Invitation{childInvitations[child.id].length !== 1 ? 's' : ''}
+                      📩 {(childInvitations[child.id]?.length || 0) + (childConnections[child.id]?.length || 0)} Notification{((childInvitations[child.id]?.length || 0) + (childConnections[child.id]?.length || 0)) !== 1 ? 's' : ''}
                     </div>
-                    {childInvitations[child.id].map((invitation) => {
+                    
+                    {/* Connection Requests */}
+                    {childConnections[child.id] && childConnections[child.id].map((request) => (
+                      <div key={`connection_${request.id}`} className="invitation-item" onClick={(e) => e.stopPropagation()}>
+                        <div className="invitation-message">
+                          {request.requester_name} wants to connect{request.child_name ? ` with ${request.child_name}` : ''}
+                        </div>
+                        <div className="invitation-actions">
+                          <button
+                            className="invitation-accept-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConnectionResponse(request.id, 'accept');
+                            }}
+                            disabled={processingConnection === request.id}
+                          >
+                            {processingConnection === request.id ? '...' : 'Accept'}
+                          </button>
+                          <button
+                            className="invitation-reject-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConnectionResponse(request.id, 'reject');
+                            }}
+                            disabled={processingConnection === request.id}
+                          >
+                            {processingConnection === request.id ? '...' : 'Decline'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Activity Invitations */}
+                    {childInvitations[child.id] && childInvitations[child.id].map((invitation) => {
                       const childFullName = invitation.host_child_name && invitation.host_family_name 
                         ? `${invitation.host_child_name} ${invitation.host_family_name}`
                         : invitation.host_child_name || 'Someone';

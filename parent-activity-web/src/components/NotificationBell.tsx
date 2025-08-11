@@ -71,14 +71,9 @@ const NotificationBell: React.FC = () => {
           ).map((child: any) => child.id)
         : [];
       
-      console.log('NotificationBell: Parent child IDs:', parentChildIds);
-
       // Load connection requests
       const requestsResponse = await apiService.getConnectionRequests();
       if (requestsResponse.success && requestsResponse.data) {
-        console.log('NotificationBell: Connection requests received:', requestsResponse.data.length);
-        console.log('NotificationBell: Connection requests data:', requestsResponse.data);
-        
         setConnectionRequests(requestsResponse.data);
         
         // Convert connection requests to notifications
@@ -91,22 +86,16 @@ const NotificationBell: React.FC = () => {
           read: false,
           data: request
         }));
-        console.log('NotificationBell: Adding connection request notifications:', requestNotifications.length);
         allNotifications.push(...requestNotifications);
       }
 
       // Load activity invitations
       const invitationsResponse = await apiService.getActivityInvitations();
       if (invitationsResponse.success && invitationsResponse.data) {
-        console.log('NotificationBell: All invitations received:', invitationsResponse.data.length);
-        console.log('NotificationBell: All invitations data:', invitationsResponse.data);
-        
         // Filter to only pending invitations for this parent's children
         const pendingInvitations = invitationsResponse.data.filter((inv: ActivityInvitation) => 
           inv.status === 'pending' && inv.invited_child_id !== null && parentChildIds.includes(inv.invited_child_id)
         );
-        console.log('NotificationBell: Filtered pending invitations:', pendingInvitations.length);
-        console.log('NotificationBell: Pending invitations data:', pendingInvitations);
         
         setActivityInvitations(pendingInvitations);
         
@@ -143,9 +132,6 @@ const NotificationBell: React.FC = () => {
         allNotifications.push(...invitationNotifications);
       }
 
-      console.log('NotificationBell: Final notification count:', allNotifications.length);
-      console.log('NotificationBell: Final notifications:', allNotifications);
-      
       setNotifications(allNotifications);
     } catch (error) {
       console.error('Failed to load notifications:', error);

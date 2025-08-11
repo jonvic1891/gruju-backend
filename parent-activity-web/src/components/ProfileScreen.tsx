@@ -10,6 +10,11 @@ const ProfileScreen = () => {
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [loading, setLoading] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const apiService = ApiService.getInstance();
 
 
@@ -53,7 +58,59 @@ const ProfileScreen = () => {
   };
 
   const handleChangePassword = () => {
-    alert('Change Password feature will be implemented next');
+    setShowPasswordModal(true);
+  };
+
+  const handlePasswordSubmit = async () => {
+    if (!currentPassword.trim()) {
+      alert('Please enter your current password');
+      return;
+    }
+
+    if (!newPassword.trim()) {
+      alert('Please enter a new password');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      alert('New password must be at least 6 characters long');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      alert('New passwords do not match');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      const response = await apiService.changePassword({
+        currentPassword: currentPassword.trim(),
+        newPassword: newPassword.trim()
+      });
+
+      if (response.success) {
+        alert('Password changed successfully');
+        setShowPasswordModal(false);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        alert(`Failed to change password: ${response.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      alert('Failed to change password');
+      console.error('Change password error:', error);
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  const handlePasswordCancel = () => {
+    setShowPasswordModal(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
   };
 
   const handleLogout = () => {
@@ -197,6 +254,65 @@ const ProfileScreen = () => {
       <div className="app-info">
         <p>Parent Activity App v1.0.0</p>
       </div>
+
+      {/* Change Password Modal */}
+      {showPasswordModal && (
+        <div className="modal-overlay" onClick={handlePasswordCancel}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Change Password</h3>
+            
+            <div className="form-group">
+              <label>Current Password</label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="form-input"
+                placeholder="Enter your current password"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>New Password</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="form-input"
+                placeholder="Enter new password (min 6 characters)"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Confirm New Password</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="form-input"
+                placeholder="Confirm new password"
+              />
+            </div>
+
+            <div className="modal-actions">
+              <button
+                onClick={handlePasswordCancel}
+                className="cancel-btn"
+                disabled={passwordLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePasswordSubmit}
+                disabled={passwordLoading}
+                className={`confirm-btn ${passwordLoading ? 'disabled' : ''}`}
+              >
+                {passwordLoading ? 'Changing...' : 'Change Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

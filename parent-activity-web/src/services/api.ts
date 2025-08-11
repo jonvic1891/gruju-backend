@@ -135,6 +135,10 @@ class ApiService {
     return response;
   }
 
+  async changePassword(passwordData: { currentPassword: string; newPassword: string }): Promise<ApiResponse<any>> {
+    return this.request('put', '/api/users/change-password', passwordData);
+  }
+
   // Children
   async getChildren(): Promise<ApiResponse<any[]>> {
     return this.request('get', '/api/children');
