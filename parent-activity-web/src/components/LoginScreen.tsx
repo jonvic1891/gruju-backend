@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import './LoginScreen.css';
 
@@ -7,9 +7,23 @@ const LoginScreen = () => {
   const [password, setPassword] = useState('');
   const [showDemoAccounts, setShowDemoAccounts] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
-  const [username, setUsername] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [phone, setPhone] = useState('');
   const { login, register, isLoading } = useAuth();
+
+  // Clear all form fields when switching between login and register modes
+  useEffect(() => {
+    setEmail('');
+    setPassword('');
+    setFirstName('');
+    setLastName('');
+    setConfirmPassword('');
+    setPhone('');
+  }, [isRegisterMode]);
 
   const demoAccounts = [
     {
@@ -71,12 +85,17 @@ const LoginScreen = () => {
     }
 
     if (isRegisterMode) {
-      if (!username.trim() || !phone.trim()) {
+      if (!firstName.trim() || !lastName.trim() || !phone.trim()) {
         alert('Please fill in all fields');
         return;
       }
       
-      const result = await register({ username, email, phone, password });
+      if (password !== confirmPassword) {
+        alert('Passwords do not match');
+        return;
+      }
+      
+      const result = await register({ username: `${firstName} ${lastName}`, email, phone, password });
       if (!result.success) {
         alert(`Registration Failed: ${result.error}`);
       }
@@ -110,24 +129,36 @@ const LoginScreen = () => {
           <p>Connect and share activities</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="form">
+        <form onSubmit={handleSubmit} className="form" key={isRegisterMode ? 'register' : 'login'}>
           <h2>{isRegisterMode ? 'Register' : 'Login'}</h2>
           
           {isRegisterMode && (
             <>
-              <input
-                type="text"
-                placeholder="Username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="input"
-              />
+              <div className="name-fields">
+                <input
+                  type="text"
+                  placeholder="First Name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="input name-input"
+                  autoComplete="given-name"
+                />
+                <input
+                  type="text"
+                  placeholder="Last Name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="input name-input"
+                  autoComplete="family-name"
+                />
+              </div>
               <input
                 type="tel"
                 placeholder="Phone"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="input"
+                autoComplete="tel"
               />
             </>
           )}
@@ -138,15 +169,46 @@ const LoginScreen = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="input"
+            autoComplete={isRegisterMode ? "email" : "username"}
           />
           
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="input"
-          />
+          <div className="password-field">
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="input password-input"
+              autoComplete={isRegisterMode ? "new-password" : "current-password"}
+            />
+            <button
+              type="button"
+              className="password-toggle"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          
+          {isRegisterMode && (
+            <div className="password-field">
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="input password-input"
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                {showConfirmPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+          )}
 
           <button 
             type="submit" 
@@ -171,7 +233,7 @@ const LoginScreen = () => {
             className="demo-toggle"
             onClick={() => setShowDemoAccounts(!showDemoAccounts)}
           >
-            {showDemoAccounts ? '🔼 Hide Demo Accounts' : '🔽 Show Demo Accounts'}
+            {showDemoAccounts ? 'Hide Demo Accounts' : 'Show Demo Accounts'}
           </button>
 
           {showDemoAccounts && (
@@ -187,7 +249,6 @@ const LoginScreen = () => {
                   onClick={() => handleDemoLogin(account)}
                 >
                   <div className="demo-header">
-                    <span className="demo-icon">{account.icon}</span>
                     <div className="demo-info">
                       <div className="demo-type">{account.type}</div>
                       <div className="demo-email">{account.email}</div>
@@ -204,7 +265,7 @@ const LoginScreen = () => {
               ))}
               
               <div className="demo-note">
-                💡 All demo accounts use password: demo123
+                All demo accounts use password: demo123
               </div>
             </div>
           )}

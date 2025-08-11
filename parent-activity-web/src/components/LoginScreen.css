@@ -214,6 +214,48 @@
   font-style: italic;
 }
 
+.name-fields {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.name-input {
+  margin-bottom: 0;
+}
+
+.password-field {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.password-input {
+  padding-right: 45px;
+  margin-bottom: 0;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: #6c757d;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.password-toggle:hover {
+  color: #007bff;
+}
+
 /* Mobile optimization */
 @media (max-width: 768px) {
   .login-container {

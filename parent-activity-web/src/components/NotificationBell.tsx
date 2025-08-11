@@ -33,8 +33,12 @@ interface ActivityInvitation {
   end_time?: string;
   location?: string;
   status: 'pending' | 'accepted' | 'declined';
-  inviter_name: string;
-  inviter_email: string;
+  host_child_name?: string;
+  host_family_name?: string;
+  host_parent_name?: string;
+  host_parent_email?: string;
+  invited_child_id?: number;
+  invited_child_name?: string;
   message?: string;
   created_at: string;
 }
@@ -58,9 +62,23 @@ const NotificationBell: React.FC = () => {
     try {
       let allNotifications: Notification[] = [];
 
+      // Load parent's children first to filter invitations
+      const childrenResponse = await apiService.getChildren();
+      const parentChildIds = childrenResponse.success && childrenResponse.data 
+        ? (Array.isArray(childrenResponse.data) 
+           ? childrenResponse.data 
+           : (childrenResponse.data as any)?.data || []
+          ).map((child: any) => child.id)
+        : [];
+      
+      console.log('NotificationBell: Parent child IDs:', parentChildIds);
+
       // Load connection requests
       const requestsResponse = await apiService.getConnectionRequests();
       if (requestsResponse.success && requestsResponse.data) {
+        console.log('NotificationBell: Connection requests received:', requestsResponse.data.length);
+        console.log('NotificationBell: Connection requests data:', requestsResponse.data);
+        
         setConnectionRequests(requestsResponse.data);
         
         // Convert connection requests to notifications
@@ -73,28 +91,61 @@ const NotificationBell: React.FC = () => {
           read: false,
           data: request
         }));
+        console.log('NotificationBell: Adding connection request notifications:', requestNotifications.length);
         allNotifications.push(...requestNotifications);
       }
 
       // Load activity invitations
       const invitationsResponse = await apiService.getActivityInvitations();
       if (invitationsResponse.success && invitationsResponse.data) {
-        const pendingInvitations = invitationsResponse.data.filter((inv: ActivityInvitation) => inv.status === 'pending');
+        console.log('NotificationBell: All invitations received:', invitationsResponse.data.length);
+        console.log('NotificationBell: All invitations data:', invitationsResponse.data);
+        
+        // Filter to only pending invitations for this parent's children
+        const pendingInvitations = invitationsResponse.data.filter((inv: ActivityInvitation) => 
+          inv.status === 'pending' && inv.invited_child_id !== null && parentChildIds.includes(inv.invited_child_id)
+        );
+        console.log('NotificationBell: Filtered pending invitations:', pendingInvitations.length);
+        console.log('NotificationBell: Pending invitations data:', pendingInvitations);
+        
         setActivityInvitations(pendingInvitations);
         
         // Convert pending activity invitations to notifications
-        const invitationNotifications: Notification[] = pendingInvitations.map((invitation: ActivityInvitation) => ({
-          id: `invitation_${invitation.id}`,
-          type: 'activity_invitation' as const,
-          title: 'Activity Invitation',
-          message: `${invitation.inviter_name} invited you to "${invitation.activity_name}" on ${new Date(invitation.start_date).toLocaleDateString()}`,
-          timestamp: invitation.created_at,
-          read: false,
-          data: invitation
-        }));
+        const invitationNotifications: Notification[] = pendingInvitations.map((invitation: ActivityInvitation) => {
+          const childFullName = invitation.host_child_name && invitation.host_family_name 
+            ? `${invitation.host_child_name} ${invitation.host_family_name}`
+            : invitation.host_child_name || 'Someone';
+          
+          const formatDate = (dateString: string) => {
+            const date = new Date(dateString);
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+          };
+
+          const timeRange = invitation.start_time && invitation.end_time 
+            ? ` at ${invitation.start_time}-${invitation.end_time}`
+            : invitation.start_time
+            ? ` at ${invitation.start_time}`
+            : '';
+          
+          return {
+            id: `invitation_${invitation.id}`,
+            type: 'activity_invitation' as const,
+            title: 'Activity Invitation',
+            message: `${childFullName} invited you to "${invitation.activity_name}" on ${formatDate(invitation.start_date)}${timeRange}`,
+            timestamp: invitation.created_at,
+            read: false,
+            data: invitation
+          };
+        });
         allNotifications.push(...invitationNotifications);
       }
 
+      console.log('NotificationBell: Final notification count:', allNotifications.length);
+      console.log('NotificationBell: Final notifications:', allNotifications);
+      
       setNotifications(allNotifications);
     } catch (error) {
       console.error('Failed to load notifications:', error);
@@ -274,17 +325,6 @@ const NotificationBell: React.FC = () => {
 
                   {notification.type === 'activity_invitation' && notification.data && (
                     <div className="notification-actions">
-                      <div className="invitation-details">
-                        {notification.data.start_time && (
-                          <small>{notification.data.start_time} - {notification.data.end_time}</small>
-                        )}
-                        {notification.data.location && (
-                          <small>📍 {notification.data.location}</small>
-                        )}
-                        {notification.data.message && (
-                          <small style={{ fontStyle: 'italic' }}>"{notification.data.message}"</small>
-                        )}
-                      </div>
                       <div className="action-buttons">
                         <button 
                           className="accept-btn"

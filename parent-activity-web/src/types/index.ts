@@ -117,9 +117,11 @@ export interface ActivityInvitation {
   location?: string;
   cost?: number;
   website_url?: string;
-  inviter_name?: string;
-  inviter_email?: string;
-  child_name?: string;
+  host_child_name?: string;
+  host_family_name?: string;
+  host_parent_name?: string;
+  host_parent_email?: string;
+  invited_child_name?: string;
 }
 
 // API types

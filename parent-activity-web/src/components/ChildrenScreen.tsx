@@ -15,8 +15,11 @@ interface ActivityInvitation {
   end_time?: string;
   location?: string;
   status: 'pending' | 'accepted' | 'declined';
-  host_parent_name: string;
-  host_parent_email: string;
+  host_child_name?: string;
+  host_family_name?: string;
+  host_parent_name?: string;
+  host_parent_email?: string;
+  invited_child_id?: number;
   invited_child_name?: string;
   message?: string;
   created_at: string;
@@ -99,6 +102,20 @@ const ChildrenScreen = () => {
       // Get all activity invitations for this parent
       const response = await apiService.getActivityInvitations();
       if (response.success && response.data) {
+        console.log('ChildrenScreen: All activity invitations:', response.data.length);
+        console.log('ChildrenScreen: All invitations data:', response.data);
+        console.log('ChildrenScreen: Children data:', childrenData);
+        
+        // Find Emma specifically for debugging
+        const emma = childrenData.find(child => 
+          (child.display_name && child.display_name.toLowerCase().includes('emma')) ||
+          (child.name && child.name.toLowerCase().includes('emma')) ||
+          (child.first_name && child.first_name.toLowerCase().includes('emma'))
+        );
+        if (emma) {
+          console.log('ChildrenScreen: Found Emma with ID:', emma.id, emma);
+        }
+        
         // Group invitations by child
         const invitationsByChild: Record<number, ActivityInvitation[]> = {};
         
@@ -108,32 +125,61 @@ const ChildrenScreen = () => {
         });
         
         // Group invitations by the child they're for
+        let matchedCount = 0;
+        let unmatchedCount = 0;
+        
         response.data.forEach((invitation: any) => {
-          // Find the child this invitation is for
-          const targetChild = childrenData.find(child => 
-            child.name === invitation.invited_child_name
-          );
-          
-          if (targetChild && invitation.status === 'pending') {
-            invitationsByChild[targetChild.id].push({
+          if (invitation.status === 'pending') {
+            console.log('Processing pending invitation:', {
               id: invitation.id,
-              activity_id: invitation.activity_id,
               activity_name: invitation.activity_name,
-              activity_description: invitation.activity_description,
-              start_date: invitation.start_date,
-              end_date: invitation.end_date,
-              start_time: invitation.start_time,
-              end_time: invitation.end_time,
-              location: invitation.location,
-              status: invitation.status,
-              host_parent_name: invitation.host_parent_name,
-              host_parent_email: invitation.host_parent_email,
-              invited_child_name: invitation.invited_child_name,
-              message: invitation.message,
-              created_at: invitation.created_at
+              invited_child_id: invitation.invited_child_id,
+              invited_child_name: invitation.invited_child_name
             });
+            
+            // Find the child this invitation is for using child ID
+            const targetChild = childrenData.find(child => 
+              child.id === invitation.invited_child_id
+            );
+            
+            if (targetChild) {
+              console.log('Matched invitation to child:', targetChild.name || targetChild.display_name);
+              matchedCount++;
+              
+              // Add to the child's invitations
+              invitationsByChild[targetChild.id].push({
+                id: invitation.id,
+                activity_id: invitation.activity_id,
+                activity_name: invitation.activity_name,
+                activity_description: invitation.activity_description,
+                start_date: invitation.start_date,
+                end_date: invitation.end_date,
+                start_time: invitation.start_time,
+                end_time: invitation.end_time,
+                location: invitation.location,
+                status: invitation.status,
+                host_child_name: invitation.host_child_name,
+                host_family_name: invitation.host_family_name,
+                host_parent_name: invitation.host_parent_name,
+                host_parent_email: invitation.host_parent_email,
+                invited_child_id: invitation.invited_child_id,
+                invited_child_name: invitation.invited_child_name,
+                message: invitation.message,
+                created_at: invitation.created_at
+              });
+            } else {
+              console.log('Could not match invitation - no child found with ID:', invitation.invited_child_id);
+              unmatchedCount++;
+            }
           }
         });
+        
+        console.log(`ChildrenScreen: Invitation matching results: ${matchedCount} matched, ${unmatchedCount} unmatched`);
+        
+        // Log Emma's specific invitations
+        if (emma && invitationsByChild[emma.id]) {
+          console.log(`ChildrenScreen: Emma (ID: ${emma.id}) has ${invitationsByChild[emma.id].length} invitations:`, invitationsByChild[emma.id]);
+        }
         
         setChildInvitations(invitationsByChild);
       }
@@ -181,6 +227,11 @@ const ChildrenScreen = () => {
       alert('Please enter the child\'s first name');
       return;
     }
+    
+    if (!newChildLastName.trim()) {
+      alert('Please enter the child\'s last name');
+      return;
+    }
 
     setAddingChild(true);
     try {
@@ -194,7 +245,6 @@ const ChildrenScreen = () => {
         setNewChildLastName('');
         setShowAddModal(false);
         loadChildren();
-        alert('Child added successfully');
       } else {
         alert(`Error: ${response.error || 'Failed to add child'}`);
       }
@@ -298,15 +348,15 @@ const ChildrenScreen = () => {
                   {child.grade && `Grade: ${child.grade}`}
                 </div>
                 {child.school && (
-                  <div className="child-school">🏫 {child.school}</div>
+                  <div className="child-school">School: {child.school}</div>
                 )}
                 {child.interests && (
-                  <div className="child-interests">💡 {child.interests}</div>
+                  <div className="child-interests">Interests: {child.interests}</div>
                 )}
                 
                 {/* Activity Count Badge */}
                 <div className="child-activity-count">
-                  📋 {childActivityCounts[child.id] || 0} {childActivityCounts[child.id] === 1 ? 'Activity' : 'Activities'}
+                  {childActivityCounts[child.id] || 0} {childActivityCounts[child.id] === 1 ? 'Activity' : 'Activities'}
                 </div>
 
                 {/* Activity Invitations - Optimized Layout */}
@@ -315,12 +365,29 @@ const ChildrenScreen = () => {
                     <div className="invitations-header">
                       📩 {childInvitations[child.id].length} Invitation{childInvitations[child.id].length !== 1 ? 's' : ''}
                     </div>
-                    {childInvitations[child.id].map((invitation) => (
-                      <div key={invitation.id} className="invitation-item" onClick={(e) => e.stopPropagation()}>
-                        <div className="invitation-header">
-                          <div className="invitation-activity">
-                            <strong>{invitation.activity_name}</strong>
-                            <span className="invitation-from">from {invitation.host_parent_name}</span>
+                    {childInvitations[child.id].map((invitation) => {
+                      const childFullName = invitation.host_child_name && invitation.host_family_name 
+                        ? `${invitation.host_child_name} ${invitation.host_family_name}`
+                        : invitation.host_child_name || 'Someone';
+                      
+                      const formatDate = (dateString: string) => {
+                        const date = new Date(dateString);
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const year = date.getFullYear();
+                        return `${day}/${month}/${year}`;
+                      };
+
+                      const timeRange = invitation.start_time && invitation.end_time 
+                        ? ` at ${invitation.start_time}-${invitation.end_time}`
+                        : invitation.start_time
+                        ? ` at ${invitation.start_time}`
+                        : '';
+
+                      return (
+                        <div key={invitation.id} className="invitation-item" onClick={(e) => e.stopPropagation()}>
+                          <div className="invitation-message">
+                            {childFullName} invited you to "{invitation.activity_name}" on {formatDate(invitation.start_date)}{timeRange}
                           </div>
                           <div className="invitation-actions">
                             <button
@@ -345,22 +412,8 @@ const ChildrenScreen = () => {
                             </button>
                           </div>
                         </div>
-                        <div className="invitation-meta">
-                          <span className="invitation-meta-item">
-                            📅 {new Date(invitation.start_date).toLocaleDateString()}
-                          </span>
-                          {invitation.start_time && (
-                            <span className="invitation-meta-item">🕐 {invitation.start_time}</span>
-                          )}
-                          {invitation.location && (
-                            <span className="invitation-meta-item">📍 {invitation.location}</span>
-                          )}
-                        </div>
-                        {invitation.message && (
-                          <div className="invitation-message">"{invitation.message}"</div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 
@@ -377,7 +430,7 @@ const ChildrenScreen = () => {
                   }}
                   title="Delete child"
                 >
-                  🗑️
+                  Delete
                 </button>
               </div>
             </div>
@@ -401,7 +454,7 @@ const ChildrenScreen = () => {
               />
               <input
                 type="text"
-                placeholder="Last name (optional)"
+                placeholder="Last name"
                 value={newChildLastName}
                 onChange={(e) => setNewChildLastName(e.target.value)}
                 className="modal-input"

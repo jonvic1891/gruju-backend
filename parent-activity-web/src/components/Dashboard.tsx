@@ -69,7 +69,6 @@ const Dashboard = () => {
             className={`nav-item ${activeTab === 'children' ? 'active' : ''}`}
             onClick={() => setActiveTab('children')}
           >
-            <span className="nav-icon">👶</span>
             <span className="nav-label">My Children</span>
           </button>
           
@@ -77,7 +76,6 @@ const Dashboard = () => {
             className={`nav-item ${activeTab === 'calendar' ? 'active' : ''}`}
             onClick={() => setActiveTab('calendar')}
           >
-            <span className="nav-icon">📅</span>
             <span className="nav-label">Calendar</span>
           </button>
           
@@ -85,7 +83,6 @@ const Dashboard = () => {
             className={`nav-item ${activeTab === 'connections' ? 'active' : ''}`}
             onClick={() => setActiveTab('connections')}
           >
-            <span className="nav-icon">🤝</span>
             <span className="nav-label">Connections</span>
           </button>
           
@@ -93,7 +90,6 @@ const Dashboard = () => {
             className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`}
             onClick={() => setActiveTab('profile')}
           >
-            <span className="nav-icon">👤</span>
             <span className="nav-label">Profile</span>
           </button>
           
@@ -102,7 +98,6 @@ const Dashboard = () => {
               className={`nav-item ${activeTab === 'admin' ? 'active' : ''}`}
               onClick={() => setActiveTab('admin')}
             >
-              <span className="nav-icon">⚙️</span>
               <span className="nav-label">Admin</span>
               <span className="admin-badge">
                 {user?.role === 'super_admin' ? 'SA' : 'A'}
@@ -120,7 +115,6 @@ const Dashboard = () => {
                 className={`nav-item ${activeTab === 'children' ? 'active' : ''}`}
                 onClick={() => handleMobileNavClick('children')}
               >
-                <span className="nav-icon">👶</span>
                 <span className="nav-label">My Children</span>
               </button>
               
@@ -128,7 +122,6 @@ const Dashboard = () => {
                 className={`nav-item ${activeTab === 'calendar' ? 'active' : ''}`}
                 onClick={() => handleMobileNavClick('calendar')}
               >
-                <span className="nav-icon">📅</span>
                 <span className="nav-label">Calendar</span>
               </button>
               
@@ -136,7 +129,6 @@ const Dashboard = () => {
                 className={`nav-item ${activeTab === 'connections' ? 'active' : ''}`}
                 onClick={() => handleMobileNavClick('connections')}
               >
-                <span className="nav-icon">🤝</span>
                 <span className="nav-label">Connections</span>
               </button>
               
@@ -144,7 +136,6 @@ const Dashboard = () => {
                 className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`}
                 onClick={() => handleMobileNavClick('profile')}
               >
-                <span className="nav-icon">👤</span>
                 <span className="nav-label">Profile</span>
               </button>
               
@@ -153,7 +144,6 @@ const Dashboard = () => {
                   className={`nav-item ${activeTab === 'admin' ? 'active' : ''}`}
                   onClick={() => handleMobileNavClick('admin')}
                 >
-                  <span className="nav-icon">⚙️</span>
                   <span className="nav-label">Admin</span>
                   <span className="admin-badge">
                     {user?.role === 'super_admin' ? 'SA' : 'A'}
