@@ -2227,6 +2227,7 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
                     ai.message as invitation_message,
                     ai.id as invitation_id,
                     ai.status,
+                    ai.viewed_at,
                     c_invited.name as invited_child_name
             FROM activities a
             INNER JOIN children c ON a.child_id = c.id
@@ -2236,7 +2237,6 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
             WHERE ai.invited_parent_id = $1
               AND a.start_date <= $3
               AND (a.end_date IS NULL OR a.end_date >= $2)
-              AND (ai.status != 'pending' OR ai.viewed_at IS NULL)
             ORDER BY a.start_date, a.start_time, ai.status
         `;
         
