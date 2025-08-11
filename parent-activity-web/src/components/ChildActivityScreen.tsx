@@ -8,9 +8,10 @@ import './ChildActivityScreen.css';
 interface ChildActivityScreenProps {
   child: Child;
   onBack: () => void;
+  onDataChanged?: () => void;
 }
 
-const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack }) => {
+const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack, onDataChanged }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [invitedActivities, setInvitedActivities] = useState<any[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
@@ -174,8 +175,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         // Reload activities to update the display
         loadActivities();
         
-        // Close the detail modal
+        // Close the detail modal and refresh parent data
         navigateToPage('main');
+        onDataChanged?.();
       } else {
         alert(`Error: ${response.error || 'Failed to respond to invitation'}`);
       }
@@ -270,9 +272,24 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   };
 
-  const handleActivityClick = (activity: Activity) => {
+  const handleActivityClick = async (activity: Activity) => {
     setSelectedActivity(activity);
     navigateToPage('activity-detail');
+    
+    // Mark invitation as viewed if this is a pending invitation
+    if (activity.isPendingInvitation) {
+      const invitationId = (activity as any).invitation_id || activity.id;
+      if (invitationId) {
+        try {
+          // Call the backend API to mark invitation as viewed
+          await apiService.markInvitationAsViewed(invitationId);
+          // Set a flag to refresh data when returning from detail view
+          sessionStorage.setItem('invitationViewed', 'true');
+        } catch (error) {
+          console.error('Failed to mark invitation as viewed:', error);
+        }
+      }
+    }
     
     // Populate newActivity state with selected activity data for inline editing
     setNewActivity({
@@ -741,6 +758,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       }));
 
       // Get pending invitations for this day (convert to activity format)
+      // Only show envelope icon for invitations that haven't been viewed
       const dayPendingInvitations = pendingInvitations.filter(invitation => {
         const invitationStartDate = invitation.start_date.split('T')[0];
         return invitationStartDate === dateString;
@@ -750,7 +768,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         activity_id: invitation.id, // Original activity ID from backend for participants API
         name: invitation.activity_name,
         description: invitation.activity_description,
-        isPendingInvitation: true,
+        isPendingInvitation: !invitation.viewed_at, // Only show as pending invitation if not viewed
         invitationId: invitation.invitation_id,
         hostParent: invitation.host_parent_username,
         host_child_name: invitation.child_name,
@@ -836,6 +854,13 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   const navigateToPage = (page: typeof currentPage) => {
     if (page !== currentPage) {
+      // If returning to main and an invitation was viewed, refresh both local and parent data
+      if (page === 'main' && sessionStorage.getItem('invitationViewed') === 'true') {
+        sessionStorage.removeItem('invitationViewed');
+        loadActivities(); // Refresh local activity data to update envelope icons
+        onDataChanged?.(); // Refresh parent data
+      }
+      
       setCurrentPage(page);
       // Push new state to history
       window.history.pushState({ page }, '', window.location.href);
@@ -1726,25 +1751,27 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                           key={actIndex} 
                           className="activity-block"
                           style={{
-                            background: colors.background,
-                            borderLeftColor: colors.borderColor
+                            background: colors.background
                           }}
                           onClick={() => handleActivityClick(activity)}
                         >
-                          <div className="activity-time">
-                            {activity.start_time ? formatTime(activity.start_time) : 'All day'}
-                          </div>
-                          <div className="activity-name">
-                            {activity.name}
-                            {activity.isPendingInvitation && <span className="invitation-badge">📩</span>}
-                            {activity.isAcceptedInvitation && <span className="invitation-badge">✅</span>}
-                            {activity.isDeclinedInvitation && <span className="invitation-badge">❌</span>}
+                          <div className="activity-content">
+                            <div className="activity-time">
+                              {activity.start_time ? formatTime(activity.start_time) : 'All day'}
+                            </div>
+                            <div className="activity-name">
+                              {activity.name}
+                            </div>
+                            {activity.location && (
+                              <div className="activity-location">📍 {activity.location}</div>
+                            )}
                           </div>
                           {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) && (
-                            <div className="activity-host">from {activity.host_child_name || activity.hostParent}</div>
-                          )}
-                          {activity.location && (
-                            <div className="activity-location">📍 {activity.location}</div>
+                            <div className="activity-footer">
+                              {activity.isPendingInvitation && <span className="notification-icon">📩</span>}
+                              {activity.isAcceptedInvitation && <span className="notification-icon">✅</span>}
+                              {activity.isDeclinedInvitation && <span className="notification-icon">❌</span>}
+                            </div>
                           )}
                         </div>
                       );
