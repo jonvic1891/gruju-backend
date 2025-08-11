@@ -455,18 +455,11 @@ const ConnectionsScreen = () => {
                   {requests.map((request: any) => (
                     <div key={request.id} className="connection-item">
                       <span className="connected-to">
-                        Request sent to <strong>{request.target_parent_name}</strong>
-                        {request.target_child_name && (
-                          <span> for <strong>{request.target_child_name}</strong></span>
+                        {request.target_child_name ? (
+                          <strong>{request.target_child_name}</strong>
+                        ) : (
+                          <span>Request sent to <strong>{request.target_parent_name}</strong></span>
                         )}
-                        <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
-                          Status: <span style={{ 
-                            color: request.status === 'pending' ? '#ffa500' : 
-                                  request.status === 'accepted' ? '#28a745' : '#dc3545'
-                          }}>
-                            {request.status}
-                          </span>
-                        </div>
                       </span>
                     </div>
                   ))}
