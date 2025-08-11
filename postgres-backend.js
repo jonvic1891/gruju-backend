@@ -756,9 +756,8 @@ app.post('/api/auth/login', async (req, res) => {
 
         const user = result.rows[0];
         
-        // For demo purposes, accept 'demo123' as password for all demo accounts
-        const isValidPassword = password === 'demo123' || 
-            await bcrypt.compare(password, user.password_hash);
+        // Verify password against stored hash
+        const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
         if (!isValidPassword) {
             await logActivity('warn', `Failed login attempt for ${email}`, null, null, req);
@@ -1018,21 +1017,35 @@ app.put('/api/users/change-password', authenticateToken, async (req, res) => {
         const user = userResult.rows[0];
 
         // Verify current password
+        console.log('🔒 Verifying current password for user:', req.user.id);
         const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password_hash);
+        console.log('🔒 Current password valid:', isCurrentPasswordValid);
+        
         if (!isCurrentPasswordValid) {
             client.release();
             return res.status(400).json({ error: 'Current password is incorrect' });
         }
 
         // Hash new password
+        console.log('🔒 Hashing new password');
         const saltRounds = 10;
         const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+        console.log('🔒 New password hash generated');
 
         // Update password
-        await client.query(
+        console.log('🔒 Updating password in database for user:', req.user.id);
+        const updateResult = await client.query(
             'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
             [newPasswordHash, req.user.id]
         );
+        console.log('🔒 Password update result:', updateResult.rowCount, 'rows affected');
+
+        // Verify the update worked
+        const verifyResult = await client.query(
+            'SELECT password_hash FROM users WHERE id = $1',
+            [req.user.id]
+        );
+        console.log('🔒 Password was actually updated:', verifyResult.rows[0].password_hash !== user.password_hash);
         
         client.release();
 
