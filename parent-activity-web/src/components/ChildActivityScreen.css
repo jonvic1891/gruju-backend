@@ -414,6 +414,17 @@ input[type="url"], input[type="tel"], textarea, select {
   --days-count: 5;
 }
 
+/* Smaller text for 7-day view to fit better */
+.week-calendar-container[data-view="7day"] .activity-time {
+  font-size: 8px;
+  padding: 1px 4px;
+}
+
+.week-calendar-container[data-view="7day"] .activity-name {
+  font-size: 11px;
+  line-height: 1.1;
+}
+
 .week-day {
   background: #f8f9fa;
   border-radius: 8px;
@@ -443,20 +454,37 @@ input[type="url"], input[type="tel"], textarea, select {
 .activity-block {
   color: white !important;
   border-radius: 12px;
-  padding: 10px 12px;
   margin-bottom: 6px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   transition: all 0.2s;
-  border-left: 4px solid;
   min-height: fit-content;
-  height: auto; /* Allow dynamic expansion */
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.activity-content {
+  padding: 10px 12px;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* Much darker background for strong contrast */
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.75)) !important;
-  backdrop-filter: blur(2px);
+}
+
+.activity-footer {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 6px 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.notification-icon {
+  font-size: 16px;
+  opacity: 0.9;
 }
 
 .activity-block:hover {
@@ -474,7 +502,9 @@ input[type="url"], input[type="tel"], textarea, select {
   display: inline-block;
   align-self: flex-start;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-  white-space: nowrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
 }
 
 .activity-name {
@@ -1287,8 +1317,15 @@ input[type="url"], input[type="tel"], textarea, select {
     padding: 8px;
   }
   
-  .activity-block {
+  .activity-content {
     padding: 8px;
+  }
+  
+  .activity-footer {
+    padding: 4px 8px;
+  }
+  
+  .activity-block {
     margin-bottom: 4px;
   }
   
@@ -1490,17 +1527,18 @@ input[type="url"], input[type="tel"], textarea, select {
     overflow: hidden; /* Prevent content overflow */
   }
   
-  .activity-block {
+  .activity-content {
     padding: 6px 8px;
+    gap: 2px;
+  }
+  
+  .activity-footer {
+    padding: 3px 8px;
+  }
+  
+  .activity-block {
     margin-bottom: 4px;
     border-radius: 6px;
-    min-height: fit-content;
-    height: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    background: linear-gradient(135deg, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.75)) !important;
-    color: white !important;
   }
   
   .activity-name {

@@ -1223,6 +1223,19 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
             
             console.log('🎯 Retrieved activities from database:', activities.length);
             
+            // Debug specific activity
+            const notification3 = activities.find(a => a.name === 'Notification 3');
+            if (notification3) {
+                console.log('🔍 "Notification 3" debug:', {
+                    name: notification3.name,
+                    is_shared: notification3.is_shared,
+                    is_host: notification3.is_host,
+                    auto_notify_new_connections: notification3.auto_notify_new_connections,
+                    invitation_status: notification3.invitation_status,
+                    inviter_parent_id: notification3.inviter_parent_id
+                });
+            }
+            
             res.json({
                 success: true,
                 data: activities

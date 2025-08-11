@@ -360,30 +360,33 @@
   color: #666;
   font-size: 11px;
   margin-bottom: 6px;
-  line-height: 1.3;
-  max-height: 2.6em;
+  line-height: 1.4;
+  max-height: 3.6em;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+  word-wrap: break-word;
 }
 
 .invitation-actions {
   display: flex;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
-.invitation-accept-btn, .invitation-reject-btn {
+.invitation-accept-btn, .invitation-reject-btn, .invitation-calendar-btn {
   flex: 1;
-  padding: 4px 8px;
+  padding: 6px 8px;
   border: none;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  min-height: 24px;
+  min-height: 28px;
+  white-space: nowrap;
 }
 
 .invitation-accept-btn {
@@ -404,7 +407,16 @@
   background: #c82333;
 }
 
-.invitation-accept-btn:disabled, .invitation-reject-btn:disabled {
+.invitation-calendar-btn {
+  background: #007bff;
+  color: white;
+}
+
+.invitation-calendar-btn:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.invitation-accept-btn:disabled, .invitation-reject-btn:disabled, .invitation-calendar-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -465,11 +477,15 @@
   }
   
   .invitation-actions {
-    flex-direction: column;
+    flex-direction: row;
+    gap: 4px;
   }
   
-  .invitation-accept-btn, .invitation-reject-btn {
-    flex: none;
+  .invitation-accept-btn, .invitation-reject-btn, .invitation-calendar-btn {
+    flex: 1;
+    font-size: 9px;
+    padding: 6px 4px;
+    min-height: 28px;
   }
   
   .empty-state {

@@ -13,6 +13,7 @@ type Tab = 'children' | 'calendar' | 'connections' | 'profile' | 'admin';
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState<Tab>('children');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
@@ -23,10 +24,23 @@ const Dashboard = () => {
     setMobileMenuOpen(false);
   };
 
+  const handleChildSelection = (child: any) => {
+    // Set the selected child ID and ensure we're on the children tab
+    setSelectedChildId(child.id);
+    setActiveTab('children');
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'children':
-        return <ChildrenScreen />;
+        return <ChildrenScreen 
+          onNavigateToCalendar={() => setActiveTab('calendar')} 
+          onNavigateToChildCalendar={(child) => {
+            handleChildSelection(child);
+          }}
+          initialSelectedChildId={selectedChildId}
+          onChildSelectionChange={setSelectedChildId}
+        />;
       case 'calendar':
         return <CalendarScreen />;
       case 'connections':
@@ -36,7 +50,7 @@ const Dashboard = () => {
       case 'admin':
         return isAdmin ? <AdminScreen /> : <div>Access Denied</div>;
       default:
-        return <ChildrenScreen />;
+        return <ChildrenScreen onNavigateToCalendar={() => setActiveTab('calendar')} />;
     }
   };
 

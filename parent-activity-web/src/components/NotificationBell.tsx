@@ -76,17 +76,18 @@ const NotificationBell: React.FC = () => {
       if (requestsResponse.success && requestsResponse.data) {
         setConnectionRequests(requestsResponse.data);
         
-        // Convert connection requests to notifications
-        const requestNotifications: Notification[] = requestsResponse.data.map((request: ConnectionRequest) => ({
-          id: `connection_${request.id}`,
-          type: 'connection_request' as const,
-          title: 'New Connection Request',
-          message: `${request.requester_name} wants to connect${request.child_name ? ` with ${request.child_name}` : ''}`,
-          timestamp: request.created_at,
-          read: false,
-          data: request
-        }));
-        allNotifications.push(...requestNotifications);
+        // Create summary for connection requests
+        if (requestsResponse.data.length > 0) {
+          allNotifications.push({
+            id: 'connection_requests_summary',
+            type: 'connection_request' as const,
+            title: 'Connection Requests',
+            message: `You have ${requestsResponse.data.length} new connection request${requestsResponse.data.length !== 1 ? 's' : ''}`,
+            timestamp: requestsResponse.data[0].created_at,
+            read: false,
+            data: requestsResponse.data
+          });
+        }
       }
 
       // Load activity invitations
@@ -94,42 +95,25 @@ const NotificationBell: React.FC = () => {
       if (invitationsResponse.success && invitationsResponse.data) {
         // Filter to only pending invitations for this parent's children
         const pendingInvitations = invitationsResponse.data.filter((inv: ActivityInvitation) => 
-          inv.status === 'pending' && inv.invited_child_id !== null && parentChildIds.includes(inv.invited_child_id)
+          inv.status === 'pending' && 
+          inv.invited_child_id !== null && 
+          parentChildIds.includes(inv.invited_child_id)
         );
         
         setActivityInvitations(pendingInvitations);
         
-        // Convert pending activity invitations to notifications
-        const invitationNotifications: Notification[] = pendingInvitations.map((invitation: ActivityInvitation) => {
-          const childFullName = invitation.host_child_name && invitation.host_family_name 
-            ? `${invitation.host_child_name} ${invitation.host_family_name}`
-            : invitation.host_child_name || 'Someone';
-          
-          const formatDate = (dateString: string) => {
-            const date = new Date(dateString);
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            return `${day}/${month}/${year}`;
-          };
-
-          const timeRange = invitation.start_time && invitation.end_time 
-            ? ` at ${invitation.start_time}-${invitation.end_time}`
-            : invitation.start_time
-            ? ` at ${invitation.start_time}`
-            : '';
-          
-          return {
-            id: `invitation_${invitation.id}`,
+        // Create summary notifications instead of individual ones
+        if (pendingInvitations.length > 0) {
+          allNotifications.push({
+            id: 'activity_invitations_summary',
             type: 'activity_invitation' as const,
-            title: 'Activity Invitation',
-            message: `${childFullName} invited you to "${invitation.activity_name}" on ${formatDate(invitation.start_date)}${timeRange}`,
-            timestamp: invitation.created_at,
+            title: 'Activity Invitations',
+            message: `You have ${pendingInvitations.length} new activity invitation${pendingInvitations.length !== 1 ? 's' : ''}`,
+            timestamp: pendingInvitations[0].created_at,
             read: false,
-            data: invitation
-          };
-        });
-        allNotifications.push(...invitationNotifications);
+            data: pendingInvitations
+          });
+        }
       }
 
       setNotifications(allNotifications);
@@ -140,11 +124,11 @@ const NotificationBell: React.FC = () => {
 
   const handleNotificationClick = (notification: Notification) => {
     if (notification.type === 'connection_request' && notification.data) {
-      // Handle connection request - could open a modal or navigate
-      console.log('Connection request clicked:', notification.data);
+      // Handle connection request summary - could open a modal showing all requests
+      console.log('Connection requests summary clicked:', notification.data);
     } else if (notification.type === 'activity_invitation' && notification.data) {
-      // Handle activity invitation - could open a modal or navigate
-      console.log('Activity invitation clicked:', notification.data);
+      // Handle activity invitation summary - could open a modal showing all invitations
+      console.log('Activity invitations summary clicked:', notification.data);
     }
     
     // Mark as read
@@ -283,58 +267,6 @@ const NotificationBell: React.FC = () => {
                       {formatTimestamp(notification.timestamp)}
                     </div>
                   </div>
-
-                  {notification.type === 'connection_request' && notification.data && (
-                    <div className="notification-actions">
-                      <button 
-                        className="accept-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAcceptConnection(notification.data.id);
-                        }}
-                        disabled={loading}
-                      >
-                        Accept
-                      </button>
-                      <button 
-                        className="reject-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRejectConnection(notification.data.id);
-                        }}
-                        disabled={loading}
-                      >
-                        Decline
-                      </button>
-                    </div>
-                  )}
-
-                  {notification.type === 'activity_invitation' && notification.data && (
-                    <div className="notification-actions">
-                      <div className="action-buttons">
-                        <button 
-                          className="accept-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAcceptInvitation(notification.data.id);
-                          }}
-                          disabled={loading}
-                        >
-                          Accept
-                        </button>
-                        <button 
-                          className="reject-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRejectInvitation(notification.data.id);
-                          }}
-                          disabled={loading}
-                        >
-                          Decline
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               ))
             )}

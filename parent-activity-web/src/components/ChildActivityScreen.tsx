@@ -81,6 +81,15 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     };
   }, [currentPage, onBack]);
 
+  // Watch for page changes to refresh data when returning to main after viewing invitations
+  useEffect(() => {
+    if (currentPage === 'main' && sessionStorage.getItem('invitationViewed') === 'true') {
+      sessionStorage.removeItem('invitationViewed');
+      loadActivities(); // Refresh local activity data to update envelope icons
+      onDataChanged?.(); // Refresh parent data
+    }
+  }, [currentPage, onDataChanged]);
+
   const loadActivities = async () => {
     try {
       setLoading(true);
@@ -676,7 +685,20 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const getActivityColor = (activity: Activity | any) => {
-    // Green for pending invitations (our main invitation system)
+    // Debug logging for the specific activity
+    if (activity.name === 'Notification 3') {
+      console.log('🔍 Activity "Notification 3" debug:', {
+        name: activity.name,
+        is_shared: activity.is_shared,
+        is_host: activity.is_host,
+        auto_notify_new_connections: activity.auto_notify_new_connections,
+        isPendingInvitation: activity.isPendingInvitation,
+        isAcceptedInvitation: activity.isAcceptedInvitation,
+        isDeclinedInvitation: activity.isDeclinedInvitation
+      });
+    }
+    
+    // Green for pending invitations (guest perspective - new invitation)
     if (activity.isPendingInvitation) {
       return {
         background: 'linear-gradient(135deg, #48bb78, #68d391)',
@@ -684,7 +706,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       };
     }
     
-    // Light blue for accepted invitations 
+    // Light blue for accepted invitations (guest perspective - accepted invitation)
     if (activity.isAcceptedInvitation) {
       return {
         background: 'linear-gradient(135deg, #4299e1, #63b3ed)',
@@ -700,8 +722,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       };
     }
     
-    // Light blue for shared/accepted activities
-    if (activity.is_shared) {
+    // Light blue for host's shared activities (activities they created and shared with others)
+    if (activity.is_shared && activity.is_host) {
+      console.log('✅ Activity should be light blue (shared host):', activity.name);
       return {
         background: 'linear-gradient(135deg, #4299e1, #63b3ed)',
         borderColor: '#3182ce'
@@ -709,6 +732,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
     
     // Dark blue for private activities (default)
+    console.log('⚫ Activity defaulting to dark blue:', activity.name, { is_shared: activity.is_shared, is_host: activity.is_host });
     return {
       background: 'linear-gradient(135deg, #2d3748, #4a5568)',
       borderColor: '#1a202c'
@@ -758,7 +782,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       }));
 
       // Get pending invitations for this day (convert to activity format)
-      // Only show envelope icon for invitations that haven't been viewed
       const dayPendingInvitations = pendingInvitations.filter(invitation => {
         const invitationStartDate = invitation.start_date.split('T')[0];
         return invitationStartDate === dateString;
@@ -768,7 +791,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         activity_id: invitation.id, // Original activity ID from backend for participants API
         name: invitation.activity_name,
         description: invitation.activity_description,
-        isPendingInvitation: !invitation.viewed_at, // Only show as pending invitation if not viewed
+        isPendingInvitation: true, // Always true for pending invitations (for color)
+        showEnvelope: !invitation.viewed_at, // Only show envelope if not viewed
         invitationId: invitation.invitation_id,
         hostParent: invitation.host_parent_username,
         host_child_name: invitation.child_name,
@@ -1762,13 +1786,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                             <div className="activity-name">
                               {activity.name}
                             </div>
-                            {activity.location && (
-                              <div className="activity-location">📍 {activity.location}</div>
-                            )}
                           </div>
                           {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) && (
                             <div className="activity-footer">
-                              {activity.isPendingInvitation && <span className="notification-icon">📩</span>}
+                              {activity.isPendingInvitation && activity.showEnvelope !== false && <span className="notification-icon">📩</span>}
                               {activity.isAcceptedInvitation && <span className="notification-icon">✅</span>}
                               {activity.isDeclinedInvitation && <span className="notification-icon">❌</span>}
                             </div>
@@ -1796,24 +1817,20 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       {/* Week Activities List */}
       <div className="week-activities-list">
         <h3>This Week's Activities</h3>
-        {activities.filter(activity => {
+        {(() => {
+          // Get all activities from calendar view (same logic as generateWeekDays)
           const weekDays = generateWeekDays();
-          const activityDate = activity.start_date.split('T')[0];
-          return weekDays.some(day => day.dateString === activityDate);
-        }).length > 0 ? (
-          <div className="activities-grid">
-            {activities
-              .filter(activity => {
-                const weekDays = generateWeekDays();
-                const activityDate = activity.start_date.split('T')[0];
-                return weekDays.some(day => day.dateString === activityDate);
-              })
-              .sort((a, b) => {
-                const dateA = new Date(a.start_date + 'T' + (a.start_time || '00:00'));
-                const dateB = new Date(b.start_date + 'T' + (b.start_time || '00:00'));
-                return dateA.getTime() - dateB.getTime();
-              })
-              .map((activity, index) => {
+          const allWeekActivities = weekDays.flatMap(day => day.activities);
+          
+          return allWeekActivities.length > 0 ? (
+            <div className="activities-grid">
+              {allWeekActivities
+                .sort((a, b) => {
+                  const dateA = new Date(a.start_date + 'T' + (a.start_time || '00:00'));
+                  const dateB = new Date(b.start_date + 'T' + (b.start_time || '00:00'));
+                  return dateA.getTime() - dateB.getTime();
+                })
+                .map((activity, index) => {
                 const colors = getActivityColor(activity);
                 return (
                   <div 
@@ -1831,19 +1848,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     <p className="activity-description">{activity.description}</p>
                   )}
                   <div className="activity-details">
-                    <div>📅 {formatDate(activity.start_date)}</div>
-                    {activity.start_time && (
-                      <div>
-                        🕐 {formatTime(activity.start_time)}
-                        {activity.end_time && ` - ${formatTime(activity.end_time)}`}
-                      </div>
-                    )}
+                    <div>📅 {formatDate(activity.start_date)}{activity.start_time && ` 🕐 ${formatTime(activity.start_time)}${activity.end_time ? ` - ${formatTime(activity.end_time)}` : ''}`}</div>
                     {activity.location && <div>📍 {activity.location}</div>}
                     {activity.cost && <div>💰 ${activity.cost}</div>}
                   </div>
-                    <div className="activity-date-added">
-                      Added {formatDate(activity.created_at)}
-                    </div>
                   </div>
                 );
               })}
@@ -1856,7 +1864,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               + Add Activity
             </button>
           </div>
-        )}
+        );
+        })()}
       </div>
     </div>
   );

@@ -300,6 +300,10 @@ class ApiService {
     return this.request('post', `/api/activity-invitations/${invitationId}/respond`, { action });
   }
 
+  async markInvitationAsViewed(invitationId: number): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/activity-invitations/${invitationId}/view`);
+  }
+
   async getActivityParticipants(activityId: number): Promise<ApiResponse<any>> {
     return this.request('get', `/api/activities/${activityId}/participants`);
   }

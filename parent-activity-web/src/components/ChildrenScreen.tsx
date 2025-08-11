@@ -29,13 +29,21 @@ interface ConnectionRequest {
   id: number;
   requester_name: string;
   requester_email: string;
+  requester_family_name?: string;
   child_name?: string;
   target_child_name?: string;
   message?: string;
   created_at: string;
 }
 
-const ChildrenScreen = () => {
+interface ChildrenScreenProps {
+  onNavigateToCalendar?: () => void;
+  onNavigateToChildCalendar?: (child: Child) => void;
+  initialSelectedChildId?: number | null;
+  onChildSelectionChange?: (childId: number | null) => void;
+}
+
+const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, onNavigateToChildCalendar, initialSelectedChildId, onChildSelectionChange }) => {
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -190,6 +198,7 @@ const ChildrenScreen = () => {
               id: request.id,
               requester_name: request.requester_name,
               requester_email: request.requester_email,
+              requester_family_name: request.requester_family_name,
               child_name: request.child_name,
               target_child_name: request.target_child_name,
               message: request.message,
@@ -224,6 +233,9 @@ const ChildrenScreen = () => {
           ? 'Invitation accepted! Activity will appear in your calendar.' 
           : 'Invitation declined.';
         alert(message);
+        
+        // Refresh data to update notification bell and other UI components
+        loadChildren();
       } else {
         alert(`Error: ${response.error || 'Failed to respond to invitation'}`);
       }
@@ -254,6 +266,9 @@ const ChildrenScreen = () => {
           ? 'Connection request accepted!' 
           : 'Connection request declined.';
         alert(message);
+        
+        // Refresh data to update notification bell and other UI components
+        loadChildren();
       } else {
         alert(`Error: ${response.error || 'Failed to respond to connection request'}`);
       }
@@ -338,13 +353,35 @@ const ChildrenScreen = () => {
     };
   }, [children]);
 
+  // Handle initial selected child ID from parent
+  useEffect(() => {
+    if (initialSelectedChildId && children.length > 0) {
+      const child = children.find(c => c.id === initialSelectedChildId);
+      if (child) {
+        setSelectedChild(child);
+        // Push state for child selection
+        window.history.pushState({ selectedChildId: child.id }, '', window.location.href);
+      }
+    }
+  }, [initialSelectedChildId, children]);
+
   const handleChildClick = (child: Child) => {
     setSelectedChild(child);
+    onChildSelectionChange?.(child.id);
     // Push state for child selection
     window.history.pushState({ selectedChildId: child.id }, '', window.location.href);
   };
 
   const handleBackToChildren = () => {
+    // Check if any invitations were viewed and refresh data if needed
+    if (sessionStorage.getItem('invitationViewed') === 'true') {
+      sessionStorage.removeItem('invitationViewed');
+      // Refresh all data to remove viewed invitations from notifications
+      loadChildren();
+    }
+    
+    setSelectedChild(null);
+    onChildSelectionChange?.(null);
     // Use browser back functionality
     window.history.back();
   };
@@ -359,7 +396,11 @@ const ChildrenScreen = () => {
 
   // Show child activity screen if a child is selected
   if (selectedChild) {
-    return <ChildActivityScreen child={selectedChild} onBack={handleBackToChildren} />;
+    return <ChildActivityScreen 
+      child={selectedChild} 
+      onBack={handleBackToChildren}
+      onDataChanged={loadChildren}
+    />;
   }
 
   return (
@@ -415,12 +456,13 @@ const ChildrenScreen = () => {
                     </div>
                     
                     {/* Connection Requests */}
-                    {childConnections[child.id] && childConnections[child.id].map((request) => (
-                      <div key={`connection_${request.id}`} className="invitation-item" onClick={(e) => e.stopPropagation()}>
-                        <div className="invitation-message">
-                          {request.requester_name} wants to connect{request.child_name ? ` with ${request.child_name}` : ''}
-                        </div>
-                        <div className="invitation-actions">
+                    {childConnections[child.id] && childConnections[child.id].map((request) => {
+                      return (
+                        <div key={`connection_${request.id}`} className="invitation-item" onClick={(e) => e.stopPropagation()}>
+                          <div className="invitation-message">
+                            {request.child_name || 'Someone'} wants to connect
+                          </div>
+                          <div className="invitation-actions">
                           <button
                             className="invitation-accept-btn"
                             onClick={(e) => {
@@ -441,15 +483,15 @@ const ChildrenScreen = () => {
                           >
                             {processingConnection === request.id ? '...' : 'Decline'}
                           </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     
                     {/* Activity Invitations */}
                     {childInvitations[child.id] && childInvitations[child.id].map((invitation) => {
-                      const childFullName = invitation.host_child_name && invitation.host_family_name 
-                        ? `${invitation.host_child_name} ${invitation.host_family_name}`
-                        : invitation.host_child_name || 'Someone';
+                      // Use just the host child's name (which should be their full name from the database)
+                      const childFullName = invitation.host_child_name || 'Someone';
                       
                       const formatDate = (dateString: string) => {
                         const date = new Date(dateString);
@@ -490,6 +532,15 @@ const ChildrenScreen = () => {
                               disabled={processingInvitation === invitation.id}
                             >
                               {processingInvitation === invitation.id ? '...' : 'Decline'}
+                            </button>
+                            <button
+                              className="invitation-calendar-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onNavigateToChildCalendar?.(child);
+                              }}
+                            >
+                              See in Calendar
                             </button>
                           </div>
                         </div>

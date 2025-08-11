@@ -50,7 +50,7 @@ Visit: **[Your Firebase URL after deployment]**
 
 ### Backend  
 - **Technology**: Node.js with Express
-- **Database**: Azure SQL Database
+- **Database**: PostgreSQL Database
 - **Authentication**: JWT tokens
 - **APIs**: RESTful API with comprehensive endpoints
 
@@ -69,9 +69,8 @@ Visit: **[Your Firebase URL after deployment]**
 │   ├── firebase.json           # Firebase configuration
 │   ├── deploy.sh              # Deployment script
 │   └── DEPLOYMENT_GUIDE.md    # Frontend deployment guide
-├── azure-sql-backend.js       # Main backend server
+├── postgres-backend.js       # Main backend server
 ├── package.json               # Backend dependencies
-├── web.config                 # Azure deployment config
 ├── .env.example               # Environment variables template
 ├── BACKEND_DEPLOYMENT.md      # Backend deployment guide
 └── README.md                  # This file
@@ -93,7 +92,7 @@ Visit: **[Your Firebase URL after deployment]**
 
 ### Prerequisites
 - Node.js 18+ 
-- Azure SQL Database access
+- PostgreSQL Database access
 - Firebase account (for deployment)
 
 ### Frontend Development
