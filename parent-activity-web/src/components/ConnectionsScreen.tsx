@@ -5,6 +5,7 @@ import './ConnectionsScreen.css';
 
 const ConnectionsScreen = () => {
   const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
+  const [sentRequests, setSentRequests] = useState<any[]>([]);
   const [activeConnections, setActiveConnections] = useState<any[]>([]);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -20,12 +21,14 @@ const ConnectionsScreen = () => {
 
   useEffect(() => {
     loadConnectionRequests();
+    loadSentRequests();
     loadActiveConnections();
     loadMyChildren();
 
     // Set up polling for connection requests every 30 seconds
     const interval = setInterval(() => {
       loadConnectionRequests();
+      loadSentRequests();
     }, 30000);
 
     return () => clearInterval(interval);
@@ -54,6 +57,23 @@ const ConnectionsScreen = () => {
     }
   };
 
+  const loadSentRequests = async () => {
+    try {
+      console.log('🔄 Loading sent connection requests...');
+      const response = await apiService.getSentConnectionRequests();
+      console.log('📤 Sent requests response:', response);
+      
+      if (response.success && response.data) {
+        console.log('✅ Sent requests loaded:', response.data.length, 'requests');
+        console.log('📝 Sent request details:', response.data);
+        setSentRequests(response.data);
+      } else {
+        console.error('❌ Failed to load sent requests:', response.error);
+      }
+    } catch (error) {
+      console.error('❌ Load sent requests error:', error);
+    }
+  };
 
   const loadMyChildren = async () => {
     try {
@@ -289,8 +309,9 @@ const ConnectionsScreen = () => {
         setShowConnectModal(false);
         setSearchResults([]);
         setSearchText('');
-        // Reload connection requests to show any incoming requests
+        // Reload both sent and received requests
         loadConnectionRequests();
+        loadSentRequests();
       } else {
         alert(`Error: ${response.error || 'Failed to send connection request'}`);
       }
@@ -405,6 +426,56 @@ const ConnectionsScreen = () => {
         )}
       </div>
 
+      {/* Sent Connection Requests */}
+      <div className="requests-section">
+        <h3>Sent Requests ({sentRequests.length})</h3>
+        
+        {sentRequests.length === 0 ? (
+          <div className="empty-state">
+            <p>No sent requests</p>
+          </div>
+        ) : (
+          <div className="requests-grouped">
+            {Object.entries(
+              sentRequests.reduce((grouped: any, request) => {
+                const childName = request.child_name || 'Unknown Child';
+                
+                if (!grouped[childName]) {
+                  grouped[childName] = [];
+                }
+                
+                grouped[childName].push(request);
+                
+                return grouped;
+              }, {})
+            ).map(([childName, requests]: any) => (
+              <div key={childName} className="child-connections-group">
+                <h4 className="child-group-header">{childName}</h4>
+                <div className="child-connections-list">
+                  {requests.map((request: any) => (
+                    <div key={request.id} className="connection-item">
+                      <span className="connected-to">
+                        Request sent to <strong>{request.target_parent_name}</strong>
+                        {request.target_child_name && (
+                          <span> for <strong>{request.target_child_name}</strong></span>
+                        )}
+                        <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                          Status: <span style={{ 
+                            color: request.status === 'pending' ? '#ffa500' : 
+                                  request.status === 'accepted' ? '#28a745' : '#dc3545'
+                          }}>
+                            {request.status}
+                          </span>
+                        </div>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Active Connections Section */}
       <div className="connections-section">
