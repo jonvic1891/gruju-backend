@@ -113,6 +113,21 @@ async function runMigrations() {
         } catch (error) {
             console.log('⚠️ Migration: Could not update existing children names:', error.message);
         }
+
+        // Migration 5: Add viewed_at column to activity_invitations table
+        try {
+            await client.query(`
+                ALTER TABLE activity_invitations 
+                ADD COLUMN IF NOT EXISTS viewed_at TIMESTAMP
+            `);
+            console.log('✅ Migration: Added viewed_at column to activity_invitations table');
+        } catch (error) {
+            if (error.code === '42701') {
+                console.log('✅ Migration: viewed_at column already exists');
+            } else {
+                throw error;
+            }
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -2088,6 +2103,7 @@ app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
             LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
             WHERE ai.invited_parent_id = $1
             AND ai.status = 'pending'
+            AND ai.viewed_at IS NULL
             ORDER BY ai.created_at DESC
         `;
         
@@ -2098,6 +2114,44 @@ app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Get activity invitations error:', error);
         res.status(500).json({ success: false, error: 'Failed to fetch activity invitations' });
+    }
+});
+
+// Mark Activity Invitation as viewed endpoint
+app.post('/api/activity-invitations/:invitationId/view', authenticateToken, async (req, res) => {
+    try {
+        const { invitationId } = req.params;
+        
+        if (!invitationId || isNaN(invitationId)) {
+            return res.status(400).json({ success: false, error: 'Invalid invitation ID' });
+        }
+
+        const client = await pool.connect();
+        
+        // Verify the invitation exists and belongs to the user
+        const invitation = await client.query(
+            'SELECT * FROM activity_invitations WHERE id = $1 AND invited_parent_id = $2 AND status = $3',
+            [invitationId, req.user.id, 'pending']
+        );
+        
+        if (invitation.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Activity invitation not found' });
+        }
+
+        // Mark as viewed if not already viewed
+        if (!invitation.rows[0].viewed_at) {
+            await client.query(
+                'UPDATE activity_invitations SET viewed_at = NOW() WHERE id = $1',
+                [invitationId]
+            );
+        }
+
+        client.release();
+        res.json({ success: true, message: 'Invitation marked as viewed' });
+    } catch (error) {
+        console.error('Mark invitation as viewed error:', error);
+        res.status(500).json({ success: false, error: 'Failed to mark invitation as viewed' });
     }
 });
 
