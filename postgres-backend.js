@@ -1006,7 +1006,7 @@ app.put('/api/users/change-password', authenticateToken, async (req, res) => {
         
         // Get current user with password hash
         const userResult = await client.query(
-            'SELECT id, password FROM users WHERE id = $1',
+            'SELECT id, password_hash FROM users WHERE id = $1',
             [req.user.id]
         );
 
@@ -1018,7 +1018,7 @@ app.put('/api/users/change-password', authenticateToken, async (req, res) => {
         const user = userResult.rows[0];
 
         // Verify current password
-        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password_hash);
         if (!isCurrentPasswordValid) {
             client.release();
             return res.status(400).json({ error: 'Current password is incorrect' });
@@ -1030,7 +1030,7 @@ app.put('/api/users/change-password', authenticateToken, async (req, res) => {
 
         // Update password
         await client.query(
-            'UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2',
+            'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
             [newPasswordHash, req.user.id]
         );
         
