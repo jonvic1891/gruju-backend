@@ -1195,7 +1195,7 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
                     ai.status as invitation_status,
                     ai.inviter_parent_id,
                     CASE 
-                        WHEN ai.status IS NOT NULL THEN true 
+                        WHEN a.auto_notify_new_connections = true OR ai.status IS NOT NULL THEN true 
                         ELSE false 
                     END as is_shared,
                     CASE 
@@ -1216,8 +1216,8 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
             const activities = result.rows.map(activity => ({
                 ...activity,
                 invitation_status: activity.invitation_status || 'none',
-                is_shared: activity.invitation_status === 'accepted' || activity.is_shared,
-                is_host: activity.inviter_parent_id ? false : true,
+                is_shared: activity.is_shared, // Use the value from the query
+                is_host: activity.is_host, // Use the value from the query
                 is_cancelled: false
             }));
             
