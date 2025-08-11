@@ -527,25 +527,40 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       }
 
       // If it's a shared activity, send invitations to selected connected children
+      console.log('🎯 Invitation debug:', {
+        isSharedActivity,
+        selectedConnectedChildrenCount: selectedConnectedChildren.length,
+        createdActivitiesCount: createdActivities.length,
+        selectedConnectedChildren,
+        connectedChildren: connectedChildren.map(cc => ({ id: cc.id, name: cc.name }))
+      });
+      
       if (isSharedActivity && selectedConnectedChildren.length > 0 && createdActivities.length > 0) {
         for (const activity of createdActivities) {
+          console.log('📩 Sending invitations for activity:', activity.name);
           for (const childId of selectedConnectedChildren) {
             try {
               // Find the connected child data to get the parent ID
               const connectedChild = connectedChildren.find(cc => cc.id === childId);
               if (connectedChild) {
-                await apiService.sendActivityInvitation(
+                console.log('📤 Sending invitation to:', connectedChild.name);
+                const inviteResponse = await apiService.sendActivityInvitation(
                   activity.id, 
                   connectedChild.parentId, // Use the correct parent ID
                   childId, // The child ID for the invitation
                   `${child.name} would like to invite your child to join: ${activity.name}`
                 );
+                console.log('✅ Invitation sent successfully:', inviteResponse);
+              } else {
+                console.error('❌ Could not find connected child with ID:', childId);
               }
             } catch (inviteError) {
-              console.error('Failed to send invitation:', inviteError);
+              console.error('❌ Failed to send invitation:', inviteError);
             }
           }
         }
+      } else {
+        console.log('⚠️ Skipping invitations - not a shared activity or no children selected');
       }
 
       // Reset form
