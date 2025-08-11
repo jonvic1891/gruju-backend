@@ -69,6 +69,39 @@ async function runMigrations() {
                 throw error;
             }
         }
+
+        // Migration 3: Add first_name and last_name columns to children table
+        try {
+            await client.query(`
+                ALTER TABLE children 
+                ADD COLUMN IF NOT EXISTS first_name VARCHAR(50),
+                ADD COLUMN IF NOT EXISTS last_name VARCHAR(50)
+            `);
+            console.log('✅ Migration: Added first_name and last_name columns to children table');
+        } catch (error) {
+            if (error.code === '42701') {
+                console.log('✅ Migration: first_name and last_name columns already exist');
+            } else {
+                throw error;
+            }
+        }
+
+        // Migration 4: Update existing children to split name into first_name and last_name
+        try {
+            const result = await client.query(`
+                UPDATE children 
+                SET first_name = SPLIT_PART(name, ' ', 1),
+                    last_name = CASE 
+                        WHEN ARRAY_LENGTH(STRING_TO_ARRAY(name, ' '), 1) > 1 
+                        THEN SUBSTRING(name FROM POSITION(' ' IN name) + 1)
+                        ELSE ''
+                    END
+                WHERE first_name IS NULL AND name IS NOT NULL
+            `);
+            console.log(`✅ Migration: Updated ${result.rowCount} existing children with split names`);
+        } catch (error) {
+            console.log('⚠️ Migration: Could not update existing children names:', error.message);
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -948,7 +981,15 @@ app.get('/api/children', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
         const result = await client.query(
-            'SELECT * FROM children WHERE parent_id = $1 ORDER BY created_at DESC',
+            `SELECT *, 
+             CASE 
+                WHEN first_name IS NOT NULL AND last_name IS NOT NULL AND last_name != '' 
+                THEN CONCAT(first_name, ' ', last_name)
+                WHEN first_name IS NOT NULL 
+                THEN first_name
+                ELSE name 
+             END as display_name
+             FROM children WHERE parent_id = $1 ORDER BY created_at DESC`,
             [req.user.id]
         );
         client.release();
@@ -965,16 +1006,33 @@ app.get('/api/children', authenticateToken, async (req, res) => {
 
 app.post('/api/children', authenticateToken, async (req, res) => {
     try {
-        const { name, age, grade, school, interests } = req.body;
+        const { name, first_name, last_name, age, grade, school, interests } = req.body;
 
-        if (!name || !name.trim()) {
+        // Handle both old (name) and new (first_name/last_name) formats
+        let firstName, lastName, fullName;
+        
+        if (first_name || last_name) {
+            firstName = first_name?.trim() || '';
+            lastName = last_name?.trim() || '';
+            fullName = `${firstName} ${lastName}`.trim();
+        } else if (name) {
+            // Legacy support: split name into first and last
+            const nameParts = name.trim().split(' ');
+            firstName = nameParts[0] || '';
+            lastName = nameParts.slice(1).join(' ') || '';
+            fullName = name.trim();
+        } else {
             return res.status(400).json({ success: false, error: 'Child name is required' });
+        }
+
+        if (!firstName) {
+            return res.status(400).json({ success: false, error: 'First name is required' });
         }
 
         const client = await pool.connect();
         const result = await client.query(
-            'INSERT INTO children (name, parent_id, age, grade, school, interests) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-            [name.trim(), req.user.id, age, grade, school, interests]
+            'INSERT INTO children (name, first_name, last_name, parent_id, age, grade, school, interests) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+            [fullName, firstName, lastName, req.user.id, age, grade, school, interests]
         );
         client.release();
 
