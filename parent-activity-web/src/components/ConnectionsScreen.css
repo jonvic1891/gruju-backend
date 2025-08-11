@@ -147,7 +147,8 @@
   margin-bottom: 24px;
 }
 
-.sent-requests-section {
+.sent-requests-section,
+.connections-section {
   background: white;
   border-radius: 12px;
   padding: 20px;
@@ -155,7 +156,8 @@
 }
 
 .requests-section h3,
-.sent-requests-section h3 {
+.sent-requests-section h3,
+.connections-section h3 {
   margin: 0 0 16px 0;
   color: #343a40;
   font-size: 20px;
@@ -183,7 +185,7 @@
 .requests-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .request-card {
@@ -191,6 +193,18 @@
   border-radius: 8px;
   padding: 16px;
   background: #f8f9fa;
+}
+
+.request-card.compact {
+  padding: 12px;
+  border-radius: 6px;
+}
+
+.request-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
 }
 
 .request-card.sent-request {
@@ -224,11 +238,24 @@
   border-left: 4px solid #007bff;
 }
 
+.request-card.compact .request-message {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 14px;
+  flex: 1;
+}
+
 .request-message p {
   margin: 0;
   font-size: 16px;
   color: #343a40;
   line-height: 1.5;
+}
+
+.request-card.compact .request-message p {
+  font-size: 14px;
 }
 
 .request-message strong {
@@ -238,7 +265,11 @@
 
 .request-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
+}
+
+.request-card.compact .request-actions {
+  gap: 6px;
 }
 
 .reject-btn {
@@ -252,6 +283,13 @@
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
+}
+
+.request-card.compact .reject-btn {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 4px;
 }
 
 .reject-btn:hover {
@@ -269,6 +307,13 @@
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
+}
+
+.request-card.compact .accept-btn {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 4px;
 }
 
 .accept-btn:hover {
@@ -446,6 +491,66 @@
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
+}
+
+.request-card.compact .remove-connection-btn {
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 16px;
+}
+
+/* Grouped connections styling */
+.connections-grouped,
+.requests-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.child-connections-group {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #e9ecef;
+}
+
+.child-group-header {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #495057;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #007bff;
+}
+
+.child-connections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.connection-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+}
+
+.connected-to {
+  color: #495057;
+  font-size: 14px;
+}
+
+.connected-to strong {
+  color: #007bff;
+}
+
+.connection-item .remove-connection-btn {
+  padding: 4px 6px;
+  font-size: 14px;
 }
 
 .remove-connection-btn:hover {

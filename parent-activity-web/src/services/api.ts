@@ -140,7 +140,7 @@ class ApiService {
     return this.request('get', '/api/children');
   }
 
-  async createChild(childData: { name: string }): Promise<ApiResponse<any>> {
+  async createChild(childData: { first_name: string; last_name?: string; name?: string }): Promise<ApiResponse<any>> {
     return this.request('post', '/api/children', childData);
   }
 

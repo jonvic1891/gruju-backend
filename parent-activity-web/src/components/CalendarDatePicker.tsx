@@ -43,7 +43,11 @@ const CalendarDatePicker: React.FC<CalendarDatePickerProps> = ({
   };
 
   const formatDate = (date: Date) => {
-    return date.toISOString().split('T')[0];
+    // Use local date formatting to avoid timezone issues
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const isDateSelected = (date: Date) => {
@@ -77,7 +81,9 @@ const CalendarDatePicker: React.FC<CalendarDatePickerProps> = ({
   };
 
   const { days, currentMonth: monthIndex } = getDaysInMonth(currentMonth);
+  // Get today's date in local time to avoid timezone confusion
   const today = new Date();
+  today.setHours(0, 0, 0, 0); // Reset time to avoid any time-based issues
   const todayStr = formatDate(today);
 
   return (

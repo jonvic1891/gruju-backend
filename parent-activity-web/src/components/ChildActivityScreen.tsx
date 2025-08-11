@@ -231,6 +231,24 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const handleAddActivity = () => {
+    // Reset all form state when starting to add a new activity
+    setNewActivity({
+      name: '',
+      description: '',
+      start_date: '',
+      end_date: '',
+      start_time: '',
+      end_time: '',
+      location: '',
+      website_url: '',
+      cost: '',
+      max_participants: '',
+      auto_notify_new_connections: false
+    });
+    setSelectedDates([]);
+    setIsSharedActivity(false);
+    setAutoNotifyNewConnections(false);
+    setSelectedConnectedChildren([]);
     navigateToPage('add-activity');
   };
 
@@ -322,6 +340,12 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   const handleEditActivity = (activity: Activity) => {
     setEditingActivity(activity);
+    // Reset all form state first, then populate with activity data
+    setSelectedDates([]);
+    setIsSharedActivity(false);
+    setAutoNotifyNewConnections(false);
+    setSelectedConnectedChildren([]);
+    
     setNewActivity({
       name: activity.name,
       description: activity.description || '',

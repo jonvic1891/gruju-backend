@@ -12,6 +12,9 @@ export interface User {
 export interface Child {
   id: number;
   name: string;
+  first_name?: string;
+  last_name?: string;
+  display_name?: string;
   parent_id: number;
   age?: number;
   grade?: string;

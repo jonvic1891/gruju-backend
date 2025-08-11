@@ -215,6 +215,16 @@
   margin-bottom: 20px;
 }
 
+.name-fields {
+  display: flex;
+  gap: 10px;
+}
+
+.name-fields .modal-input {
+  flex: 1;
+  margin-bottom: 20px;
+}
+
 .modal-input:focus {
   outline: none;
   border-color: #007bff;

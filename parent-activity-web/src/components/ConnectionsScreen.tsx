@@ -5,7 +5,6 @@ import './ConnectionsScreen.css';
 
 const ConnectionsScreen = () => {
   const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
-  const [sentRequests, setSentRequests] = useState<ConnectionRequest[]>([]);
   const [activeConnections, setActiveConnections] = useState<any[]>([]);
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -21,40 +20,40 @@ const ConnectionsScreen = () => {
 
   useEffect(() => {
     loadConnectionRequests();
-    loadSentRequests();
     loadActiveConnections();
     loadMyChildren();
+
+    // Set up polling for connection requests every 30 seconds
+    const interval = setInterval(() => {
+      loadConnectionRequests();
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const loadConnectionRequests = async () => {
     try {
       setLoading(true);
+      console.log('🔄 Loading connection requests...');
       const response = await apiService.getConnectionRequests();
+      console.log('📋 Connection requests response:', response);
+      
       if (response.success && response.data) {
+        console.log('✅ Connection requests loaded:', response.data.length, 'requests');
+        console.log('📝 Request details:', response.data);
         setConnectionRequests(response.data);
       } else {
+        console.error('❌ Failed to load connection requests:', response.error);
         alert(`Error: ${response.error || 'Failed to load connection requests'}`);
       }
     } catch (error) {
+      console.error('❌ Load connection requests error:', error);
       alert('Failed to load connection requests');
-      console.error('Load connection requests error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadSentRequests = async () => {
-    try {
-      const response = await apiService.getSentConnectionRequests();
-      if (response.success && response.data) {
-        setSentRequests(response.data);
-      } else {
-        console.error('Failed to load sent requests:', response.error);
-      }
-    } catch (error) {
-      console.error('Load sent requests error:', error);
-    }
-  };
 
   const loadMyChildren = async () => {
     try {
@@ -290,8 +289,8 @@ const ConnectionsScreen = () => {
         setShowConnectModal(false);
         setSearchResults([]);
         setSearchText('');
-        // Refresh sent requests to show the new request immediately
-        loadSentRequests();
+        // Reload connection requests to show any incoming requests
+        loadConnectionRequests();
       } else {
         alert(`Error: ${response.error || 'Failed to send connection request'}`);
       }
@@ -354,44 +353,51 @@ const ConnectionsScreen = () => {
 
       {/* Connection Requests */}
       <div className="requests-section">
-        <h3>Pending Requests ({connectionRequests.length})</h3>
+        <h3>Connection Requests ({connectionRequests.length})</h3>
         
         {loading ? (
           <div className="loading">Loading requests...</div>
         ) : connectionRequests.length === 0 ? (
           <div className="empty-state">
-            <p>No pending connection requests</p>
+            <p>No connection requests</p>
           </div>
         ) : (
-          <div className="requests-list">
-            {connectionRequests.map((request) => (
-              <div key={request.id} className="request-card">
-                <div className="request-header">
-                  <span className="request-date">
-                    {new Date(request.created_at).toLocaleDateString()}
-                  </span>
-                </div>
+          <div className="requests-grouped">
+            {Object.entries(
+              connectionRequests.reduce((grouped: any, request) => {
+                const targetChildName = request.target_child_name || 'Any Child';
                 
-                <div className="request-message">
-                  <p>
-                    <strong>{request.child_name}</strong> wants to connect with{' '}
-                    <strong>{request.target_child_name || 'your child'}</strong> to share activities
-                  </p>
-                </div>
+                if (!grouped[targetChildName]) {
+                  grouped[targetChildName] = [];
+                }
                 
-                <div className="request-actions">
-                  <button
-                    onClick={() => handleRejectRequest(request.id)}
-                    className="reject-btn"
-                  >
-                    Reject
-                  </button>
-                  <button
-                    onClick={() => handleAcceptRequest(request.id)}
-                    className="accept-btn"
-                  >
-                    Accept
-                  </button>
+                grouped[targetChildName].push(request);
+                
+                return grouped;
+              }, {})
+            ).map(([childName, requests]: any) => (
+              <div key={childName} className="child-connections-group">
+                <h4 className="child-group-header">{childName}</h4>
+                <div className="child-connections-list">
+                  {requests.map((request: any) => (
+                    <div key={request.id} className="connection-item">
+                      <span className="connected-to"><strong>{request.child_name}</strong> wants to connect</span>
+                      <div className="request-actions">
+                        <button
+                          onClick={() => handleRejectRequest(request.id)}
+                          className="reject-btn"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => handleAcceptRequest(request.id)}
+                          className="accept-btn"
+                        >
+                          Accept
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
@@ -399,42 +405,9 @@ const ConnectionsScreen = () => {
         )}
       </div>
 
-      {/* Sent Requests Section */}
-      <div className="sent-requests-section">
-        <h3>Sent Requests ({sentRequests.length})</h3>
-        
-        {sentRequests.length === 0 ? (
-          <div className="empty-state">
-            <p>No pending sent requests</p>
-          </div>
-        ) : (
-          <div className="requests-list">
-            {sentRequests.map((request) => (
-              <div key={request.id} className="request-card sent-request">
-                <div className="request-header">
-                  <span className="request-date">
-                    {new Date(request.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-                
-                <div className="request-message">
-                  <p>
-                    <strong>{request.child_name}</strong> wants to connect with{' '}
-                    <strong>{request.target_child_name || 'their child'}</strong> to share activities
-                  </p>
-                </div>
-                
-                <div className="request-status">
-                  <span className="status-badge pending">Pending</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {/* Active Connections Section */}
-      <div className="sent-requests-section">
+      <div className="connections-section">
         <h3>Active Connections ({activeConnections.length})</h3>
         
         {activeConnections.length === 0 ? (
@@ -442,34 +415,57 @@ const ConnectionsScreen = () => {
             <p>No active connections yet</p>
           </div>
         ) : (
-          <div className="requests-list">
-            {activeConnections.map((connection) => (
-              <div key={connection.id} className="request-card">
-                <div className="request-header">
-                  <span className="request-date">
-                    {new Date(connection.created_at).toLocaleDateString()}
-                  </span>
-                </div>
+          <div className="connections-grouped">
+            {Object.entries(
+              activeConnections.reduce((grouped: any, connection) => {
+                // Get current user info to determine which child is ours
+                const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
+                const currentUsername = currentUser.username;
                 
-                <div className="request-message">
-                  <p>
-                    <strong>{connection.child1_name}</strong> is connected with{' '}
-                    <strong>{connection.child2_name}</strong>
-                  </p>
-                </div>
+                // Determine which child belongs to the current user
+                let myChild, theirChild;
+                if (connection.child1_parent_name === currentUsername) {
+                  myChild = { name: connection.child1_name, id: connection.child1_id };
+                  theirChild = { name: connection.child2_name, id: connection.child2_id };
+                } else {
+                  myChild = { name: connection.child2_name, id: connection.child2_id };
+                  theirChild = { name: connection.child1_name, id: connection.child1_id };
+                }
                 
-                <div className="request-status">
-                  <span className="status-badge" style={{backgroundColor: '#28a745', color: 'white', border: '1px solid #1e7e34'}}>Active</span>
-                  <button
-                    onClick={() => handleRemoveConnection(
-                      connection.id,
-                      `${connection.child1_name} ↔ ${connection.child2_name}`
-                    )}
-                    className="remove-connection-btn"
-                    title="Remove this connection"
-                  >
-                    🗑️ Remove
-                  </button>
+                // Group by our child
+                if (!grouped[myChild.id]) {
+                  grouped[myChild.id] = {
+                    childName: myChild.name,
+                    connections: []
+                  };
+                }
+                
+                grouped[myChild.id].connections.push({
+                  ...connection,
+                  connectedToName: theirChild.name
+                });
+                
+                return grouped;
+              }, {})
+            ).map(([childId, childGroup]: any) => (
+              <div key={childId} className="child-connections-group">
+                <h4 className="child-group-header">{childGroup.childName}</h4>
+                <div className="child-connections-list">
+                  {childGroup.connections.map((connection: any) => (
+                    <div key={connection.id} className="connection-item">
+                      <span className="connected-to"><strong>{connection.connectedToName}</strong></span>
+                      <button
+                        onClick={() => handleRemoveConnection(
+                          connection.id,
+                          `${childGroup.childName} ↔ ${connection.connectedToName}`
+                        )}
+                        className="remove-connection-btn"
+                        title="Remove this connection"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

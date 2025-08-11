@@ -26,7 +26,8 @@ const ChildrenScreen = () => {
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newChildName, setNewChildName] = useState('');
+  const [newChildFirstName, setNewChildFirstName] = useState('');
+  const [newChildLastName, setNewChildLastName] = useState('');
   const [addingChild, setAddingChild] = useState(false);
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [childActivityCounts, setChildActivityCounts] = useState<Record<number, number>>({});
@@ -176,17 +177,21 @@ const ChildrenScreen = () => {
   };
 
   const handleCreateChild = async () => {
-    if (!newChildName.trim()) {
-      alert('Please enter a child name');
+    if (!newChildFirstName.trim()) {
+      alert('Please enter the child\'s first name');
       return;
     }
 
     setAddingChild(true);
     try {
-      const response = await apiService.createChild({ name: newChildName.trim() });
+      const response = await apiService.createChild({ 
+        first_name: newChildFirstName.trim(),
+        last_name: newChildLastName.trim()
+      });
       
       if (response.success) {
-        setNewChildName('');
+        setNewChildFirstName('');
+        setNewChildLastName('');
         setShowAddModal(false);
         loadChildren();
         alert('Child added successfully');
@@ -202,7 +207,7 @@ const ChildrenScreen = () => {
   };
 
   const handleDeleteChild = async (child: Child) => {
-    if (window.confirm(`Are you sure you want to delete ${child.name}? This will also delete all their activities.`)) {
+    if (window.confirm(`Are you sure you want to delete ${child.display_name || child.name}? This will also delete all their activities.`)) {
       try {
         const response = await apiService.deleteChild(child.id);
         if (response.success) {
@@ -286,7 +291,7 @@ const ChildrenScreen = () => {
               onClick={() => handleChildClick(child)}
             >
               <div className="child-info">
-                <h3 className="child-name">{child.name}</h3>
+                <h3 className="child-name">{child.display_name || child.name}</h3>
                 <div className="child-details">
                   {child.age && `Age: ${child.age}`}
                   {child.age && child.grade && ' • '}
@@ -385,19 +390,29 @@ const ChildrenScreen = () => {
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Add New Child</h3>
-            <input
-              type="text"
-              placeholder="Enter child's name"
-              value={newChildName}
-              onChange={(e) => setNewChildName(e.target.value)}
-              className="modal-input"
-              autoFocus
-            />
+            <div className="name-fields">
+              <input
+                type="text"
+                placeholder="First name"
+                value={newChildFirstName}
+                onChange={(e) => setNewChildFirstName(e.target.value)}
+                className="modal-input"
+                autoFocus
+              />
+              <input
+                type="text"
+                placeholder="Last name (optional)"
+                value={newChildLastName}
+                onChange={(e) => setNewChildLastName(e.target.value)}
+                className="modal-input"
+              />
+            </div>
             <div className="modal-actions">
               <button
                 onClick={() => {
                   setShowAddModal(false);
-                  setNewChildName('');
+                  setNewChildFirstName('');
+                  setNewChildLastName('');
                 }}
                 className="cancel-btn"
               >
