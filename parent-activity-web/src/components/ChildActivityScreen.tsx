@@ -527,40 +527,25 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       }
 
       // If it's a shared activity, send invitations to selected connected children
-      console.log('🎯 Invitation debug:', {
-        isSharedActivity,
-        selectedConnectedChildrenCount: selectedConnectedChildren.length,
-        createdActivitiesCount: createdActivities.length,
-        selectedConnectedChildren,
-        connectedChildren: connectedChildren.map(cc => ({ id: cc.id, name: cc.name }))
-      });
-      
       if (isSharedActivity && selectedConnectedChildren.length > 0 && createdActivities.length > 0) {
         for (const activity of createdActivities) {
-          console.log('📩 Sending invitations for activity:', activity.name);
           for (const childId of selectedConnectedChildren) {
             try {
               // Find the connected child data to get the parent ID
               const connectedChild = connectedChildren.find(cc => cc.id === childId);
               if (connectedChild) {
-                console.log('📤 Sending invitation to:', connectedChild.name);
-                const inviteResponse = await apiService.sendActivityInvitation(
+                await apiService.sendActivityInvitation(
                   activity.id, 
                   connectedChild.parentId, // Use the correct parent ID
                   childId, // The child ID for the invitation
                   `${child.name} would like to invite your child to join: ${activity.name}`
                 );
-                console.log('✅ Invitation sent successfully:', inviteResponse);
-              } else {
-                console.error('❌ Could not find connected child with ID:', childId);
               }
             } catch (inviteError) {
-              console.error('❌ Failed to send invitation:', inviteError);
+              console.error('Failed to send invitation:', inviteError);
             }
           }
         }
-      } else {
-        console.log('⚠️ Skipping invitations - not a shared activity or no children selected');
       }
 
       // Reset form
@@ -700,22 +685,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const getActivityColor = (activity: Activity | any) => {
-    // Debug logging for specific activities
-    if (activity.name?.includes('Notification')) {
-      console.log(`🔍 Activity "${activity.name}" debug:`, {
-        name: activity.name,
-        is_shared: activity.is_shared,
-        is_host: activity.is_host,
-        auto_notify_new_connections: activity.auto_notify_new_connections,
-        isPendingInvitation: activity.isPendingInvitation,
-        isAcceptedInvitation: activity.isAcceptedInvitation,
-        isDeclinedInvitation: activity.isDeclinedInvitation
-      });
-    }
-    
     // Green for pending invitations (guest perspective - new invitation)
     if (activity.isPendingInvitation) {
-      console.log('🟢 GREEN - Pending invitation:', activity.name);
       return {
         background: 'linear-gradient(135deg, #48bb78, #68d391)',
         borderColor: '#38a169'
@@ -724,7 +695,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     
     // Light blue for accepted invitations (guest perspective - accepted invitation)
     if (activity.isAcceptedInvitation) {
-      console.log('🔵 LIGHT BLUE - Accepted invitation:', activity.name);
       return {
         background: 'linear-gradient(135deg, #4299e1, #63b3ed)',
         borderColor: '#3182ce'
@@ -733,7 +703,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     
     // Grey for declined invitations
     if (activity.isDeclinedInvitation) {
-      console.log('⚪ GREY - Declined invitation:', activity.name);
       return {
         background: 'linear-gradient(135deg, #a0aec0, #cbd5e0)',
         borderColor: '#718096'
@@ -742,7 +711,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     
     // Light blue for host's shared activities
     if (activity.is_shared === true && activity.is_host === true) {
-      console.log('🔵 LIGHT BLUE - Host shared activity:', activity.name);
       return {
         background: 'linear-gradient(135deg, #4299e1, #63b3ed)',
         borderColor: '#3182ce'
@@ -750,11 +718,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
     
     // Dark blue for private activities (default)
-    console.log('⚫ DARK BLUE - Private activity:', activity.name, { 
-      is_shared: activity.is_shared, 
-      is_host: activity.is_host,
-      type: typeof activity.is_shared
-    });
     return {
       background: 'linear-gradient(135deg, #2d3748, #4a5568)',
       borderColor: '#1a202c'
