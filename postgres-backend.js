@@ -1195,7 +1195,8 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
                     ai.status as invitation_status,
                     ai.inviter_parent_id,
                     CASE 
-                        WHEN a.auto_notify_new_connections = true OR ai.status IS NOT NULL THEN true 
+                        WHEN a.auto_notify_new_connections = true OR 
+                             EXISTS (SELECT 1 FROM activity_invitations ai2 WHERE ai2.activity_id = a.id) THEN true 
                         ELSE false 
                     END as is_shared,
                     CASE 
@@ -1223,17 +1224,32 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
             
             console.log('🎯 Retrieved activities from database:', activities.length);
             
-            // Debug specific activity
+            // Debug specific activity and check invitations
             const notification3 = activities.find(a => a.name === 'Notification 3');
             if (notification3) {
-                console.log('🔍 "Notification 3" debug:', {
+                console.log('🔍 "Notification 3" backend debug:', {
                     name: notification3.name,
+                    id: notification3.id,
                     is_shared: notification3.is_shared,
                     is_host: notification3.is_host,
                     auto_notify_new_connections: notification3.auto_notify_new_connections,
                     invitation_status: notification3.invitation_status,
                     inviter_parent_id: notification3.inviter_parent_id
                 });
+                
+                // Check if there are any invitations for this activity
+                const invitationCheck = await client.query(
+                    'SELECT COUNT(*) as invitation_count FROM activity_invitations WHERE activity_id = $1',
+                    [notification3.id]
+                );
+                console.log(`📊 Invitation count for "${notification3.name}":`, invitationCheck.rows[0].invitation_count);
+                
+                // Also check the auto_notify field directly from activities table
+                const activityCheck = await client.query(
+                    'SELECT auto_notify_new_connections FROM activities WHERE id = $1',
+                    [notification3.id]
+                );
+                console.log(`⚙️ auto_notify_new_connections from DB:`, activityCheck.rows[0]?.auto_notify_new_connections);
             }
             
             res.json({

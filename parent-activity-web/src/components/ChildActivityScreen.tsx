@@ -700,9 +700,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const getActivityColor = (activity: Activity | any) => {
-    // Debug logging for the specific activity
-    if (activity.name === 'Notification 3') {
-      console.log('🔍 Activity "Notification 3" debug:', {
+    // Debug logging for specific activities
+    if (activity.name?.includes('Notification')) {
+      console.log(`🔍 Activity "${activity.name}" debug:`, {
         name: activity.name,
         is_shared: activity.is_shared,
         is_host: activity.is_host,
@@ -715,6 +715,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     
     // Green for pending invitations (guest perspective - new invitation)
     if (activity.isPendingInvitation) {
+      console.log('🟢 GREEN - Pending invitation:', activity.name);
       return {
         background: 'linear-gradient(135deg, #48bb78, #68d391)',
         borderColor: '#38a169'
@@ -723,6 +724,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     
     // Light blue for accepted invitations (guest perspective - accepted invitation)
     if (activity.isAcceptedInvitation) {
+      console.log('🔵 LIGHT BLUE - Accepted invitation:', activity.name);
       return {
         background: 'linear-gradient(135deg, #4299e1, #63b3ed)',
         borderColor: '#3182ce'
@@ -731,15 +733,16 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     
     // Grey for declined invitations
     if (activity.isDeclinedInvitation) {
+      console.log('⚪ GREY - Declined invitation:', activity.name);
       return {
         background: 'linear-gradient(135deg, #a0aec0, #cbd5e0)',
         borderColor: '#718096'
       };
     }
     
-    // Light blue for host's shared activities (activities they created and shared with others)
-    if (activity.is_shared && activity.is_host) {
-      console.log('✅ Activity should be light blue (shared host):', activity.name);
+    // Light blue for host's shared activities
+    if (activity.is_shared === true && activity.is_host === true) {
+      console.log('🔵 LIGHT BLUE - Host shared activity:', activity.name);
       return {
         background: 'linear-gradient(135deg, #4299e1, #63b3ed)',
         borderColor: '#3182ce'
@@ -747,7 +750,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
     
     // Dark blue for private activities (default)
-    console.log('⚫ Activity defaulting to dark blue:', activity.name, { is_shared: activity.is_shared, is_host: activity.is_host });
+    console.log('⚫ DARK BLUE - Private activity:', activity.name, { 
+      is_shared: activity.is_shared, 
+      is_host: activity.is_host,
+      type: typeof activity.is_shared
+    });
     return {
       background: 'linear-gradient(135deg, #2d3748, #4a5568)',
       borderColor: '#1a202c'
