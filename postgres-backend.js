@@ -1336,7 +1336,27 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
 // Connection endpoints
 app.get('/api/connections/requests', authenticateToken, async (req, res) => {
     try {
+        console.log(`🔍 GET /api/connections/requests - User ID: ${req.user.id}, Email: ${req.user.email}`);
+        
         const client = await pool.connect();
+        
+        // First, check all connection requests for this user (debug)
+        const allRequestsResult = await client.query(
+            `SELECT cr.*, u.username as requester_name 
+             FROM connection_requests cr 
+             LEFT JOIN users u ON cr.requester_id = u.id 
+             WHERE cr.target_parent_id = $1`,
+            [req.user.id]
+        );
+        console.log(`📋 All connection requests for user ${req.user.id}:`, allRequestsResult.rows);
+        
+        // Check for any requests with NULL child_id
+        const nullChildRequests = await client.query(
+            `SELECT * FROM connection_requests WHERE target_parent_id = $1 AND child_id IS NULL`,
+            [req.user.id]
+        );
+        console.log(`⚠️ Requests with NULL child_id:`, nullChildRequests.rows);
+        
         const result = await client.query(
             `SELECT cr.*, 
                     u.username as requester_name, u.email as requester_email, u.family_name as requester_family_name,
@@ -1344,14 +1364,20 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
                     c2.name as target_child_name, c2.age as target_child_age, c2.grade as target_child_grade, c2.school as target_child_school
              FROM connection_requests cr
              JOIN users u ON cr.requester_id = u.id
-             JOIN children c1 ON cr.child_id = c1.id
+             LEFT JOIN children c1 ON cr.child_id = c1.id
              LEFT JOIN children c2 ON cr.target_child_id = c2.id
              WHERE cr.target_parent_id = $1 AND cr.status = 'pending'
              ORDER BY cr.created_at DESC`,
             [req.user.id]
         );
+        console.log(`✅ Final filtered results:`, result.rows);
+        
         client.release();
 
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+        
         res.json({
             success: true,
             data: result.rows
@@ -1430,6 +1456,12 @@ app.get('/api/connections/search', authenticateToken, async (req, res) => {
 
 app.post('/api/connections/request', authenticateToken, async (req, res) => {
     try {
+        console.log('📝 POST /api/connections/request - Creating connection request:', {
+            requester_id: req.user.id,
+            requester_email: req.user.email,
+            body: req.body
+        });
+        
         const { target_parent_id, child_id, target_child_id, message } = req.body;
 
         if (!target_parent_id || !child_id) {
@@ -1453,6 +1485,8 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
             'INSERT INTO connection_requests (requester_id, target_parent_id, child_id, target_child_id, message, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
             [req.user.id, target_parent_id, child_id, target_child_id, message, 'pending']
         );
+        
+        console.log('✅ Connection request created successfully:', result.rows[0]);
 
         // Get detailed information for the response
         const detailedRequest = await client.query(
