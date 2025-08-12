@@ -798,7 +798,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         showAcceptedIcon: !invitation.viewed_at, // Only show green tick if not viewed
         invitationId: invitation.invitation_id,
         hostParent: invitation.host_parent_username,
-        host_child_name: invitation.child_name,
+        host_child_name: invitation.invited_child_name,
         host_parent_name: invitation.host_parent_username,
         is_shared: true // Mark as shared so it gets the blue color
       }));
@@ -817,7 +817,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         showEnvelope: !invitation.viewed_at, // Only show envelope if not viewed
         invitationId: invitation.invitation_id,
         hostParent: invitation.host_parent_username,
-        host_child_name: invitation.child_name,
+        host_child_name: invitation.invited_child_name,
         host_parent_name: invitation.host_parent_username
       }));
       
@@ -835,7 +835,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         showDeclinedIcon: !invitation.viewed_at, // Only show red cross if not viewed
         invitationId: invitation.invitation_id,
         hostParent: invitation.host_parent_username,
-        host_child_name: invitation.child_name,
+        host_child_name: invitation.invited_child_name,
         host_parent_name: invitation.host_parent_username
       }));
       
