@@ -1381,17 +1381,16 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
         const result = await client.query(query, params);
         client.release();
 
-        // Debug: Log activities with their is_shared status
+        // Debug: Log ALL activities to see what's being returned
         console.log('🔍 Calendar Activities Debug:');
-        result.rows.forEach(activity => {
-            if (activity.name && activity.name.toLowerCase().includes('auto')) {
-                console.log(`Activity: "${activity.name}"`);
-                console.log(`  - is_shared: ${activity.is_shared}`);
-                console.log(`  - debug_auto_notify: ${activity.debug_auto_notify}`);
-                console.log(`  - debug_total_invitations: ${activity.debug_total_invitations}`);
-                console.log(`  - debug_user_accepted_invitations: ${activity.debug_user_accepted_invitations}`);
-                console.log(`  - unviewed_status_changes: ${activity.unviewed_status_changes}`);
-            }
+        console.log(`Found ${result.rows.length} activities for user ${req.user.id} (${req.user.email})`);
+        result.rows.forEach((activity, index) => {
+            console.log(`${index + 1}. Activity: "${activity.name}" (ID: ${activity.id})`);
+            console.log(`   - is_shared: ${activity.is_shared}`);
+            console.log(`   - debug_auto_notify: ${activity.debug_auto_notify}`);
+            console.log(`   - debug_total_invitations: ${activity.debug_total_invitations}`);
+            console.log(`   - debug_user_accepted_invitations: ${activity.debug_user_accepted_invitations}`);
+            console.log(`   - child_name: ${activity.child_name}`);
         });
 
         res.json({
