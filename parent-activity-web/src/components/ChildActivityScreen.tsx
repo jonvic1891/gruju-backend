@@ -308,8 +308,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setSelectedActivity(activity);
     navigateToPage('activity-detail');
     
-    // Mark invitation as viewed if this is a pending invitation
-    if (activity.isPendingInvitation) {
+    // Mark invitation as viewed if this is any type of invitation
+    if (activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) {
       const invitationId = (activity as any).invitation_id || activity.id;
       if (invitationId) {
         try {
@@ -795,6 +795,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         name: invitation.activity_name,
         description: invitation.activity_description,
         isAcceptedInvitation: true,
+        showAcceptedIcon: !invitation.viewed_at, // Only show green tick if not viewed
         invitationId: invitation.invitation_id,
         hostParent: invitation.host_parent_username,
         host_child_name: invitation.child_name,
@@ -831,6 +832,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         name: invitation.activity_name,
         description: invitation.activity_description,
         isDeclinedInvitation: true,
+        showDeclinedIcon: !invitation.viewed_at, // Only show red cross if not viewed
         invitationId: invitation.invitation_id,
         hostParent: invitation.host_parent_username,
         host_child_name: invitation.child_name,
@@ -1870,8 +1872,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                       {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation || (activity as any).unviewed_status_changes > 0) && (
                         <div className="activity-status">
                           {activity.isPendingInvitation && activity.showEnvelope !== false && <span className="status-icon">📩</span>}
-                          {activity.isAcceptedInvitation && <span className="status-icon">✅</span>}
-                          {activity.isDeclinedInvitation && <span className="status-icon">❌</span>}
+                          {activity.isAcceptedInvitation && (activity as any).showAcceptedIcon && <span className="status-icon">✅</span>}
+                          {activity.isDeclinedInvitation && (activity as any).showDeclinedIcon && <span className="status-icon">❌</span>}
                           {/* Status change notifications for host's own activities */}
                           {(activity as any).unviewed_status_changes > 0 && (activity as any).unviewed_statuses && (
                             <>
