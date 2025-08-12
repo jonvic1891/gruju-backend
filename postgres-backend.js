@@ -1336,7 +1336,31 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
         const client = await pool.connect();
         
         let query = `
-            SELECT a.*, c.name as child_name 
+            SELECT 
+                a.*, 
+                c.name as child_name,
+                -- Determine if activity is shared
+                CASE 
+                    WHEN a.auto_notify_new_connections = true OR 
+                         EXISTS (SELECT 1 FROM activity_invitations ai WHERE ai.activity_id = a.id) OR
+                         EXISTS (SELECT 1 FROM activity_invitations ai WHERE ai.activity_id = a.id AND ai.invited_parent_id = $1 AND ai.status = 'accepted') 
+                    THEN true 
+                    ELSE false 
+                END as is_shared,
+                -- Status change notification count for host's own activities
+                COALESCE((SELECT COUNT(*) FROM activity_invitations ai_status 
+                 WHERE ai_status.activity_id = a.id 
+                 AND ai_status.inviter_parent_id = $1 
+                 AND ai_status.status IN ('accepted', 'declined')
+                 AND ai_status.status_viewed_at IS NULL 
+                 AND ai_status.updated_at > ai_status.created_at), 0) as unviewed_status_changes,
+                -- Get distinct statuses for unviewed changes
+                (SELECT string_agg(DISTINCT ai_status.status, ',') FROM activity_invitations ai_status 
+                 WHERE ai_status.activity_id = a.id 
+                 AND ai_status.inviter_parent_id = $1 
+                 AND ai_status.status IN ('accepted', 'declined')
+                 AND ai_status.status_viewed_at IS NULL 
+                 AND ai_status.updated_at > ai_status.created_at) as unviewed_statuses
             FROM activities a 
             JOIN children c ON a.child_id = c.id 
             WHERE c.parent_id = $1
@@ -1352,6 +1376,14 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
 
         const result = await client.query(query, params);
         client.release();
+
+        // Debug: Log activities with their is_shared status
+        console.log('🔍 Calendar Activities Debug:');
+        result.rows.forEach(activity => {
+            if (activity.name && activity.name.toLowerCase().includes('auto')) {
+                console.log(`Activity: "${activity.name}" - is_shared: ${activity.is_shared}, auto_notify_new_connections: ${activity.auto_notify_new_connections}, has_invitations: ${activity.unviewed_status_changes > 0}`);
+            }
+        });
 
         res.json({
             success: true,
