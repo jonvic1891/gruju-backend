@@ -2259,6 +2259,12 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
     }
 });
 
+// Test endpoint for debugging
+app.get('/api/activities/:activityId/test', (req, res) => {
+    console.log(`🧪 TEST ENDPOINT HIT: ActivityID ${req.params.activityId}`);
+    res.json({ success: true, message: 'Test endpoint working', activityId: req.params.activityId });
+});
+
 // Get activity participants (all invitees and their status)
 app.get('/api/activities/:activityId/participants', (req, res, next) => {
     console.log(`🚀 PARTICIPANTS API REQUEST: ${req.method} ${req.url} - ActivityID: ${req.params.activityId}`);
