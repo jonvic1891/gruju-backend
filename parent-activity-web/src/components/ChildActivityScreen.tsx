@@ -1813,8 +1813,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                           {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) && (
                             <div className="activity-footer">
                               {activity.isPendingInvitation && activity.showEnvelope !== false && <span className="notification-icon">📩</span>}
-                              {activity.isAcceptedInvitation && <span className="notification-icon">✅</span>}
-                              {activity.isDeclinedInvitation && <span className="notification-icon">❌</span>}
+                              {activity.isAcceptedInvitation && (activity as any).showAcceptedIcon && <span className="notification-icon">✅</span>}
+                              {activity.isDeclinedInvitation && (activity as any).showDeclinedIcon && <span className="notification-icon">❌</span>}
                             </div>
                           )}
                         </div>
