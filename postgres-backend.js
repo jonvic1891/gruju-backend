@@ -2446,9 +2446,13 @@ app.get('/api/activities/:activityId/participants', (req, res, next) => {
             return res.status(403).json({ success: false, error: 'Permission denied' });
         }
         
-        // Get the activity host information
+        // Get the activity host information (child and parent details)
         const hostQuery = await client.query(`
-            SELECT u.username as host_name, u.id as host_id, a.name as activity_name
+            SELECT u.username as host_parent_name, 
+                   u.id as host_parent_id, 
+                   c.name as host_child_name,
+                   c.id as host_child_id,
+                   a.name as activity_name
             FROM activities a
             INNER JOIN children c ON a.child_id = c.id
             INNER JOIN users u ON c.parent_id = u.id

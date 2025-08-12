@@ -119,9 +119,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       // Load accepted/invited activities
       const invitedResponse = await apiService.getInvitedActivities(startDate, endDate);
       if (invitedResponse.success && invitedResponse.data) {
-        // Filter for this specific child
+        // Get current user info to filter out host's own invitations
+        const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
+        const currentUsername = currentUser.username;
+        
+        // Filter for this specific child but exclude invitations where current user is the host
         const childInvitedActivities = invitedResponse.data.filter((invitation: any) => 
-          invitation.invited_child_name === child.name
+          invitation.invited_child_name === child.name &&
+          invitation.host_parent_username !== currentUsername
         );
         
         console.log(`✅ Found ${childInvitedActivities.length} accepted invitations for ${child.name}`);
@@ -134,9 +139,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       // Load pending invitations
       const pendingResponse = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
       if (pendingResponse.success && pendingResponse.data) {
-        // Filter for this specific child
+        // Get current user info to filter out host's own invitations
+        const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
+        const currentUsername = currentUser.username;
+        
+        // Filter for this specific child but exclude invitations where current user is the host
         const childPendingInvitations = pendingResponse.data.filter((invitation: any) => 
-          invitation.invited_child_name === child.name
+          invitation.invited_child_name === child.name &&
+          invitation.host_parent_username !== currentUsername
         );
         
         console.log(`📩 Found ${childPendingInvitations.length} pending invitations for ${child.name}`);
@@ -149,9 +159,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       // Load declined invitations
       const declinedResponse = await apiService.getDeclinedInvitationsForCalendar(startDate, endDate);
       if (declinedResponse.success && declinedResponse.data) {
-        // Filter for this specific child
+        // Get current user info to filter out host's own invitations
+        const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
+        const currentUsername = currentUser.username;
+        
+        // Filter for this specific child but exclude invitations where current user is the host
         const childDeclinedInvitations = declinedResponse.data.filter((invitation: any) => 
-          invitation.invited_child_name === child.name
+          invitation.invited_child_name === child.name &&
+          invitation.host_parent_username !== currentUsername
         );
         
         console.log(`❌ Found ${childDeclinedInvitations.length} declined invitations for ${child.name}`);
@@ -1169,29 +1184,36 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 ) : activityParticipants ? (
                   <div className="participants-list">
                     <div className="host-info">
-                      <p>👤 <strong>{activityParticipants.host?.host_name} (Host)</strong></p>
+                      <p>👤 <strong>{activityParticipants.host?.host_child_name} (Host)</strong></p>
                     </div>
                     {activityParticipants.participants?.length > 0 ? (
                       <div className="invited-participants">
                         <h4>Invited Children:</h4>
-                        {activityParticipants.participants.map((participant: any, index: number) => (
-                          <div key={index} className="participant-item">
-                            <div className="participant-info">
-                              <span className="participant-name">👤 {participant.child_name || participant.parent_name}</span>
+                        {(() => {
+                          const validParticipants = activityParticipants.participants.filter((participant: any) => participant.child_name && participant.child_id);
+                          return validParticipants.length > 0 ? validParticipants.map((participant: any, index: number) => (
+                            <div key={index} className="participant-item">
+                              <div className="participant-info">
+                                <span className="participant-name">👤 {participant.child_name}</span>
+                              </div>
+                              <div className="participant-status">
+                                {participant.status === 'pending' && (
+                                  <span style={{ color: '#fd7e14', fontSize: '12px' }}>📩 Pending</span>
+                                )}
+                                {participant.status === 'accepted' && (
+                                  <span style={{ color: '#48bb78', fontSize: '12px' }}>✅ Accepted</span>
+                                )}
+                                {participant.status === 'declined' && (
+                                  <span style={{ color: '#a0aec0', fontSize: '12px' }}>❌ Declined</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="participant-status">
-                              {participant.status === 'pending' && (
-                                <span style={{ color: '#fd7e14', fontSize: '12px' }}>📩 Pending</span>
-                              )}
-                              {participant.status === 'accepted' && (
-                                <span style={{ color: '#48bb78', fontSize: '12px' }}>✅ Accepted</span>
-                              )}
-                              {participant.status === 'declined' && (
-                                <span style={{ color: '#a0aec0', fontSize: '12px' }}>❌ Declined</span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                          )) : (
+                            <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                              No other children invited yet
+                            </p>
+                          );
+                        })()}
                       </div>
                     ) : (
                       <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
@@ -1217,7 +1239,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   ) : connectedChildren.length > 0 ? (
                     <div className="uninvited-children-list">
                       {connectedChildren
-                        .filter(child => !activityParticipants?.participants?.some((p: any) => p.child_id === child.id))
+                        .filter(child => !activityParticipants?.participants?.some((p: any) => p.child_id === child.id && p.child_name && p.child_id))
                         .map((child: any, index: number) => (
                           <div key={index} className="uninvited-child-item">
                             <div className="participant-info">
@@ -1231,7 +1253,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                             </button>
                           </div>
                         ))}
-                      {connectedChildren.filter(child => !activityParticipants?.participants?.some((p: any) => p.child_id === child.id)).length === 0 && (
+                      {connectedChildren.filter(child => !activityParticipants?.participants?.some((p: any) => p.child_id === child.id && p.child_name && p.child_id)).length === 0 && (
                         <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
                           All connected children have already been invited
                         </p>
