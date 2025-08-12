@@ -2325,11 +2325,10 @@ app.get('/api/activities/:activityId/participants', (req, res, next) => {
                    ai.viewed_at,
                    u.username as parent_name,
                    u.id as parent_id,
-                   COALESCE(c.name, c_invited.name) as child_name,
-                   COALESCE(c.id, c_invited.id) as child_id
+                   c_invited.name as child_name,
+                   c_invited.id as child_id
             FROM activity_invitations ai
             INNER JOIN users u ON ai.invited_parent_id = u.id
-            LEFT JOIN children c ON ai.child_id = c.id
             LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
             WHERE ai.activity_id = $1
             ORDER BY ai.created_at DESC
