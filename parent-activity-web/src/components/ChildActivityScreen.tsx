@@ -51,6 +51,12 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [loadingParticipants, setLoadingParticipants] = useState(false);
   const apiService = ApiService.getInstance();
 
+  // Get user-specific draft key to prevent cross-user data leakage
+  const getDraftKey = () => {
+    const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
+    return `activityDraft_${currentUser.id || 'unknown'}`;
+  };
+
   // Save activity draft to localStorage
   const saveActivityDraft = () => {
     const draft = {
@@ -61,14 +67,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       selectedConnectedChildren,
       childId: child.id
     };
-    localStorage.setItem('activityDraft', JSON.stringify(draft));
+    localStorage.setItem(getDraftKey(), JSON.stringify(draft));
     return draft;
   };
 
   // Restore activity draft from localStorage
   const restoreActivityDraft = () => {
     try {
-      const draftStr = localStorage.getItem('activityDraft');
+      const draftStr = localStorage.getItem(getDraftKey());
       if (draftStr) {
         const draft = JSON.parse(draftStr);
         // Only restore if it's for the same child
@@ -102,7 +108,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   // Clear activity draft
   const clearActivityDraft = () => {
-    localStorage.removeItem('activityDraft');
+    localStorage.removeItem(getDraftKey());
     setActivityDraft(null);
   };
 
@@ -152,6 +158,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   useEffect(() => {
     console.log('🚀 ChildActivityScreen mounted for child:', child.name);
     console.log('🔗 onNavigateToConnections prop:', !!onNavigateToConnections);
+    
+    // Clean up any old non-user-specific drafts (security fix)
+    localStorage.removeItem('activityDraft');
+    
     loadActivities();
     loadConnectedChildren();
     loadPendingConnectionRequests();

@@ -62,6 +62,9 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
 
 
   useEffect(() => {
+    // Clean up any old non-user-specific drafts (security fix)
+    localStorage.removeItem('activityDraft');
+    
     loadChildren();
     checkForActivityDraft();
   }, []);
@@ -83,7 +86,11 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
 
   const checkForActivityDraft = () => {
     try {
-      const draftStr = localStorage.getItem('activityDraft');
+      // Get user-specific draft key
+      const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
+      const draftKey = `activityDraft_${currentUser.id || 'unknown'}`;
+      
+      const draftStr = localStorage.getItem(draftKey);
       if (draftStr) {
         const draft = JSON.parse(draftStr);
         setActivityDraft(draft);
@@ -103,7 +110,11 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
   };
 
   const dismissActivityDraft = () => {
-    localStorage.removeItem('activityDraft');
+    // Get user-specific draft key
+    const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
+    const draftKey = `activityDraft_${currentUser.id || 'unknown'}`;
+    
+    localStorage.removeItem(draftKey);
     setActivityDraft(null);
   };
 
