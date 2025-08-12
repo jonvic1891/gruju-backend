@@ -2274,7 +2274,18 @@ app.get('/api/activities/:activityId/participants', (req, res, next) => {
     try {
         const { activityId } = req.params;
         console.log(`🔍 Getting participants for activity ${activityId}, user ${req.user.id}`);
+        
         const client = await pool.connect();
+        
+        // First check if activity exists
+        console.log(`🔍 Checking if activity ${activityId} exists`);
+        const activityExists = await client.query('SELECT id, name FROM activities WHERE id = $1', [activityId]);
+        console.log(`📊 Activity ${activityId} exists:`, activityExists.rows.length > 0, activityExists.rows);
+        
+        if (activityExists.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Activity not found' });
+        }
         
         // First verify that the user has permission to view this activity (either host or invited)
         const permissionCheck = await client.query(`
