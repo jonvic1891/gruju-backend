@@ -314,6 +314,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       console.log('📡 Participants API response:', response);
       if (response.success && response.data) {
         console.log('✅ Participants loaded successfully:', response.data);
+        console.log('🏠 Host data:', response.data.host);
         setActivityParticipants(response.data);
       } else {
         console.error('❌ Failed to load activity participants:', response.error);
@@ -1184,7 +1185,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 ) : activityParticipants ? (
                   <div className="participants-list">
                     <div className="host-info">
-                      <p>👤 <strong>{activityParticipants.host?.host_child_name} (Host)</strong></p>
+                      <p>👤 <strong>{activityParticipants.host?.host_child_name || activityParticipants.host?.host_name || 'Unknown'} (Host)</strong></p>
                     </div>
                     {activityParticipants.participants?.length > 0 ? (
                       <div className="invited-participants">
