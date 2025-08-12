@@ -1810,11 +1810,36 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                               {activity.name}
                             </div>
                           </div>
-                          {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) && (
+                          {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation || (activity as any).unviewed_status_changes > 0) && (
                             <div className="activity-footer">
                               {activity.isPendingInvitation && activity.showEnvelope !== false && <span className="notification-icon">📩</span>}
                               {activity.isAcceptedInvitation && (activity as any).showAcceptedIcon && <span className="notification-icon">✅</span>}
                               {activity.isDeclinedInvitation && (activity as any).showDeclinedIcon && <span className="notification-icon">❌</span>}
+                              {/* Status change notifications for host's own activities */}
+                              {(activity as any).unviewed_status_changes > 0 && (activity as any).unviewed_statuses && (
+                                <>
+                                  {(activity as any).unviewed_statuses.includes('accepted') && (
+                                    <span 
+                                      className="notification-icon" 
+                                      onClick={() => handleStatusChangeClicked(activity)}
+                                      style={{ cursor: 'pointer' }}
+                                      title="New accepted invitation - click to view"
+                                    >
+                                      ✅
+                                    </span>
+                                  )}
+                                  {(activity as any).unviewed_statuses.includes('declined') && (
+                                    <span 
+                                      className="notification-icon" 
+                                      onClick={() => handleStatusChangeClicked(activity)}
+                                      style={{ cursor: 'pointer' }}
+                                      title="New declined invitation - click to view"
+                                    >
+                                      ❌
+                                    </span>
+                                  )}
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
