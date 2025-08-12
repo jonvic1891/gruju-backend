@@ -1910,6 +1910,11 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
         if (!invited_parent_id) {
             return res.status(400).json({ success: false, error: 'Invited parent ID is required' });
         }
+        
+        // CRITICAL VALIDATION: child_id is required and must not be null
+        if (!child_id) {
+            return res.status(400).json({ success: false, error: 'Child ID is required - cannot create invitation without specifying which child to invite' });
+        }
 
         const client = await pool.connect();
         
@@ -1928,6 +1933,26 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
         if (activity.parent_id !== req.user.id) {
             client.release();
             return res.status(403).json({ success: false, error: 'Not authorized to invite to this activity' });
+        }
+
+        // Verify that the child belongs to the invited parent
+        const childCheck = await client.query(
+            'SELECT id, name, parent_id FROM children WHERE id = $1',
+            [child_id]
+        );
+        
+        if (childCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Child not found' });
+        }
+        
+        const child = childCheck.rows[0];
+        if (child.parent_id !== invited_parent_id) {
+            client.release();
+            return res.status(400).json({ 
+                success: false, 
+                error: `Child ${child.name} does not belong to the invited parent. Child belongs to parent ID ${child.parent_id}, but invitation is for parent ID ${invited_parent_id}` 
+            });
         }
 
         // Create the activity invitation
@@ -2430,7 +2455,7 @@ app.get('/api/activities/:activityId/participants', (req, res, next) => {
             WHERE a.id = $1
         `, [activityId]);
         
-        // Get all invitees for this activity
+        // Get all invitees for this activity (now with database constraints ensuring data integrity)
         const participantsQuery = await client.query(`
             SELECT ai.id as invitation_id,
                    ai.status,
@@ -2444,7 +2469,7 @@ app.get('/api/activities/:activityId/participants', (req, res, next) => {
                    c_invited.id as child_id
             FROM activity_invitations ai
             INNER JOIN users u ON ai.invited_parent_id = u.id
-            LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
+            INNER JOIN children c_invited ON ai.invited_child_id = c_invited.id
             WHERE ai.activity_id = $1
             ORDER BY ai.created_at DESC
         `, [activityId]);
