@@ -1224,34 +1224,6 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
             
             console.log('🎯 Retrieved activities from database:', activities.length);
             
-            // Debug specific activity and check invitations
-            const notification3 = activities.find(a => a.name === 'Notification 3');
-            if (notification3) {
-                console.log('🔍 "Notification 3" backend debug:', {
-                    name: notification3.name,
-                    id: notification3.id,
-                    is_shared: notification3.is_shared,
-                    is_host: notification3.is_host,
-                    auto_notify_new_connections: notification3.auto_notify_new_connections,
-                    invitation_status: notification3.invitation_status,
-                    inviter_parent_id: notification3.inviter_parent_id
-                });
-                
-                // Check if there are any invitations for this activity
-                const invitationCheck = await client.query(
-                    'SELECT COUNT(*) as invitation_count FROM activity_invitations WHERE activity_id = $1',
-                    [notification3.id]
-                );
-                console.log(`📊 Invitation count for "${notification3.name}":`, invitationCheck.rows[0].invitation_count);
-                
-                // Also check the auto_notify field directly from activities table
-                const activityCheck = await client.query(
-                    'SELECT auto_notify_new_connections FROM activities WHERE id = $1',
-                    [notification3.id]
-                );
-                console.log(`⚙️ auto_notify_new_connections from DB:`, activityCheck.rows[0]?.auto_notify_new_connections);
-            }
-            
             res.json({
                 success: true,
                 data: activities
@@ -2291,6 +2263,7 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
 app.get('/api/activities/:activityId/participants', authenticateToken, async (req, res) => {
     try {
         const { activityId } = req.params;
+        console.log(`🔍 Getting participants for activity ${activityId}, user ${req.user.id}`);
         const client = await pool.connect();
         
         // First verify that the user has permission to view this activity (either host or invited)
@@ -2324,13 +2297,15 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
                    ai.message,
                    ai.created_at as invited_at,
                    ai.updated_at as responded_at,
+                   ai.viewed_at,
                    u.username as parent_name,
                    u.id as parent_id,
-                   c.name as child_name,
-                   c.id as child_id
+                   COALESCE(c.name, c_invited.name) as child_name,
+                   COALESCE(c.id, c_invited.id) as child_id
             FROM activity_invitations ai
             INNER JOIN users u ON ai.invited_parent_id = u.id
             LEFT JOIN children c ON ai.child_id = c.id
+            LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
             WHERE ai.activity_id = $1
             ORDER BY ai.created_at DESC
         `, [activityId]);
@@ -2342,9 +2317,21 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
             participants: participantsQuery.rows || []
         };
         
+        console.log(`📊 Found ${participantsQuery.rows.length} participants for activity ${activityId}`);
+        console.log(`🏠 Host:`, result.host);
+        console.log(`👥 Participants:`, result.participants);
+        
         res.json({ success: true, data: result });
     } catch (error) {
-        console.error('Get activity participants error:', error);
+        console.error('🚨 Get activity participants error:', error);
+        console.error('🔍 Error details:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code,
+            detail: error.detail,
+            activityId: req.params.activityId,
+            userId: req.user.id
+        });
         res.status(500).json({ success: false, error: 'Failed to get activity participants' });
     }
 });
