@@ -94,23 +94,24 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     try {
       setLoading(true);
       
-      // Load child's own activities
-      const activitiesResponse = await apiService.getActivities(child.id);
-      if (activitiesResponse.success && activitiesResponse.data) {
-        const activitiesData = Array.isArray(activitiesResponse.data) ? activitiesResponse.data : [];
-        setActivities(activitiesData);
-      } else {
-        console.error('Failed to load activities:', activitiesResponse.error);
-        setActivities([]);
-      }
-      
-      // Load invitations using the proper calendar endpoints (like CalendarScreen does)
-      // Get date range for current month to load all relevant invitations
+      // Load child's own activities using calendar endpoint to get status change notifications
+      // Get date range for current month to load all relevant activities
       const now = new Date();
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       const startDate = startOfMonth.toISOString().split('T')[0];
       const endDate = endOfMonth.toISOString().split('T')[0];
+      
+      const activitiesResponse = await apiService.getCalendarActivities(startDate, endDate);
+      if (activitiesResponse.success && activitiesResponse.data) {
+        const activitiesData = Array.isArray(activitiesResponse.data) ? activitiesResponse.data : [];
+        // Filter to only show activities for the current child
+        const childActivities = activitiesData.filter(activity => activity.child_id === child.id);
+        setActivities(childActivities);
+      } else {
+        console.error('Failed to load activities:', activitiesResponse.error);
+        setActivities([]);
+      }
       
       console.log(`📩 Loading invitations for ${child.name} from ${startDate} to ${endDate}`);
       console.log(`🔗 API URL will be: /api/calendar/pending-invitations?start=${startDate}&end=${endDate}`);
@@ -205,11 +206,18 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         setActivityParticipants(response.data);
         
         // Mark all unviewed status changes as viewed for this activity
-        // This will be handled when the user views the participants modal
+        // Find the invitation ID from the participants data and mark it as viewed
+        if (response.data.participants && response.data.participants.length > 0) {
+          const invitationWithStatusChange = response.data.participants.find((p: any) => p.invitation_id);
+          if (invitationWithStatusChange && invitationWithStatusChange.invitation_id) {
+            await apiService.markStatusChangeAsViewed(invitationWithStatusChange.invitation_id);
+          }
+        }
+        
+        // Reload activities to hide the notification icon
         setTimeout(async () => {
-          // Reload activities to hide the notification icon after a short delay
           await loadActivities();
-        }, 1000);
+        }, 500);
       }
     } catch (error) {
       console.error('Failed to load participants:', error);
@@ -839,8 +847,50 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         host_parent_name: invitation.host_parent_username
       }));
       
-      // Combine activities and all types of invitations
-      const allDayItems = [...dayActivities, ...dayInvitedActivities, ...dayPendingInvitations, ...dayDeclinedInvitations];
+      // Since activities now come with is_shared property from backend, just use them directly
+      // and add any invitation-only activities that don't have corresponding activities
+      const invitationOnlyActivities = [
+        ...dayInvitedActivities.filter(inv => !dayActivities.some(act => act.id === inv.id)).map(invitation => ({
+          ...invitation,
+          id: `accepted-${invitation.id}`,
+          activity_id: invitation.id,
+          name: invitation.activity_name,
+          description: invitation.activity_description,
+          isAcceptedInvitation: true,
+          showAcceptedIcon: !invitation.viewed_at,
+          invitationId: invitation.invitation_id,
+          host_child_name: invitation.invited_child_name,
+          host_parent_name: invitation.host_parent_username,
+          is_shared: true
+        })),
+        ...dayPendingInvitations.filter(inv => !dayActivities.some(act => act.id === inv.id)).map(invitation => ({
+          ...invitation,
+          id: `invitation-${invitation.id}`,
+          activity_id: invitation.id,
+          name: invitation.activity_name,
+          description: invitation.activity_description,
+          isPendingInvitation: true,
+          showEnvelope: !invitation.viewed_at,
+          invitationId: invitation.invitation_id,
+          host_child_name: invitation.invited_child_name,
+          host_parent_name: invitation.host_parent_username
+        })),
+        ...dayDeclinedInvitations.filter(inv => !dayActivities.some(act => act.id === inv.id)).map(invitation => ({
+          ...invitation,
+          id: `declined-${invitation.id}`,
+          activity_id: invitation.id,
+          name: invitation.activity_name,
+          description: invitation.activity_description,
+          isDeclinedInvitation: true,
+          showDeclinedIcon: !invitation.viewed_at,
+          invitationId: invitation.invitation_id,
+          host_child_name: invitation.invited_child_name,
+          host_parent_name: invitation.host_parent_username
+        }))
+      ];
+      
+      // Combine activities (which already have is_shared from backend) with any invitation-only activities
+      const allDayItems = [...dayActivities, ...invitationOnlyActivities];
       
       // Sort all items by start time
       const sortedItems = allDayItems.sort((a, b) => {
@@ -1810,36 +1860,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                               {activity.name}
                             </div>
                           </div>
-                          {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation || (activity as any).unviewed_status_changes > 0) && (
+                          {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) && (
                             <div className="activity-footer">
                               {activity.isPendingInvitation && activity.showEnvelope !== false && <span className="notification-icon">📩</span>}
                               {activity.isAcceptedInvitation && (activity as any).showAcceptedIcon && <span className="notification-icon">✅</span>}
                               {activity.isDeclinedInvitation && (activity as any).showDeclinedIcon && <span className="notification-icon">❌</span>}
-                              {/* Status change notifications for host's own activities */}
-                              {(activity as any).unviewed_status_changes > 0 && (activity as any).unviewed_statuses && (
-                                <>
-                                  {(activity as any).unviewed_statuses.includes('accepted') && (
-                                    <span 
-                                      className="notification-icon" 
-                                      onClick={() => handleStatusChangeClicked(activity)}
-                                      style={{ cursor: 'pointer' }}
-                                      title="New accepted invitation - click to view"
-                                    >
-                                      ✅
-                                    </span>
-                                  )}
-                                  {(activity as any).unviewed_statuses.includes('declined') && (
-                                    <span 
-                                      className="notification-icon" 
-                                      onClick={() => handleStatusChangeClicked(activity)}
-                                      style={{ cursor: 'pointer' }}
-                                      title="New declined invitation - click to view"
-                                    >
-                                      ❌
-                                    </span>
-                                  )}
-                                </>
-                              )}
                             </div>
                           )}
                         </div>
