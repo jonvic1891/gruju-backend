@@ -202,7 +202,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       const response = await apiService.getActivityParticipants(activity.activity_id || activity.id);
       
       if (response.success && response.data) {
-        setParticipants(response.data);
+        setActivityParticipants(response.data);
         
         // Mark all unviewed status changes as viewed for this activity
         // This will be handled when the user views the participants modal
