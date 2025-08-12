@@ -1347,6 +1347,10 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
                     THEN true 
                     ELSE false 
                 END as is_shared,
+                -- Debug fields to see what each condition evaluates to
+                a.auto_notify_new_connections as debug_auto_notify,
+                (SELECT COUNT(*) FROM activity_invitations ai WHERE ai.activity_id = a.id) as debug_total_invitations,
+                (SELECT COUNT(*) FROM activity_invitations ai WHERE ai.activity_id = a.id AND ai.invited_parent_id = $1 AND ai.status = 'accepted') as debug_user_accepted_invitations,
                 -- Status change notification count for host's own activities
                 COALESCE((SELECT COUNT(*) FROM activity_invitations ai_status 
                  WHERE ai_status.activity_id = a.id 
@@ -1381,7 +1385,12 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
         console.log('🔍 Calendar Activities Debug:');
         result.rows.forEach(activity => {
             if (activity.name && activity.name.toLowerCase().includes('auto')) {
-                console.log(`Activity: "${activity.name}" - is_shared: ${activity.is_shared}, auto_notify_new_connections: ${activity.auto_notify_new_connections}, has_invitations: ${activity.unviewed_status_changes > 0}`);
+                console.log(`Activity: "${activity.name}"`);
+                console.log(`  - is_shared: ${activity.is_shared}`);
+                console.log(`  - debug_auto_notify: ${activity.debug_auto_notify}`);
+                console.log(`  - debug_total_invitations: ${activity.debug_total_invitations}`);
+                console.log(`  - debug_user_accepted_invitations: ${activity.debug_user_accepted_invitations}`);
+                console.log(`  - unviewed_status_changes: ${activity.unviewed_status_changes}`);
             }
         });
 
