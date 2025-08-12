@@ -1203,7 +1203,7 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
         const client = await pool.connect();
         
         try {
-            // Get activities for the child with invitation status and status change notifications
+            // Get activities for the child with invitation status
             const query = `
                 SELECT 
                     a.*,
@@ -1219,27 +1219,20 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
                         ELSE true 
                     END as is_host,
                     false as is_cancelled,
-                    -- Status change notification data (for host perspective)
-                    (SELECT COUNT(*) FROM activity_invitations ai_status 
+                    -- Simple status change notification count
+                    COALESCE((SELECT COUNT(*) FROM activity_invitations ai_status 
                      WHERE ai_status.activity_id = a.id 
                      AND ai_status.inviter_parent_id = $2 
                      AND ai_status.status IN ('accepted', 'declined')
                      AND ai_status.status_viewed_at IS NULL 
-                     AND ai_status.updated_at > ai_status.created_at) as unviewed_status_changes,
-                    -- Get the most recent status change details for notification display
-                    (SELECT json_agg(json_build_object(
-                        'invitation_id', ai_recent.id,
-                        'status', ai_recent.status,
-                        'updated_at', ai_recent.updated_at,
-                        'invited_child_name', c_invited.name
-                    )) FROM activity_invitations ai_recent 
-                    LEFT JOIN children c_invited ON ai_recent.invited_child_id = c_invited.id
-                    WHERE ai_recent.activity_id = a.id 
-                    AND ai_recent.inviter_parent_id = $2 
-                    AND ai_recent.status IN ('accepted', 'declined')
-                    AND ai_recent.status_viewed_at IS NULL 
-                    AND ai_recent.updated_at > ai_recent.created_at
-                    ORDER BY ai_recent.updated_at DESC) as recent_status_changes
+                     AND ai_status.updated_at > ai_status.created_at), 0) as unviewed_status_changes,
+                    -- Get distinct statuses for unviewed changes
+                    (SELECT string_agg(DISTINCT ai_status.status, ',') FROM activity_invitations ai_status 
+                     WHERE ai_status.activity_id = a.id 
+                     AND ai_status.inviter_parent_id = $2 
+                     AND ai_status.status IN ('accepted', 'declined')
+                     AND ai_status.status_viewed_at IS NULL 
+                     AND ai_status.updated_at > ai_status.created_at) as unviewed_statuses
                 FROM activities a
                 LEFT JOIN activity_invitations ai ON a.id = ai.activity_id 
                     AND ai.invited_parent_id = $2

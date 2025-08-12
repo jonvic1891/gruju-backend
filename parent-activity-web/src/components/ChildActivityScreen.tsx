@@ -196,18 +196,23 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   };
 
-  const handleStatusChangeViewed = async (invitationId: number) => {
+  const handleStatusChangeClicked = async (activity: Activity) => {
+    // Show participants to see status changes, then mark all as viewed
     try {
-      const response = await apiService.markStatusChangeAsViewed(invitationId);
+      const response = await apiService.getActivityParticipants(activity.activity_id || activity.id);
       
-      if (response.success) {
-        // Reload activities to hide the notification icon
-        await loadActivities();
-      } else {
-        console.error('Failed to mark status change as viewed:', response.error);
+      if (response.success && response.data) {
+        setParticipants(response.data);
+        
+        // Mark all unviewed status changes as viewed for this activity
+        // This will be handled when the user views the participants modal
+        setTimeout(async () => {
+          // Reload activities to hide the notification icon after a short delay
+          await loadActivities();
+        }, 1000);
       }
     } catch (error) {
-      console.error('Failed to mark status change as viewed:', error);
+      console.error('Failed to load participants:', error);
     }
   };
 
@@ -1868,18 +1873,30 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                           {activity.isAcceptedInvitation && <span className="status-icon">✅</span>}
                           {activity.isDeclinedInvitation && <span className="status-icon">❌</span>}
                           {/* Status change notifications for host's own activities */}
-                          {(activity as any).unviewed_status_changes > 0 && (activity as any).recent_status_changes && 
-                            (activity as any).recent_status_changes.map((change: any, index: number) => (
-                              <span 
-                                key={index} 
-                                className="status-icon" 
-                                onClick={() => handleStatusChangeViewed(change.invitation_id)}
-                                style={{ cursor: 'pointer' }}
-                              >
-                                {change.status === 'accepted' ? '✅' : '❌'}
-                              </span>
-                            ))
-                          }
+                          {(activity as any).unviewed_status_changes > 0 && (activity as any).unviewed_statuses && (
+                            <>
+                              {(activity as any).unviewed_statuses.includes('accepted') && (
+                                <span 
+                                  className="status-icon" 
+                                  onClick={() => handleStatusChangeClicked(activity)}
+                                  style={{ cursor: 'pointer' }}
+                                  title="New accepted invitation - click to view"
+                                >
+                                  ✅
+                                </span>
+                              )}
+                              {(activity as any).unviewed_statuses.includes('declined') && (
+                                <span 
+                                  className="status-icon" 
+                                  onClick={() => handleStatusChangeClicked(activity)}
+                                  style={{ cursor: 'pointer' }}
+                                  title="New declined invitation - click to view"
+                                >
+                                  ❌
+                                </span>
+                              )}
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
