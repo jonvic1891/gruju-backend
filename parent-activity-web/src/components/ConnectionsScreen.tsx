@@ -621,8 +621,27 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
 
       {/* Return to Activity Popup */}
       {showReturnToActivityPopup && (
-        <div className="modal-overlay">
-          <div className="modal-content">
+        <div className="modal-overlay" style={{
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="modal-content" style={{
+            backgroundColor: 'white',
+            padding: '24px',
+            borderRadius: '12px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
+            textAlign: 'center'
+          }}>
             <h3>Connection Request Sent! 🎉</h3>
             <p>Your connection request has been sent successfully.</p>
             <p>Would you like to continue adding more connections or return to finish creating your activity?</p>

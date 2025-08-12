@@ -104,6 +104,8 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     if (activityDraft && activityDraft.childId) {
       const child = children.find(c => c.id === activityDraft.childId);
       if (child) {
+        // Clear the draft from ChildrenScreen since it will be handled by ChildActivityScreen
+        setActivityDraft(null);
         setSelectedChild(child);
       }
     }

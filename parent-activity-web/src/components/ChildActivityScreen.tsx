@@ -97,6 +97,12 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           setAutoNotifyNewConnections(draft.autoNotifyNewConnections || false);
           setSelectedConnectedChildren(draft.selectedConnectedChildren || []);
           setActivityDraft(draft);
+          
+          // Automatically navigate to add-activity screen when draft is restored
+          setTimeout(() => {
+            navigateToPage('add-activity');
+          }, 100);
+          
           return true;
         }
       }
