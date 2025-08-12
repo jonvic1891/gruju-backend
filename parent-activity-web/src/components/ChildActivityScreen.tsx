@@ -150,6 +150,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   useEffect(() => {
+    console.log('🚀 ChildActivityScreen mounted for child:', child.name);
+    console.log('🔗 onNavigateToConnections prop:', !!onNavigateToConnections);
     loadActivities();
     loadConnectedChildren();
     loadPendingConnectionRequests();
@@ -346,11 +348,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   const loadConnectedChildren = async () => {
     try {
+      console.log('🔄 Loading connected children...');
       const response = await apiService.getConnections();
+      console.log('📡 Connections API response:', response);
       if (response.success && response.data) {
         // Get current user info to determine which children are ours vs connected
         const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
         const currentUsername = currentUser.username;
+        console.log('👤 Current user:', currentUsername);
         
         // Extract connected children from connections
         const children: any[] = [];
@@ -380,24 +385,32 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           }
         });
         
-        console.log('Connected children loaded:', children);
+        console.log('✅ Connected children loaded:', children.length, children);
         setConnectedChildren(children);
+      } else {
+        console.log('❌ No connected children data or API error');
+        setConnectedChildren([]);
       }
     } catch (error) {
-      console.error('Failed to load connected children:', error);
+      console.error('❌ Failed to load connected children:', error);
       setConnectedChildren([]);
     }
   };
 
   const loadPendingConnectionRequests = async () => {
     try {
+      console.log('🔄 Loading pending connection requests...');
       const response = await apiService.getSentConnectionRequests();
+      console.log('📡 Pending connections API response:', response);
       if (response.success && response.data) {
-        console.log('Pending connection requests loaded:', response.data);
+        console.log('✅ Pending connection requests loaded:', response.data.length, response.data);
         setPendingConnectionRequests(response.data);
+      } else {
+        console.log('❌ No pending connection requests data or API error');
+        setPendingConnectionRequests([]);
       }
     } catch (error) {
-      console.error('Failed to load pending connection requests:', error);
+      console.error('❌ Failed to load pending connection requests:', error);
       setPendingConnectionRequests([]);
     }
   };
@@ -711,9 +724,15 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         for (const activity of createdActivities) {
           for (const childId of selectedConnectedChildren) {
             try {
+              // Skip pending connections for now - they'll be invited when connections are accepted
+              if (typeof childId === 'string' && childId.startsWith('pending-')) {
+                console.log('Skipping pending connection invitation:', childId);
+                continue;
+              }
+              
               // Find the connected child data to get the parent ID
               const connectedChild = connectedChildren.find(cc => cc.id === childId);
-              if (connectedChild) {
+              if (connectedChild && typeof childId === 'number') {
                 await apiService.sendActivityInvitation(
                   activity.id, 
                   connectedChild.parentId, // Use the correct parent ID
@@ -1605,6 +1624,16 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     onChange={() => setIsSharedActivity(true)}
                   />
                   🌐 Shared (Invite connected children)
+                  {!isSharedActivity && connectedChildren.length === 0 && pendingConnectionRequests.length === 0 && (
+                    <span style={{ 
+                      fontSize: '12px', 
+                      color: '#667eea', 
+                      fontStyle: 'italic',
+                      marginLeft: '8px' 
+                    }}>
+                      - Select to create connections
+                    </span>
+                  )}
                 </label>
               </div>
               
@@ -1644,8 +1673,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   </div>
                   {connectedChildren.length === 0 && pendingConnectionRequests.length === 0 ? (
                     <div className="no-connections">
-                      <p>No connections found. You need to create connections with other families first!</p>
-                      {onNavigateToConnections && (
+                      <p><strong>No connections found.</strong></p>
+                      <p style={{ fontSize: '14px', color: '#666', marginBottom: '12px' }}>
+                        To invite other children to this activity, you'll need to connect with their families first.
+                      </p>
+                      {onNavigateToConnections ? (
                         <button
                           type="button"
                           onClick={handleNavigateToConnections}
@@ -1654,15 +1686,26 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                             background: 'linear-gradient(135deg, #667eea, #764ba2)',
                             color: 'white',
                             border: 'none',
-                            padding: '8px 16px',
-                            borderRadius: '6px',
+                            padding: '10px 20px',
+                            borderRadius: '8px',
                             cursor: 'pointer',
                             fontSize: '14px',
-                            marginTop: '8px'
+                            fontWeight: 'bold',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                           }}
                         >
-                          🔗 Go to Connections Tab
+                          🔗 Create Connections Now
                         </button>
+                      ) : (
+                        <div style={{ 
+                          background: '#f8f9fa', 
+                          padding: '8px 12px', 
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          color: '#666'
+                        }}>
+                          Navigation to connections not available. Please go to the Connections tab manually.
+                        </div>
                       )}
                     </div>
                   ) : (
