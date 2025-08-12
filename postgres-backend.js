@@ -128,6 +128,21 @@ async function runMigrations() {
                 throw error;
             }
         }
+
+        // Migration 6: Add status_viewed_at column for tracking when host views status changes
+        try {
+            await client.query(`
+                ALTER TABLE activity_invitations 
+                ADD COLUMN IF NOT EXISTS status_viewed_at TIMESTAMP
+            `);
+            console.log('✅ Migration: Added status_viewed_at column to activity_invitations table');
+        } catch (error) {
+            if (error.code === '42701') {
+                console.log('✅ Migration: status_viewed_at column already exists');
+            } else {
+                throw error;
+            }
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -1188,7 +1203,7 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
         const client = await pool.connect();
         
         try {
-            // Get activities for the child with invitation status
+            // Get activities for the child with invitation status and status change notifications
             const query = `
                 SELECT 
                     a.*,
@@ -1203,7 +1218,28 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
                         WHEN ai.invited_parent_id = $2 THEN false 
                         ELSE true 
                     END as is_host,
-                    false as is_cancelled
+                    false as is_cancelled,
+                    -- Status change notification data (for host perspective)
+                    (SELECT COUNT(*) FROM activity_invitations ai_status 
+                     WHERE ai_status.activity_id = a.id 
+                     AND ai_status.inviter_parent_id = $2 
+                     AND ai_status.status IN ('accepted', 'declined')
+                     AND ai_status.status_viewed_at IS NULL 
+                     AND ai_status.updated_at > ai_status.created_at) as unviewed_status_changes,
+                    -- Get the most recent status change details for notification display
+                    (SELECT json_agg(json_build_object(
+                        'invitation_id', ai_recent.id,
+                        'status', ai_recent.status,
+                        'updated_at', ai_recent.updated_at,
+                        'invited_child_name', c_invited.name
+                    )) FROM activity_invitations ai_recent 
+                    LEFT JOIN children c_invited ON ai_recent.invited_child_id = c_invited.id
+                    WHERE ai_recent.activity_id = a.id 
+                    AND ai_recent.inviter_parent_id = $2 
+                    AND ai_recent.status IN ('accepted', 'declined')
+                    AND ai_recent.status_viewed_at IS NULL 
+                    AND ai_recent.updated_at > ai_recent.created_at
+                    ORDER BY ai_recent.updated_at DESC) as recent_status_changes
                 FROM activities a
                 LEFT JOIN activity_invitations ai ON a.id = ai.activity_id 
                     AND ai.invited_parent_id = $2
@@ -2153,6 +2189,50 @@ app.post('/api/activity-invitations/:invitationId/view', authenticateToken, asyn
     } catch (error) {
         console.error('Mark invitation as viewed error:', error);
         res.status(500).json({ success: false, error: 'Failed to mark invitation as viewed' });
+    }
+});
+
+// Mark Activity Invitation status change as viewed endpoint (for host notifications)
+app.post('/api/activity-invitations/:invitationId/mark-status-viewed', authenticateToken, async (req, res) => {
+    try {
+        const { invitationId } = req.params;
+        
+        if (!invitationId || isNaN(invitationId)) {
+            return res.status(400).json({ success: false, error: 'Invalid invitation ID' });
+        }
+
+        const client = await pool.connect();
+        
+        // Verify the invitation exists and belongs to this user (as the host)
+        const invitation = await client.query(
+            'SELECT * FROM activity_invitations WHERE id = $1',
+            [invitationId]
+        );
+        
+        if (invitation.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Invitation not found' });
+        }
+
+        // Verify user is the host (inviter) of this invitation
+        if (invitation.rows[0].inviter_parent_id !== req.user.id) {
+            client.release();
+            return res.status(403).json({ success: false, error: 'You can only mark your own invitations as viewed' });
+        }
+
+        // Mark status change as viewed if not already viewed
+        if (!invitation.rows[0].status_viewed_at) {
+            await client.query(
+                'UPDATE activity_invitations SET status_viewed_at = NOW() WHERE id = $1',
+                [invitationId]
+            );
+        }
+
+        client.release();
+        res.json({ success: true, message: 'Status change notification marked as viewed' });
+    } catch (error) {
+        console.error('Mark status change as viewed error:', error);
+        res.status(500).json({ success: false, error: 'Failed to mark status change as viewed' });
     }
 });
 

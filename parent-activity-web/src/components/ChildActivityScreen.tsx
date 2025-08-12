@@ -196,6 +196,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   };
 
+  const handleStatusChangeViewed = async (invitationId: number) => {
+    try {
+      const response = await apiService.markStatusChangeAsViewed(invitationId);
+      
+      if (response.success) {
+        // Reload activities to hide the notification icon
+        await loadActivities();
+      } else {
+        console.error('Failed to mark status change as viewed:', response.error);
+      }
+    } catch (error) {
+      console.error('Failed to mark status change as viewed:', error);
+    }
+  };
+
   const loadConnectedChildren = async () => {
     try {
       const response = await apiService.getConnections();
@@ -266,15 +281,18 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const loadActivityParticipants = async (activityId: number) => {
     try {
       setLoadingParticipants(true);
+      console.log('🔍 Loading participants for activity ID:', activityId);
       const response = await apiService.getActivityParticipants(activityId);
+      console.log('📡 Participants API response:', response);
       if (response.success && response.data) {
+        console.log('✅ Participants loaded successfully:', response.data);
         setActivityParticipants(response.data);
       } else {
+        console.error('❌ Failed to load activity participants:', response.error);
         setActivityParticipants(null);
-        console.error('Failed to load activity participants:', response.error);
       }
     } catch (error) {
-      console.error('Error loading activity participants:', error);
+      console.error('💥 Error loading activity participants:', error);
       setActivityParticipants(null);
     } finally {
       setLoadingParticipants(false);
@@ -341,20 +359,33 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setSelectedDates(activityDates);
     
     // Load participants for any activity that has a real backend activity ID
+    console.log('🎯 Activity debug for participants:', {
+      name: activity.name,
+      id: activity.id,
+      activity_id: (activity as any).activity_id,
+      isPendingInvitation: activity.isPendingInvitation,
+      isAcceptedInvitation: activity.isAcceptedInvitation,
+      isDeclinedInvitation: activity.isDeclinedInvitation
+    });
+    
     // For invitations, we need to get the original activity ID from the backend
     if (activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) {
       // For invitations, we need to load participants using the original activity ID
       // The invitation data should contain the original activity_id
       const originalActivityId = (activity as any).activity_id || (activity as any).id;
+      console.log('📋 Loading participants for invitation with originalActivityId:', originalActivityId);
       if (originalActivityId && typeof originalActivityId === 'number') {
         loadActivityParticipants(originalActivityId);
       } else {
+        console.error('❌ No valid activity ID found for invitation:', activity);
         setActivityParticipants(null);
       }
     } else if (activity.id) {
       // For regular activities, use the activity ID directly
+      console.log('📋 Loading participants for regular activity with ID:', activity.id);
       loadActivityParticipants(activity.id);
     } else {
+      console.error('❌ No activity ID found for activity:', activity);
       setActivityParticipants(null);
     }
     
@@ -1831,11 +1862,24 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   >
                     <div className="activity-card-header">
                       <h4 className="activity-name">{activity.name}</h4>
-                      {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) && (
+                      {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation || (activity as any).unviewed_status_changes > 0) && (
                         <div className="activity-status">
                           {activity.isPendingInvitation && activity.showEnvelope !== false && <span className="status-icon">📩</span>}
                           {activity.isAcceptedInvitation && <span className="status-icon">✅</span>}
                           {activity.isDeclinedInvitation && <span className="status-icon">❌</span>}
+                          {/* Status change notifications for host's own activities */}
+                          {(activity as any).unviewed_status_changes > 0 && (activity as any).recent_status_changes && 
+                            (activity as any).recent_status_changes.map((change: any, index: number) => (
+                              <span 
+                                key={index} 
+                                className="status-icon" 
+                                onClick={() => handleStatusChangeViewed(change.invitation_id)}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                {change.status === 'accepted' ? '✅' : '❌'}
+                              </span>
+                            ))
+                          }
                         </div>
                       )}
                     </div>
