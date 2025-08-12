@@ -9,9 +9,10 @@ interface ChildActivityScreenProps {
   child: Child;
   onBack: () => void;
   onDataChanged?: () => void;
+  onNavigateToConnections?: () => void;
 }
 
-const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack, onDataChanged }) => {
+const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack, onDataChanged, onNavigateToConnections }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [invitedActivities, setInvitedActivities] = useState<any[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
@@ -28,8 +29,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [isSharedActivity, setIsSharedActivity] = useState(false);
   const [autoNotifyNewConnections, setAutoNotifyNewConnections] = useState(false);
-  const [selectedConnectedChildren, setSelectedConnectedChildren] = useState<number[]>([]);
+  const [selectedConnectedChildren, setSelectedConnectedChildren] = useState<(number | string)[]>([]);
   const [connectedChildren, setConnectedChildren] = useState<any[]>([]);
+  const [pendingConnectionRequests, setPendingConnectionRequests] = useState<any[]>([]);
+  const [activityDraft, setActivityDraft] = useState<any>(null);
   const [newActivity, setNewActivity] = useState({
     name: '',
     description: '',
@@ -48,9 +51,111 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [loadingParticipants, setLoadingParticipants] = useState(false);
   const apiService = ApiService.getInstance();
 
+  // Save activity draft to localStorage
+  const saveActivityDraft = () => {
+    const draft = {
+      newActivity,
+      selectedDates,
+      isSharedActivity,
+      autoNotifyNewConnections,
+      selectedConnectedChildren,
+      childId: child.id
+    };
+    localStorage.setItem('activityDraft', JSON.stringify(draft));
+    return draft;
+  };
+
+  // Restore activity draft from localStorage
+  const restoreActivityDraft = () => {
+    try {
+      const draftStr = localStorage.getItem('activityDraft');
+      if (draftStr) {
+        const draft = JSON.parse(draftStr);
+        // Only restore if it's for the same child
+        if (draft.childId === child.id) {
+          setNewActivity(draft.newActivity || {
+            name: '',
+            description: '',
+            start_date: '',
+            end_date: '',
+            start_time: '',
+            end_time: '',
+            location: '',
+            website_url: '',
+            cost: '',
+            max_participants: '',
+            auto_notify_new_connections: false
+          });
+          setSelectedDates(draft.selectedDates || []);
+          setIsSharedActivity(draft.isSharedActivity || false);
+          setAutoNotifyNewConnections(draft.autoNotifyNewConnections || false);
+          setSelectedConnectedChildren(draft.selectedConnectedChildren || []);
+          setActivityDraft(draft);
+          return true;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to restore activity draft:', error);
+    }
+    return false;
+  };
+
+  // Clear activity draft
+  const clearActivityDraft = () => {
+    localStorage.removeItem('activityDraft');
+    setActivityDraft(null);
+  };
+
+  // Navigate to connections to create new connections
+  const handleNavigateToConnections = () => {
+    if (onNavigateToConnections) {
+      saveActivityDraft();
+      onNavigateToConnections();
+    }
+  };
+
+  // Handle cancel with draft consideration
+  const handleCancelActivity = () => {
+    if (activityDraft) {
+      // If there's a draft, ask if they want to keep it
+      const keepDraft = window.confirm(
+        'You have a saved draft of this activity. Would you like to keep it for later?\n\n' +
+        'Click "OK" to keep the draft, or "Cancel" to discard it.'
+      );
+      if (!keepDraft) {
+        clearActivityDraft();
+      }
+    }
+    
+    // Reset form state
+    setNewActivity({
+      name: '',
+      description: '',
+      start_date: '',
+      end_date: '',
+      start_time: '',
+      end_time: '',
+      location: '',
+      website_url: '',
+      cost: '',
+      max_participants: '',
+      auto_notify_new_connections: false
+    });
+    setSelectedDates([]);
+    setIsSharedActivity(false);
+    setAutoNotifyNewConnections(false);
+    setSelectedConnectedChildren([]);
+    
+    goBack();
+  };
+
   useEffect(() => {
     loadActivities();
     loadConnectedChildren();
+    loadPendingConnectionRequests();
+    
+    // Check if there's a saved draft to restore
+    restoreActivityDraft();
   }, [child.id]);
 
   // Handle browser back button and internal navigation
@@ -284,25 +389,40 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   };
 
+  const loadPendingConnectionRequests = async () => {
+    try {
+      const response = await apiService.getSentConnectionRequests();
+      if (response.success && response.data) {
+        console.log('Pending connection requests loaded:', response.data);
+        setPendingConnectionRequests(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to load pending connection requests:', error);
+      setPendingConnectionRequests([]);
+    }
+  };
+
   const handleAddActivity = () => {
-    // Reset all form state when starting to add a new activity
-    setNewActivity({
-      name: '',
-      description: '',
-      start_date: '',
-      end_date: '',
-      start_time: '',
-      end_time: '',
-      location: '',
-      website_url: '',
-      cost: '',
-      max_participants: '',
-      auto_notify_new_connections: false
-    });
-    setSelectedDates([]);
-    setIsSharedActivity(false);
-    setAutoNotifyNewConnections(false);
-    setSelectedConnectedChildren([]);
+    // Check if there's already a draft - if not, reset form state
+    if (!activityDraft) {
+      setNewActivity({
+        name: '',
+        description: '',
+        start_date: '',
+        end_date: '',
+        start_time: '',
+        end_time: '',
+        location: '',
+        website_url: '',
+        cost: '',
+        max_participants: '',
+        auto_notify_new_connections: false
+      });
+      setSelectedDates([]);
+      setIsSharedActivity(false);
+      setAutoNotifyNewConnections(false);
+      setSelectedConnectedChildren([]);
+    }
     navigateToPage('add-activity');
   };
 
@@ -626,6 +746,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setIsSharedActivity(false);
       setAutoNotifyNewConnections(false);
       setSelectedConnectedChildren([]);
+      clearActivityDraft(); // Clear the saved draft after successful creation
       navigateToPage('main');
       loadActivities();
       
@@ -822,7 +943,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         showAcceptedIcon: !invitation.viewed_at, // Only show green tick if not viewed
         invitationId: invitation.invitation_id,
         hostParent: invitation.host_parent_username,
-        host_child_name: invitation.invited_child_name,
+        host_child_name: invitation.host_child_name,
         host_parent_name: invitation.host_parent_username,
         is_shared: true // Mark as shared so it gets the blue color
       }));
@@ -841,7 +962,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         showEnvelope: !invitation.viewed_at, // Only show envelope if not viewed
         invitationId: invitation.invitation_id,
         hostParent: invitation.host_parent_username,
-        host_child_name: invitation.invited_child_name,
+        host_child_name: invitation.host_child_name,
         host_parent_name: invitation.host_parent_username
       }));
       
@@ -859,7 +980,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         showDeclinedIcon: !invitation.viewed_at, // Only show red cross if not viewed
         invitationId: invitation.invitation_id,
         hostParent: invitation.host_parent_username,
-        host_child_name: invitation.invited_child_name,
+        host_child_name: invitation.host_child_name,
         host_parent_name: invitation.host_parent_username
       }));
       
@@ -875,7 +996,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           isAcceptedInvitation: true,
           showAcceptedIcon: !invitation.viewed_at,
           invitationId: invitation.invitation_id,
-          host_child_name: invitation.invited_child_name,
+          host_child_name: invitation.host_child_name,
           host_parent_name: invitation.host_parent_username,
           is_shared: true
         })),
@@ -888,7 +1009,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           isPendingInvitation: true,
           showEnvelope: !invitation.viewed_at,
           invitationId: invitation.invitation_id,
-          host_child_name: invitation.invited_child_name,
+          host_child_name: invitation.host_child_name,
           host_parent_name: invitation.host_parent_username
         })),
         ...dayDeclinedInvitations.filter(inv => !dayActivities.some(act => act.id === inv.id)).map(invitation => ({
@@ -900,7 +1021,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           isDeclinedInvitation: true,
           showDeclinedIcon: !invitation.viewed_at,
           invitationId: invitation.invitation_id,
-          host_child_name: invitation.invited_child_name,
+          host_child_name: invitation.host_child_name,
           host_parent_name: invitation.host_parent_username
         }))
       ];
@@ -1185,7 +1306,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 ) : activityParticipants ? (
                   <div className="participants-list">
                     <div className="host-info">
-                      <p>👤 <strong>{activityParticipants.host?.host_child_name || activityParticipants.host?.host_name || 'Unknown'} (Host)</strong></p>
+                      <p>👤 <strong>{activityParticipants.host?.host_child_name || 'Unknown Host'} (Host)</strong></p>
                     </div>
                     {activityParticipants.participants?.length > 0 ? (
                       <div className="invited-participants">
@@ -1359,6 +1480,33 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           </div>
         </div>
         <div className="page-content">
+          {activityDraft && (
+            <div className="draft-notification" style={{
+              background: 'linear-gradient(135deg, #48bb78, #68d391)',
+              color: 'white',
+              padding: '12px',
+              borderRadius: '8px',
+              marginBottom: '16px',
+              textAlign: 'center'
+            }}>
+              📝 <strong>Draft Restored:</strong> Your activity details have been saved and restored from when you went to create connections.
+              <button 
+                onClick={clearActivityDraft}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  color: 'white',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  marginLeft: '8px',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                Clear Draft
+              </button>
+            </div>
+          )}
           <div className="page-form">
             <input
               type="text"
@@ -1464,34 +1612,62 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 <div className="connected-children-section">
                   <div className="children-selection-header">
                     <label>Invite Children:</label>
-                    {connectedChildren.length > 0 && (
+                    {(connectedChildren.length > 0 || pendingConnectionRequests.length > 0) && (
                       <div className="selection-controls">
                         <button
                           type="button"
                           onClick={() => {
-                            const allChildrenSelected = connectedChildren.every(child => 
-                              selectedConnectedChildren.includes(child.id)
-                            );
-                            if (allChildrenSelected) {
+                            const allConnectedIds = connectedChildren.map(child => child.id);
+                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.id}`);
+                            const allIds = [...allConnectedIds, ...allPendingIds];
+                            
+                            const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
+                            if (allSelected) {
                               setSelectedConnectedChildren([]);
                             } else {
-                              setSelectedConnectedChildren(connectedChildren.map(child => child.id));
+                              setSelectedConnectedChildren(allIds);
                             }
                           }}
                           className="select-all-btn"
                         >
-                          {connectedChildren.every(child => selectedConnectedChildren.includes(child.id)) 
-                            ? 'Deselect All' 
-                            : 'Select All'
-                          } ({connectedChildren.length})
+                          {(() => {
+                            const allConnectedIds = connectedChildren.map(child => child.id);
+                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.id}`);
+                            const allIds = [...allConnectedIds, ...allPendingIds];
+                            const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
+                            const totalCount = connectedChildren.length + pendingConnectionRequests.length;
+                            return allSelected ? 'Deselect All' : 'Select All';
+                          })()} ({connectedChildren.length + pendingConnectionRequests.length})
                         </button>
                       </div>
                     )}
                   </div>
-                  {connectedChildren.length === 0 ? (
-                    <p className="no-connections">No connected children found. Add connections first!</p>
+                  {connectedChildren.length === 0 && pendingConnectionRequests.length === 0 ? (
+                    <div className="no-connections">
+                      <p>No connections found. You need to create connections with other families first!</p>
+                      {onNavigateToConnections && (
+                        <button
+                          type="button"
+                          onClick={handleNavigateToConnections}
+                          className="connection-nav-btn"
+                          style={{
+                            background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                            color: 'white',
+                            border: 'none',
+                            padding: '8px 16px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            marginTop: '8px'
+                          }}
+                        >
+                          🔗 Go to Connections Tab
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <div className="children-list">
+                      {/* Confirmed connections */}
                       {connectedChildren.map((connectedChild) => (
                         <label key={connectedChild.id} className="child-checkbox">
                           <input
@@ -1507,9 +1683,53 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                               }
                             }}
                           />
-                          {connectedChild.name} ({connectedChild.parentName})
+                          ✅ {connectedChild.name} ({connectedChild.parentName})
                         </label>
                       ))}
+                      
+                      {/* Pending connection requests */}
+                      {pendingConnectionRequests.map((request) => (
+                        <label key={`pending-${request.id}`} className="child-checkbox" style={{ opacity: 0.7 }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedConnectedChildren.includes(`pending-${request.id}`)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedConnectedChildren([...selectedConnectedChildren, `pending-${request.id}`]);
+                              } else {
+                                setSelectedConnectedChildren(
+                                  selectedConnectedChildren.filter(id => id !== `pending-${request.id}`)
+                                );
+                              }
+                            }}
+                          />
+                          ⏳ {request.target_child_name} ({request.target_parent_name}) - <em style={{ fontSize: '12px' }}>pending connection</em>
+                        </label>
+                      ))}
+                      
+                      {connectedChildren.length === 0 && pendingConnectionRequests.length > 0 && (
+                        <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic', marginTop: '12px' }}>
+                          You can select pending connections above. They'll be invited automatically when they accept your connection request.
+                          <br />
+                          {onNavigateToConnections && (
+                            <button
+                              type="button"
+                              onClick={handleNavigateToConnections}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#667eea',
+                                textDecoration: 'underline',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                marginTop: '4px'
+                              }}
+                            >
+                              Send more connection requests
+                            </button>
+                          )}
+                        </p>
+                      )}
                     </div>
                   )}
                   
@@ -1533,26 +1753,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           </div>
           <div className="page-actions">
             <button
-              onClick={() => {
-                goBack();
-                setNewActivity({
-                  name: '',
-                  description: '',
-                  start_date: '',
-                  end_date: '',
-                  start_time: '',
-                  end_time: '',
-                  location: '',
-                  website_url: '',
-                  cost: '',
-                  max_participants: '',
-                  auto_notify_new_connections: false
-                });
-                setSelectedDates([]);
-                setIsSharedActivity(false);
-                setAutoNotifyNewConnections(false);
-                setSelectedConnectedChildren([]);
-              }}
+              onClick={handleCancelActivity}
               className="cancel-btn"
             >
               Cancel

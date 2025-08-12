@@ -41,9 +41,10 @@ interface ChildrenScreenProps {
   onNavigateToChildCalendar?: (child: Child) => void;
   initialSelectedChildId?: number | null;
   onChildSelectionChange?: (childId: number | null) => void;
+  onNavigateToConnections?: () => void;
 }
 
-const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, onNavigateToChildCalendar, initialSelectedChildId, onChildSelectionChange }) => {
+const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, onNavigateToChildCalendar, initialSelectedChildId, onChildSelectionChange, onNavigateToConnections }) => {
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -400,6 +401,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       child={selectedChild} 
       onBack={handleBackToChildren}
       onDataChanged={loadChildren}
+      onNavigateToConnections={onNavigateToConnections}
     />;
   }
 

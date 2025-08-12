@@ -189,9 +189,9 @@ async function createTables(client) {
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
-                username VARCHAR(50) UNIQUE NOT NULL,
+                username VARCHAR(50) NOT NULL,
                 email VARCHAR(255) UNIQUE NOT NULL,
-                phone VARCHAR(20),
+                phone VARCHAR(20) UNIQUE,
                 password_hash VARCHAR(255) NOT NULL,
                 role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'admin', 'super_admin')),
                 is_active BOOLEAN DEFAULT true,
@@ -200,6 +200,28 @@ async function createTables(client) {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+
+        // Migration: Drop username unique constraint if it exists (for existing databases)
+        try {
+            await client.query(`
+                ALTER TABLE users DROP CONSTRAINT IF EXISTS users_username_key;
+            `);
+            console.log('✅ Dropped username unique constraint (if it existed)');
+        } catch (error) {
+            // Ignore error if constraint doesn't exist
+            console.log('ℹ️ Username unique constraint already removed or didn\'t exist');
+        }
+
+        // Migration: Add phone unique constraint if it doesn't exist
+        try {
+            await client.query(`
+                ALTER TABLE users ADD CONSTRAINT users_phone_key UNIQUE (phone);
+            `);
+            console.log('✅ Added phone unique constraint');
+        } catch (error) {
+            // Ignore error if constraint already exists
+            console.log('ℹ️ Phone unique constraint already exists');
+        }
 
         // Children table
         await client.query(`
@@ -844,6 +866,15 @@ app.post('/api/auth/register', async (req, res) => {
         if (existingUser.rows.length > 0) {
             client.release();
             return res.status(400).json({ success: false, error: 'An account with this email address already exists' });
+        }
+
+        // Check if phone number already exists (if provided)
+        if (phone) {
+            const existingPhone = await client.query('SELECT id FROM users WHERE phone = $1', [phone]);
+            if (existingPhone.rows.length > 0) {
+                client.release();
+                return res.status(400).json({ success: false, error: 'An account with this phone number already exists' });
+            }
         }
 
         const hashedPassword = await bcrypt.hash(password, 12);

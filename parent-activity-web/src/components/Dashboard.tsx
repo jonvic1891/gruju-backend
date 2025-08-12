@@ -40,6 +40,7 @@ const Dashboard = () => {
           }}
           initialSelectedChildId={selectedChildId}
           onChildSelectionChange={setSelectedChildId}
+          onNavigateToConnections={() => setActiveTab('connections')}
         />;
       case 'calendar':
         return <CalendarScreen />;
@@ -50,7 +51,10 @@ const Dashboard = () => {
       case 'admin':
         return isAdmin ? <AdminScreen /> : <div>Access Denied</div>;
       default:
-        return <ChildrenScreen onNavigateToCalendar={() => setActiveTab('calendar')} />;
+        return <ChildrenScreen 
+          onNavigateToCalendar={() => setActiveTab('calendar')} 
+          onNavigateToConnections={() => setActiveTab('connections')}
+        />;
     }
   };
 
