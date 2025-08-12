@@ -186,7 +186,9 @@ class ApiService {
 
   // Unified method to get all invitations (replaces separate accepted/pending/declined methods)
   async getAllInvitations(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
-    return this.request('get', `/api/calendar/invitations?start=${startDate}&end=${endDate}`);
+    // Add cache-busting parameter to force fresh request
+    const timestamp = Date.now();
+    return this.request('get', `/api/calendar/invitations?start=${startDate}&end=${endDate}&_t=${timestamp}`);
   }
 
   // Helper methods to filter invitations by status
