@@ -1822,21 +1822,31 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     key={index} 
                     className="activity-card"
                     style={{
-                      borderLeftColor: colors.borderColor
+                      borderLeftColor: colors.borderColor,
+                      background: colors.background
                     }}
                     onClick={() => {
                       handleActivityClick(activity);
                     }}
                   >
-                    <h4 className="activity-name">{activity.name}</h4>
-                  {activity.description && (
-                    <p className="activity-description">{activity.description}</p>
-                  )}
-                  <div className="activity-details">
-                    <div>📅 {formatDate(activity.start_date)}{activity.start_time && ` 🕐 ${formatTime(activity.start_time)}${activity.end_time ? ` - ${formatTime(activity.end_time)}` : ''}`}</div>
-                    {activity.location && <div>📍 {activity.location}</div>}
-                    {activity.cost && <div>💰 ${activity.cost}</div>}
-                  </div>
+                    <div className="activity-card-header">
+                      <h4 className="activity-name">{activity.name}</h4>
+                      {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) && (
+                        <div className="activity-status">
+                          {activity.isPendingInvitation && activity.showEnvelope !== false && <span className="status-icon">📩</span>}
+                          {activity.isAcceptedInvitation && <span className="status-icon">✅</span>}
+                          {activity.isDeclinedInvitation && <span className="status-icon">❌</span>}
+                        </div>
+                      )}
+                    </div>
+                    {activity.description && (
+                      <p className="activity-description">{activity.description}</p>
+                    )}
+                    <div className="activity-details">
+                      <div>{formatDate(activity.start_date)}{activity.start_time && ` ${formatTime(activity.start_time)}${activity.end_time ? ` - ${formatTime(activity.end_time)}` : ''}`}</div>
+                      {activity.location && <div>{activity.location}</div>}
+                      {activity.cost && <div>${activity.cost}</div>}
+                    </div>
                   </div>
                 );
               })}

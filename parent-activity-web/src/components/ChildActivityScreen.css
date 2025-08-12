@@ -112,7 +112,6 @@
 }
 
 .activity-card {
-  background: white;
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -125,18 +124,36 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
+.activity-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
 .activity-name {
-  margin: 0 0 10px 0;
-  color: #2c3e50;
+  margin: 0;
+  color: white;
   font-size: 18px;
   font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  flex: 1;
+}
+
+.activity-status {
+  margin-left: 10px;
+}
+
+.status-icon {
+  font-size: 16px;
 }
 
 .activity-description {
   margin: 0 0 15px 0;
-  color: #6c757d;
+  color: rgba(255, 255, 255, 0.9);
   font-size: 14px;
   line-height: 1.5;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .activity-details {
@@ -146,10 +163,8 @@
 .activity-details > div {
   margin: 8px 0;
   font-size: 14px;
-  color: #495057;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .activity-date-added {
