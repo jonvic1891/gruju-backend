@@ -143,6 +143,30 @@ async function runMigrations() {
                 throw error;
             }
         }
+
+        // Migration 7: Drop username unique constraint if it exists (for existing databases)
+        try {
+            await client.query(`
+                ALTER TABLE users DROP CONSTRAINT IF EXISTS users_username_key;
+            `);
+            console.log('✅ Migration: Dropped username unique constraint (allows duplicate names)');
+        } catch (error) {
+            console.log('ℹ️ Migration: Username unique constraint already removed or didn\'t exist');
+        }
+
+        // Migration 8: Add phone unique constraint if it doesn't exist
+        try {
+            await client.query(`
+                ALTER TABLE users ADD CONSTRAINT users_phone_key UNIQUE (phone);
+            `);
+            console.log('✅ Migration: Added phone unique constraint');
+        } catch (error) {
+            if (error.code === '23505' || error.message.includes('already exists')) {
+                console.log('ℹ️ Migration: Phone unique constraint already exists');
+            } else {
+                console.log('ℹ️ Migration: Could not add phone constraint:', error.message);
+            }
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -200,28 +224,6 @@ async function createTables(client) {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
-
-        // Migration: Drop username unique constraint if it exists (for existing databases)
-        try {
-            await client.query(`
-                ALTER TABLE users DROP CONSTRAINT IF EXISTS users_username_key;
-            `);
-            console.log('✅ Dropped username unique constraint (if it existed)');
-        } catch (error) {
-            // Ignore error if constraint doesn't exist
-            console.log('ℹ️ Username unique constraint already removed or didn\'t exist');
-        }
-
-        // Migration: Add phone unique constraint if it doesn't exist
-        try {
-            await client.query(`
-                ALTER TABLE users ADD CONSTRAINT users_phone_key UNIQUE (phone);
-            `);
-            console.log('✅ Added phone unique constraint');
-        } catch (error) {
-            // Ignore error if constraint already exists
-            console.log('ℹ️ Phone unique constraint already exists');
-        }
 
         // Children table
         await client.query(`
