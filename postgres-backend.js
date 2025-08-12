@@ -2160,8 +2160,8 @@ app.post('/api/activity-invitations/:invitationId/view', authenticateToken, asyn
         
         // Verify the invitation exists and belongs to the user
         const invitation = await client.query(
-            'SELECT * FROM activity_invitations WHERE id = $1 AND invited_parent_id = $2 AND status = $3',
-            [invitationId, req.user.id, 'pending']
+            'SELECT * FROM activity_invitations WHERE id = $1 AND invited_parent_id = $2',
+            [invitationId, req.user.id]
         );
         
         if (invitation.rows.length === 0) {
