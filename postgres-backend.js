@@ -167,6 +167,27 @@ async function runMigrations() {
                 console.log('ℹ️ Migration: Could not add phone constraint:', error.message);
             }
         }
+
+        // Migration 9: Create pending_activity_invitations table for tracking pending connections per activity
+        try {
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS pending_activity_invitations (
+                    id SERIAL PRIMARY KEY,
+                    activity_id INTEGER NOT NULL,
+                    pending_connection_id VARCHAR(100) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
+                    UNIQUE(activity_id, pending_connection_id)
+                )
+            `);
+            console.log('✅ Migration: Created pending_activity_invitations table');
+        } catch (error) {
+            if (error.code === '42P07') {
+                console.log('✅ Migration: pending_activity_invitations table already exists');
+            } else {
+                throw error;
+            }
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -2020,6 +2041,77 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
     }
 });
 
+// Create Pending Invitations endpoint
+app.post('/api/activities/:activityId/pending-invitations', authenticateToken, async (req, res) => {
+    try {
+        const { activityId } = req.params;
+        const { pending_connections } = req.body;
+
+        console.log('📝 Creating pending invitations:', {
+            activityId,
+            pending_connections,
+            userId: req.user.id
+        });
+
+        if (!pending_connections || !Array.isArray(pending_connections) || pending_connections.length === 0) {
+            return res.status(400).json({ success: false, error: 'Pending connections array is required' });
+        }
+
+        const client = await pool.connect();
+        
+        // Verify the activity exists and belongs to this user's child
+        const activityCheck = await client.query(
+            'SELECT a.*, c.parent_id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1',
+            [activityId]
+        );
+        
+        if (activityCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Activity not found' });
+        }
+        
+        const activity = activityCheck.rows[0];
+        if (activity.parent_id !== req.user.id) {
+            client.release();
+            return res.status(403).json({ success: false, error: 'Not authorized to create pending invitations for this activity' });
+        }
+
+        // Insert pending invitations
+        const insertedRecords = [];
+        for (const pendingConnectionId of pending_connections) {
+            try {
+                const result = await client.query(
+                    `INSERT INTO pending_activity_invitations (activity_id, pending_connection_id) 
+                     VALUES ($1, $2) 
+                     ON CONFLICT (activity_id, pending_connection_id) DO NOTHING
+                     RETURNING id`,
+                    [activityId, pendingConnectionId]
+                );
+                
+                if (result.rows.length > 0) {
+                    insertedRecords.push({ id: result.rows[0].id, pending_connection_id: pendingConnectionId });
+                }
+            } catch (error) {
+                console.error(`Failed to insert pending invitation for ${pendingConnectionId}:`, error);
+            }
+        }
+
+        client.release();
+
+        res.json({
+            success: true,
+            data: { 
+                inserted_count: insertedRecords.length,
+                pending_invitations: insertedRecords,
+                message: `${insertedRecords.length} pending invitations created for activity`
+            }
+        });
+    } catch (error) {
+        console.error('Create pending invitations error:', error);
+        res.status(500).json({ success: false, error: 'Failed to create pending invitations' });
+    }
+});
+
 // Activity Duplication endpoint
 app.post('/api/activities/:activityId/duplicate', authenticateToken, async (req, res) => {
     try {
@@ -2654,7 +2746,99 @@ async function processAutoNotifications(client, requesterId, targetParentId, req
             }
         }
 
-        console.log('🎉 Bidirectional auto-notifications complete');
+        // Direction 3: Process pending invitations for both users
+        console.log('🔄 Direction 3: Processing pending invitations');
+        
+        // Get the new connection ID to map pending connection IDs
+        const connectionResult = await client.query(`
+            SELECT id FROM connections 
+            WHERE (child1_id = $1 AND child2_id = $2) OR (child1_id = $2 AND child2_id = $1)
+            ORDER BY created_at DESC 
+            LIMIT 1
+        `, [requesterChildId, targetChildId]);
+        
+        if (connectionResult.rows.length > 0) {
+            
+            // Process pending invitations for requester (activities where target was selected as pending)
+            const requesterPendingKey = `pending-${targetParentId}`;
+            const requesterPendingInvitations = await client.query(`
+                SELECT pai.*, a.*, c.name as child_name FROM pending_activity_invitations pai
+                JOIN activities a ON pai.activity_id = a.id
+                JOIN children c ON a.child_id = c.id
+                WHERE c.parent_id = $1 
+                  AND pai.pending_connection_id = $2
+                  AND a.start_date >= $3
+            `, [requesterId, requesterPendingKey, today]);
+            
+            console.log(`📋 Found ${requesterPendingInvitations.rows.length} pending invitations from requester`);
+            
+            for (const pendingInvite of requesterPendingInvitations.rows) {
+                try {
+                    console.log(`📧 Sending pending invitation for "${pendingInvite.name}" to target parent ${targetParentId}`);
+                    await client.query(`
+                        INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                    `, [
+                        pendingInvite.activity_id,
+                        requesterId,
+                        targetParentId,
+                        targetChildId,
+                        `${pendingInvite.child_name || 'Your child'} would like to invite your child to join: ${pendingInvite.name}`,
+                        'pending'
+                    ]);
+                    
+                    // Remove the pending invitation since it's now been sent
+                    await client.query(`
+                        DELETE FROM pending_activity_invitations WHERE id = $1
+                    `, [pendingInvite.id]);
+                    
+                    console.log(`✅ Pending invitation sent and removed for "${pendingInvite.name}"`);
+                } catch (inviteError) {
+                    console.error(`❌ Failed to send pending invitation for "${pendingInvite.name}":`, inviteError);
+                }
+            }
+            
+            // Process pending invitations for target (activities where requester was selected as pending)
+            const targetPendingKey = `pending-${requesterId}`;
+            const targetPendingInvitations = await client.query(`
+                SELECT pai.*, a.*, c.name as child_name FROM pending_activity_invitations pai
+                JOIN activities a ON pai.activity_id = a.id
+                JOIN children c ON a.child_id = c.id
+                WHERE c.parent_id = $1 
+                  AND pai.pending_connection_id = $2
+                  AND a.start_date >= $3
+            `, [targetParentId, targetPendingKey, today]);
+            
+            console.log(`📋 Found ${targetPendingInvitations.rows.length} pending invitations from target parent`);
+            
+            for (const pendingInvite of targetPendingInvitations.rows) {
+                try {
+                    console.log(`📧 Sending pending invitation for "${pendingInvite.name}" to requester ${requesterId}`);
+                    await client.query(`
+                        INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                    `, [
+                        pendingInvite.activity_id,
+                        targetParentId,
+                        requesterId,
+                        requesterChildId,
+                        `${pendingInvite.child_name || 'Your child'} would like to invite your child to join: ${pendingInvite.name}`,
+                        'pending'
+                    ]);
+                    
+                    // Remove the pending invitation since it's now been sent
+                    await client.query(`
+                        DELETE FROM pending_activity_invitations WHERE id = $1
+                    `, [pendingInvite.id]);
+                    
+                    console.log(`✅ Pending invitation sent and removed for "${pendingInvite.name}"`);
+                } catch (inviteError) {
+                    console.error(`❌ Failed to send pending invitation for "${pendingInvite.name}":`, inviteError);
+                }
+            }
+        }
+
+        console.log('🎉 Bidirectional auto-notifications and pending invitations complete');
     } catch (error) {
         console.error('❌ Auto-notification processing failed:', error);
     }

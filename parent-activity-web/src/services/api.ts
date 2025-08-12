@@ -313,6 +313,12 @@ class ApiService {
   async getActivityParticipants(activityId: number): Promise<ApiResponse<any>> {
     return this.request('get', `/api/activities/${activityId}/participants`);
   }
+
+  async createPendingInvitations(activityId: number, pendingConnections: string[]): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/activities/${activityId}/pending-invitations`, { 
+      pending_connections: pendingConnections 
+    });
+  }
 }
 
 export default ApiService;

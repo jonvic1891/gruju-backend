@@ -735,6 +735,25 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         }
       }
 
+      // Track pending connections for each created activity
+      if (isSharedActivity && createdActivities.length > 0) {
+        const pendingConnections = selectedConnectedChildren.filter(id => 
+          typeof id === 'string' && id.startsWith('pending-')
+        ) as string[];
+        
+        if (pendingConnections.length > 0) {
+          for (const activity of createdActivities) {
+            try {
+              // Store pending invitations for this activity
+              await apiService.createPendingInvitations(activity.id, pendingConnections);
+              console.log(`📝 Stored ${pendingConnections.length} pending invitations for activity "${activity.name}"`);
+            } catch (error) {
+              console.error('Failed to store pending invitations:', error);
+            }
+          }
+        }
+      }
+
       // If it's a shared activity, send invitations to selected connected children
       if (isSharedActivity && selectedConnectedChildren.length > 0 && createdActivities.length > 0) {
         for (const activity of createdActivities) {
