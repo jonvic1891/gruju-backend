@@ -2260,7 +2260,11 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
 });
 
 // Get activity participants (all invitees and their status)
-app.get('/api/activities/:activityId/participants', authenticateToken, async (req, res) => {
+app.get('/api/activities/:activityId/participants', (req, res, next) => {
+    console.log(`🚀 PARTICIPANTS API REQUEST: ${req.method} ${req.url} - ActivityID: ${req.params.activityId}`);
+    console.log(`🔑 Authorization header present: ${!!req.headers.authorization}`);
+    next();
+}, authenticateToken, async (req, res) => {
     try {
         const { activityId } = req.params;
         console.log(`🔍 Getting participants for activity ${activityId}, user ${req.user.id}`);
