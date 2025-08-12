@@ -14,13 +14,18 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState<Tab>('children');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
+  const [cameFromActivity, setCameFromActivity] = useState(false);
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
 
 
   const handleMobileNavClick = (tab: Tab) => {
-    setActiveTab(tab);
+    if (tab === 'connections') {
+      handleNavigateToConnections();
+    } else {
+      setActiveTab(tab);
+    }
     setMobileMenuOpen(false);
   };
 
@@ -28,6 +33,16 @@ const Dashboard = () => {
     // Set the selected child ID and ensure we're on the children tab
     setSelectedChildId(child.id);
     setActiveTab('children');
+  };
+
+  const handleNavigateToConnectionsFromActivity = () => {
+    setCameFromActivity(true);
+    setActiveTab('connections');
+  };
+
+  const handleNavigateToConnections = () => {
+    setCameFromActivity(false);
+    setActiveTab('connections');
   };
 
   const renderContent = () => {
@@ -40,12 +55,18 @@ const Dashboard = () => {
           }}
           initialSelectedChildId={selectedChildId}
           onChildSelectionChange={setSelectedChildId}
-          onNavigateToConnections={() => setActiveTab('connections')}
+          onNavigateToConnections={handleNavigateToConnectionsFromActivity}
         />;
       case 'calendar':
         return <CalendarScreen />;
       case 'connections':
-        return <ConnectionsScreen />;
+        return <ConnectionsScreen 
+          cameFromActivity={cameFromActivity}
+          onReturnToActivity={() => {
+            setCameFromActivity(false);
+            setActiveTab('children');
+          }}
+        />;
       case 'profile':
         return <ProfileScreen />;
       case 'admin':
@@ -99,7 +120,7 @@ const Dashboard = () => {
           
           <button
             className={`nav-item ${activeTab === 'connections' ? 'active' : ''}`}
-            onClick={() => setActiveTab('connections')}
+            onClick={handleNavigateToConnections}
           >
             <span className="nav-label">Connections</span>
           </button>

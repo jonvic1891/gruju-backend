@@ -57,12 +57,55 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
   const [childConnections, setChildConnections] = useState<Record<number, ConnectionRequest[]>>({});
   const [processingInvitation, setProcessingInvitation] = useState<number | null>(null);
   const [processingConnection, setProcessingConnection] = useState<number | null>(null);
+  const [activityDraft, setActivityDraft] = useState<any>(null);
   const apiService = ApiService.getInstance();
 
 
   useEffect(() => {
     loadChildren();
+    checkForActivityDraft();
   }, []);
+
+  // Check for activity draft when component becomes visible (user returns from connections tab)
+  useEffect(() => {
+    const handleFocus = () => {
+      checkForActivityDraft();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, []);
+
+  const checkForActivityDraft = () => {
+    try {
+      const draftStr = localStorage.getItem('activityDraft');
+      if (draftStr) {
+        const draft = JSON.parse(draftStr);
+        setActivityDraft(draft);
+      }
+    } catch (error) {
+      console.error('Failed to load activity draft:', error);
+    }
+  };
+
+  const resumeActivityCreation = () => {
+    if (activityDraft && activityDraft.childId) {
+      const child = children.find(c => c.id === activityDraft.childId);
+      if (child) {
+        setSelectedChild(child);
+      }
+    }
+  };
+
+  const dismissActivityDraft = () => {
+    localStorage.removeItem('activityDraft');
+    setActivityDraft(null);
+  };
 
   const loadChildren = async () => {
     try {
@@ -413,6 +456,63 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
           + Add Child
         </button>
       </div>
+
+      {/* Activity Draft Notification */}
+      {activityDraft && (
+        <div style={{
+          background: 'linear-gradient(135deg, #667eea, #764ba2)',
+          color: 'white',
+          padding: '16px',
+          borderRadius: '8px',
+          margin: '16px 0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        }}>
+          <div>
+            <h4 style={{ margin: '0 0 4px 0', fontSize: '16px' }}>
+              📝 Saved Activity Draft
+            </h4>
+            <p style={{ margin: '0', fontSize: '14px', opacity: 0.9 }}>
+              You have an unfinished activity "{activityDraft.newActivity?.name || 'Untitled'}" 
+              {activityDraft.childId && children.find(c => c.id === activityDraft.childId) && 
+                ` for ${children.find(c => c.id === activityDraft.childId)?.name}`}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={resumeActivityCreation}
+              style={{
+                background: 'rgba(255,255,255,0.2)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 'bold'
+              }}
+            >
+              Continue
+            </button>
+            <button
+              onClick={dismissActivityDraft}
+              style={{
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)',
+                color: 'white',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {!Array.isArray(children) || children.length === 0 ? (
         <div className="empty-state">

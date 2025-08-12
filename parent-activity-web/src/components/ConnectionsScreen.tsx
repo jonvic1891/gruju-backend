@@ -3,7 +3,12 @@ import ApiService from '../services/api';
 import { ConnectionRequest, Child, SearchResult } from '../types';
 import './ConnectionsScreen.css';
 
-const ConnectionsScreen = () => {
+interface ConnectionsScreenProps {
+  cameFromActivity?: boolean;
+  onReturnToActivity?: () => void;
+}
+
+const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity = false, onReturnToActivity }) => {
   const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
   const [sentRequests, setSentRequests] = useState<any[]>([]);
   const [activeConnections, setActiveConnections] = useState<any[]>([]);
@@ -17,6 +22,7 @@ const ConnectionsScreen = () => {
   const [selectedMyChild, setSelectedMyChild] = useState<number | null>(null);
   const [selectedTargetChild, setSelectedTargetChild] = useState<number | null>(null);
   const [connectionMessage, setConnectionMessage] = useState('');
+  const [showReturnToActivityPopup, setShowReturnToActivityPopup] = useState(false);
   const apiService = ApiService.getInstance();
 
   useEffect(() => {
@@ -305,13 +311,19 @@ const ConnectionsScreen = () => {
       });
 
       if (response.success) {
-        alert('Connection request sent successfully');
         setShowConnectModal(false);
         setSearchResults([]);
         setSearchText('');
         // Reload both sent and received requests
         loadConnectionRequests();
         loadSentRequests();
+        
+        // Show popup if user came from activity creation flow
+        if (cameFromActivity) {
+          setShowReturnToActivityPopup(true);
+        } else {
+          alert('Connection request sent successfully');
+        }
       } else {
         alert(`Error: ${response.error || 'Failed to send connection request'}`);
       }
@@ -601,6 +613,47 @@ const ConnectionsScreen = () => {
                 className="send-btn"
               >
                 Send Request
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Return to Activity Popup */}
+      {showReturnToActivityPopup && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>Connection Request Sent! 🎉</h3>
+            <p>Your connection request has been sent successfully.</p>
+            <p>Would you like to continue adding more connections or return to finish creating your activity?</p>
+            
+            <div className="modal-actions">
+              <button
+                onClick={() => setShowReturnToActivityPopup(false)}
+                className="cancel-btn"
+                style={{
+                  background: 'linear-gradient(135deg, #48bb78, #68d391)',
+                  color: 'white',
+                  border: 'none'
+                }}
+              >
+                Continue Adding Connections
+              </button>
+              <button
+                onClick={() => {
+                  setShowReturnToActivityPopup(false);
+                  if (onReturnToActivity) {
+                    onReturnToActivity();
+                  }
+                }}
+                className="send-btn"
+                style={{
+                  background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                  color: 'white',
+                  border: 'none'
+                }}
+              >
+                Return to Activity
               </button>
             </div>
           </div>
