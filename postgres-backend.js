@@ -1347,6 +1347,8 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
                     THEN true 
                     ELSE false 
                 END as is_shared,
+                -- Determine if user is host (owns the activity)
+                true as is_host,
                 -- Debug fields to see what each condition evaluates to
                 a.auto_notify_new_connections as debug_auto_notify,
                 (SELECT COUNT(*) FROM activity_invitations ai WHERE ai.activity_id = a.id) as debug_total_invitations,
