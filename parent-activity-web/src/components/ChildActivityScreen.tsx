@@ -10,9 +10,10 @@ interface ChildActivityScreenProps {
   onBack: () => void;
   onDataChanged?: () => void;
   onNavigateToConnections?: () => void;
+  shouldRestoreActivityCreation?: boolean;
 }
 
-const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack, onDataChanged, onNavigateToConnections }) => {
+const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack, onDataChanged, onNavigateToConnections, shouldRestoreActivityCreation }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [invitedActivities, setInvitedActivities] = useState<any[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
@@ -881,8 +882,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const getActivityColor = (activity: Activity | any) => {
-    // Green for pending invitations (guest perspective - new invitation)
-    if (activity.isPendingInvitation) {
+    // Green for pending shared activities (receiver sees new invitation)
+    if (activity.is_shared === true && activity.invitation_status === 'pending') {
       return {
         background: 'linear-gradient(135deg, #48bb78, #68d391)',
         borderColor: '#38a169'
@@ -890,30 +891,30 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
     
     // Light blue for accepted invitations (guest perspective - accepted invitation)
-    if (activity.isAcceptedInvitation) {
+    if (activity.is_host === false && activity.invitation_status === 'accepted') {
       return {
         background: 'linear-gradient(135deg, #4299e1, #63b3ed)',
         borderColor: '#3182ce'
       };
     }
     
-    // Grey for declined invitations
-    if (activity.isDeclinedInvitation) {
+    // Grey for declined invitations (guest perspective - declined invitation)
+    if (activity.is_host === false && activity.invitation_status === 'declined') {
       return {
         background: 'linear-gradient(135deg, #a0aec0, #cbd5e0)',
         borderColor: '#718096'
       };
     }
     
-    // Light blue for host's shared activities
-    if (activity.is_shared === true && activity.is_host === true) {
+    // Light blue for host's shared activities (host perspective - shareable activity)
+    if (activity.is_host === true && activity.is_shared === true) {
       return {
         background: 'linear-gradient(135deg, #4299e1, #63b3ed)',
         borderColor: '#3182ce'
       };
     }
     
-    // Dark blue for private activities (default)
+    // Dark blue for host's private activities (default)
     return {
       background: 'linear-gradient(135deg, #2d3748, #4a5568)',
       borderColor: '#1a202c'

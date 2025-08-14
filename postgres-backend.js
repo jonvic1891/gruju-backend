@@ -3134,4 +3134,59 @@ async function processAutoNotifications(client, requesterId, targetParentId, req
     }
 }
 
+// Admin endpoint to cleanup duplicate pending invitations
+app.post('/api/admin/cleanup-pending-invitations', authenticateToken, async (req, res) => {
+    try {
+        console.log('🧹 Admin cleanup: removing duplicate pending invitations');
+        
+        const client = await pool.connect();
+        
+        // Find pending invitations that have corresponding activity invitations
+        const duplicatesQuery = await client.query(`
+            SELECT pai.id as pending_id, pai.activity_id, pai.pending_connection_id,
+                   ai.id as actual_invitation_id, ai.invited_parent_id
+            FROM pending_activity_invitations pai
+            JOIN activity_invitations ai ON pai.activity_id = ai.activity_id
+            WHERE CAST(REPLACE(pai.pending_connection_id, 'pending-', '') AS INTEGER) = ai.invited_parent_id
+        `);
+        
+        console.log(`🔍 Found ${duplicatesQuery.rows.length} duplicate pending invitations`);
+        
+        if (duplicatesQuery.rows.length > 0) {
+            // Delete the duplicate pending invitations
+            const pendingIdsToDelete = duplicatesQuery.rows.map(row => row.pending_id);
+            
+            const deleteResult = await client.query(`
+                DELETE FROM pending_activity_invitations 
+                WHERE id = ANY($1)
+                RETURNING id, activity_id, pending_connection_id
+            `, [pendingIdsToDelete]);
+            
+            console.log(`✅ Deleted ${deleteResult.rows.length} duplicate pending invitations`);
+            
+            client.release();
+            
+            res.json({
+                success: true,
+                message: `Cleaned up ${deleteResult.rows.length} duplicate pending invitations`,
+                deletedRecords: deleteResult.rows
+            });
+        } else {
+            client.release();
+            res.json({
+                success: true,
+                message: 'No duplicate pending invitations found'
+            });
+        }
+        
+    } catch (error) {
+        console.error('❌ Cleanup failed:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to cleanup pending invitations',
+            details: error.message 
+        });
+    }
+});
+
 startServer();

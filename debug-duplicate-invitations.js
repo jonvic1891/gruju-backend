@@ -1,77 +1,78 @@
 #!/usr/bin/env node
 
-const fetch = require('node-fetch');
-const API_BASE = 'https://gruju-backend-5014424c95f2.herokuapp.com';
+const { Pool } = require('pg');
+
+// Database configuration
+const pool = new Pool({
+    user: process.env.PGUSER || 'postgres',
+    host: process.env.PGHOST || 'localhost', 
+    database: process.env.PGDATABASE || 'parent_activity_app',
+    password: process.env.PGPASSWORD || 'password',
+    port: process.env.PGPORT || 5432,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
 async function debugDuplicateInvitations() {
     try {
-        console.log('🔍 DEBUGGING DUPLICATE INVITATIONS ISSUE');
-        console.log('='.repeat(60));
+        console.log('🔍 CHECKING FOR DUPLICATE INVITATIONS');
+        console.log('='.repeat(70));
         
-        // Login as host
-        const hostLogin = await fetch(`${API_BASE}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: 'roberts1@example.com', password: 'test123' })
-        }).then(r => r.json());
+        const client = await pool.connect();
         
-        console.log('✅ Logged in as host');
-        console.log(`Host: ${hostLogin.user.username} (ID: ${hostLogin.user.id})`);
+        // Check for charlie 1 activity specifically
+        const charlie1Query = await client.query(`
+            SELECT ai.*, a.name as activity_name, u1.username as inviter, u2.username as invited
+            FROM activity_invitations ai
+            JOIN activities a ON ai.activity_id = a.id
+            JOIN users u1 ON ai.inviter_parent_id = u1.id
+            JOIN users u2 ON ai.invited_parent_id = u2.id
+            WHERE a.name = 'charlie 1'
+            ORDER BY ai.created_at DESC
+        `);
         
-        // Search for the "Host-Guest View Test" activity
-        console.log('\n🔍 Looking for "Host-Guest View Test" activity...');
-        
-        // Get host's activities to find the test activity
-        const activitiesResponse = await fetch(`${API_BASE}/api/activities?_t=${Date.now()}`, {
-            headers: { 'Authorization': `Bearer ${hostLogin.token}` }
+        console.log(`📧 INVITATIONS FOR "charlie 1" ACTIVITY: ${charlie1Query.rows.length}`);
+        charlie1Query.rows.forEach((inv, i) => {
+            console.log(`\n${i + 1}. Invitation ID: ${inv.id}`);
+            console.log(`   Status: ${inv.status}`);
+            console.log(`   Inviter: ${inv.inviter} (ID: ${inv.inviter_parent_id})`);
+            console.log(`   Invited: ${inv.invited} (ID: ${inv.invited_parent_id})`);
+            console.log(`   Invited Child ID: ${inv.invited_child_id}`);
+            console.log(`   Created: ${inv.created_at}`);
+            console.log(`   Updated: ${inv.updated_at}`);
         });
-        const activities = await activitiesResponse.json();
         
-        const testActivity = activities.data?.find(a => a.name === 'Host-Guest View Test');
+        // Check for any duplicate invitations (same activity + same invited parent)
+        const duplicatesQuery = await client.query(`
+            SELECT activity_id, invited_parent_id, COUNT(*) as count, 
+                   array_agg(id) as invitation_ids,
+                   array_agg(status) as statuses,
+                   array_agg(created_at) as created_dates
+            FROM activity_invitations 
+            GROUP BY activity_id, invited_parent_id
+            HAVING COUNT(*) > 1
+        `);
         
-        if (testActivity) {
-            console.log(`✅ Found activity: "${testActivity.name}" (ID: ${testActivity.id})`);
-            
-            // Get participants to see the duplicate issue
-            const participantsResponse = await fetch(`${API_BASE}/api/activities/${testActivity.id}/participants`, {
-                headers: { 'Authorization': `Bearer ${hostLogin.token}` }
-            });
-            
-            if (participantsResponse.ok) {
-                const participantsData = await participantsResponse.json();
-                console.log(`\n📊 Current participants/invitations (${participantsData.data?.participants?.length || 0} total):`);
-                
-                if (participantsData.data?.participants?.length > 0) {
-                    participantsData.data.participants.forEach((p, i) => {
-                        console.log(`   ${i + 1}. ${p.child_name}`);
-                        console.log(`      Status: ${p.status}`);
-                        console.log(`      Type: ${p.invitation_type}`);
-                        console.log(`      Message: ${p.message}`);
-                        console.log(`      Invitation ID: ${p.invitation_id || 'N/A'}`);
-                        console.log(`      Pending ID: ${p.pending_id || 'N/A'}`);
-                        console.log('');
-                    });
-                }
-                
-                console.log('🎯 ISSUE ANALYSIS:');
-                console.log('The problem is that when a pending invitation becomes an actual invitation,');
-                console.log('both records show up:');
-                console.log('1. Original pending invitation record (from pending_activity_invitations)');
-                console.log('2. New actual invitation record (from activity_invitations)');
-                console.log('');
-                console.log('The system should clean up the pending record when the actual invitation is sent.');
-                
-            } else {
-                console.log('❌ Cannot access participants:', await participantsResponse.text());
-            }
-        } else {
-            console.log('❌ "Host-Guest View Test" activity not found');
-            console.log('Available activities:');
-            activities.data?.forEach(a => console.log(`   - ${a.name} (ID: ${a.id})`));
-        }
+        console.log(`\n🔍 DUPLICATE INVITATIONS FOUND: ${duplicatesQuery.rows.length}`);
+        duplicatesQuery.rows.forEach((dup, i) => {
+            console.log(`\n${i + 1}. Activity ID: ${dup.activity_id}, Invited Parent: ${dup.invited_parent_id}`);
+            console.log(`   Count: ${dup.count}`);
+            console.log(`   Invitation IDs: ${dup.invitation_ids}`);
+            console.log(`   Statuses: ${dup.statuses}`);
+            console.log(`   Created dates: ${dup.created_dates.map(d => d.toISOString())}`);
+        });
+        
+        client.release();
+        
+        console.log('\n🎯 ANALYSIS:');
+        console.log('If there are duplicates, we need to:');
+        console.log('1. Keep the most recent invitation');
+        console.log('2. Delete older duplicates');
+        console.log('3. Fix the invitation response logic to UPDATE instead of INSERT');
         
     } catch (error) {
         console.error('❌ Debug failed:', error.message);
+    } finally {
+        pool.end();
     }
 }
 
