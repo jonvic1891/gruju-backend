@@ -1534,6 +1534,29 @@ app.delete('/api/activities/delete/:activityId', authenticateToken, async (req, 
 app.get('/api/connections', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
+        
+        // Debug: First check all connections for this user (including blocked ones)
+        const allConnections = await client.query(
+            `SELECT c.*, 
+                    u1.id as child1_parent_id, u1.username as child1_parent_name, 
+                    u2.id as child2_parent_id, u2.username as child2_parent_name,
+                    ch1.name as child1_name, ch2.name as child2_name
+             FROM connections c
+             JOIN children ch1 ON c.child1_id = ch1.id
+             JOIN children ch2 ON c.child2_id = ch2.id  
+             JOIN users u1 ON ch1.parent_id = u1.id
+             JOIN users u2 ON ch2.parent_id = u2.id
+             WHERE (ch1.parent_id = $1 OR ch2.parent_id = $1)
+             ORDER BY c.created_at DESC`,
+            [req.user.id]
+        );
+        console.log(`🔍 All connections for user ${req.user.id}:`, allConnections.rows.map(c => ({
+            id: c.id,
+            child1: c.child1_name,
+            child2: c.child2_name,
+            status: c.status
+        })));
+        
         const result = await client.query(
             `SELECT c.*, 
                     u1.id as child1_parent_id, u1.username as child1_parent_name, 
@@ -1548,6 +1571,14 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
              ORDER BY c.created_at DESC`,
             [req.user.id]
         );
+        
+        console.log(`✅ Active connections for user ${req.user.id}:`, result.rows.map(c => ({
+            id: c.id,
+            child1: c.child1_name,
+            child2: c.child2_name,
+            status: c.status
+        })));
+        
         client.release();
         
         res.json({ success: true, data: result.rows });
@@ -2329,7 +2360,10 @@ app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
             ORDER BY ai.created_at DESC
         `;
         
+        console.log(`🔍 Activity invitations query for user ${req.user.id} (pending only)`);
         const result = await client.query(query, [req.user.id]);
+        console.log(`📊 Found ${result.rows.length} pending activity invitations`);
+        
         client.release();
 
         res.json({ success: true, data: result.rows });
@@ -2459,6 +2493,56 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
             [status, invitationId]
         );
 
+        // If invitation was accepted, create a connection between the children if one doesn't exist
+        if (action === 'accept') {
+            const invitationData = invitation.rows[0];
+            console.log(`🔗 Processing accepted invitation:`, {
+                invitationId,
+                activityId: invitationData.activity_id,
+                invitedParentId: invitationData.invited_parent_id,
+                invitedChildId: invitationData.invited_child_id,
+                inviterParentId: invitationData.inviter_parent_id
+            });
+            
+            // Get the activity's child_id to connect with the invited child
+            const activityResult = await client.query(
+                'SELECT child_id FROM activities WHERE id = $1',
+                [invitationData.activity_id]
+            );
+            
+            if (activityResult.rows.length > 0) {
+                const hostChildId = activityResult.rows[0].child_id;
+                const invitedChildId = invitationData.invited_child_id;
+                
+                console.log(`🔍 Checking connection between host child ${hostChildId} and invited child ${invitedChildId}`);
+                
+                // Check if connection already exists (in either direction)
+                const existingConnection = await client.query(
+                    `SELECT id FROM connections 
+                     WHERE ((child1_id = $1 AND child2_id = $2) OR (child1_id = $2 AND child2_id = $1))
+                     AND status = 'active'`,
+                    [hostChildId, invitedChildId]
+                );
+                
+                console.log(`📊 Existing connections found: ${existingConnection.rows.length}`);
+                
+                // Create connection if it doesn't exist
+                if (existingConnection.rows.length === 0) {
+                    const connectionResult = await client.query(
+                        `INSERT INTO connections (child1_id, child2_id, status, created_at) 
+                         VALUES ($1, $2, 'active', CURRENT_TIMESTAMP)
+                         RETURNING id`,
+                        [hostChildId, invitedChildId]
+                    );
+                    console.log(`✅ Created connection ${connectionResult.rows[0].id} between children ${hostChildId} and ${invitedChildId} after accepting activity invitation`);
+                } else {
+                    console.log(`ℹ️ Connection already exists between children ${hostChildId} and ${invitedChildId}:`, existingConnection.rows[0]);
+                }
+            } else {
+                console.error(`❌ Could not find activity ${invitationData.activity_id} when processing accepted invitation`);
+            }
+        }
+
         client.release();
 
         res.json({ success: true, message: `Activity invitation ${status}` });
@@ -2500,19 +2584,42 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
             INNER JOIN users u ON c.parent_id = u.id
             INNER JOIN activity_invitations ai ON a.id = ai.activity_id
             LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
-            WHERE ai.invited_parent_id = $1
+            WHERE (ai.invited_parent_id = $1 OR ai.inviter_parent_id = $1)
               AND a.start_date <= $3
               AND (a.end_date IS NULL OR a.end_date >= $2)
             ORDER BY a.start_date, a.start_time, ai.status
         `;
         
-        console.log(`🔍 All invitations query for user ${req.user.id} (${start} to ${end})`);
+        console.log(`🔍 Calendar invitations query for user ${req.user.id} (${start} to ${end})`);
+        
+        // Debug: Check ALL activity invitations for this user (no date filter)
+        const debugQuery = await client.query(
+            'SELECT ai.*, a.name as activity_name FROM activity_invitations ai JOIN activities a ON ai.activity_id = a.id WHERE ai.invited_parent_id = $1 OR ai.inviter_parent_id = $1',
+            [req.user.id]
+        );
+        console.log(`🔍 DEBUG: Found ${debugQuery.rows.length} total activity invitations for user ${req.user.id} (any date):`, 
+            debugQuery.rows.map(r => ({
+                activity: r.activity_name,
+                status: r.status,
+                start_date: r.start_date,
+                invitation_id: r.id
+            }))
+        );
+        
         const result = await client.query(query, [req.user.id, start, end]);
         console.log(`📊 Found ${result.rows.length} total invitations:`, result.rows.map(r => ({
             activity: r.activity_name,
             date: r.start_date,
             child: r.invited_child_name,
-            status: r.status
+            status: r.status,
+            invitation_id: r.invitation_id
+        })));
+        
+        const acceptedInvitations = result.rows.filter(r => r.status === 'accepted');
+        console.log(`✅ Found ${acceptedInvitations.length} ACCEPTED invitations:`, acceptedInvitations.map(r => ({
+            activity: r.activity_name,
+            child: r.invited_child_name,
+            invitation_id: r.invitation_id
         })));
         
         client.release();
@@ -2613,6 +2720,23 @@ app.get('/api/activities/:activityId/participants', (req, res, next) => {
         console.log(`📊 Found ${participantsQuery.rows.length} participants for activity ${activityId}`);
         console.log(`🏠 Host:`, result.host);
         console.log(`👥 Participants:`, result.participants);
+        
+        const acceptedParticipants = result.participants.filter(p => p.status === 'accepted');
+        console.log(`✅ ACCEPTED participants (${acceptedParticipants.length}):`, acceptedParticipants.map(p => ({
+            child_name: p.child_name,
+            child_id: p.child_id,
+            parent_name: p.parent_name,
+            status: p.status,
+            invitation_id: p.invitation_id
+        })));
+        
+        const pendingParticipants = result.participants.filter(p => p.status === 'pending');
+        console.log(`⏳ PENDING participants (${pendingParticipants.length}):`, pendingParticipants.map(p => ({
+            child_name: p.child_name,
+            child_id: p.child_id,
+            parent_name: p.parent_name,
+            status: p.status
+        })));
         
         res.json({ success: true, data: result });
     } catch (error) {
@@ -2748,6 +2872,12 @@ async function processAutoNotifications(client, requesterId, targetParentId, req
 
         // Direction 3: Process pending invitations for both users
         console.log('🔄 Direction 3: Processing pending invitations');
+        console.log(`🔍 Looking for pending invitations between:`, {
+            requesterParentId: requesterId,
+            targetParentId: targetParentId,
+            requesterChildId: requesterChildId,
+            targetChildId: targetChildId
+        });
         
         // Get the new connection ID to map pending connection IDs
         const connectionResult = await client.query(`
@@ -2770,7 +2900,15 @@ async function processAutoNotifications(client, requesterId, targetParentId, req
                   AND a.start_date >= $3
             `, [requesterId, requesterPendingKey, today]);
             
-            console.log(`📋 Found ${requesterPendingInvitations.rows.length} pending invitations from requester`);
+            console.log(`📋 Found ${requesterPendingInvitations.rows.length} pending invitations from requester for key: ${requesterPendingKey}`);
+            if (requesterPendingInvitations.rows.length > 0) {
+                console.log(`🔍 Pending invitations details:`, requesterPendingInvitations.rows.map(p => ({
+                    activity: p.name,
+                    activity_id: p.activity_id,
+                    pending_connection_id: p.pending_connection_id,
+                    child_name: p.child_name
+                })));
+            }
             
             for (const pendingInvite of requesterPendingInvitations.rows) {
                 try {
@@ -2809,7 +2947,15 @@ async function processAutoNotifications(client, requesterId, targetParentId, req
                   AND a.start_date >= $3
             `, [targetParentId, targetPendingKey, today]);
             
-            console.log(`📋 Found ${targetPendingInvitations.rows.length} pending invitations from target parent`);
+            console.log(`📋 Found ${targetPendingInvitations.rows.length} pending invitations from target parent for key: ${targetPendingKey}`);
+            if (targetPendingInvitations.rows.length > 0) {
+                console.log(`🔍 Target pending invitations details:`, targetPendingInvitations.rows.map(p => ({
+                    activity: p.name,
+                    activity_id: p.activity_id,
+                    pending_connection_id: p.pending_connection_id,
+                    child_name: p.child_name
+                })));
+            }
             
             for (const pendingInvite of targetPendingInvitations.rows) {
                 try {
