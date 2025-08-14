@@ -2082,81 +2082,98 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
 
         const client = await pool.connect();
         
-        // Verify the activity exists and belongs to this user's child
-        const activityCheck = await client.query(
-            'SELECT a.*, c.parent_id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1',
-            [activityId]
-        );
-        
-        if (activityCheck.rows.length === 0) {
-            client.release();
-            return res.status(404).json({ success: false, error: 'Activity not found' });
-        }
-        
-        const activity = activityCheck.rows[0];
-        if (activity.parent_id !== req.user.id) {
-            client.release();
-            return res.status(403).json({ success: false, error: 'Not authorized to invite to this activity' });
-        }
+        try {
+            // Start transaction to ensure atomicity
+            await client.query('BEGIN');
 
-        // Verify that the child belongs to the invited parent
-        const childCheck = await client.query(
-            'SELECT id, name, parent_id FROM children WHERE id = $1',
-            [child_id]
-        );
-        
-        if (childCheck.rows.length === 0) {
-            client.release();
-            return res.status(404).json({ success: false, error: 'Child not found' });
-        }
-        
-        const child = childCheck.rows[0];
-        if (child.parent_id !== invited_parent_id) {
-            client.release();
-            return res.status(400).json({ 
-                success: false, 
-                error: `Child ${child.name} does not belong to the invited parent. Child belongs to parent ID ${child.parent_id}, but invitation is for parent ID ${invited_parent_id}` 
-            });
-        }
-
-        // Create the activity invitation
-        console.log('🔧 Attempting to insert invitation with values:', {
-            activityId,
-            inviter_parent_id: req.user.id,
-            invited_parent_id,
-            child_id,
-            message
-        });
-
-        const invitationResult = await client.query(
-            `INSERT INTO activity_invitations 
-             (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status) 
-             VALUES ($1, $2, $3, $4, $5, 'pending') 
-             RETURNING id`,
-            [activityId, req.user.id, invited_parent_id, child_id, message]
-        );
-
-        // Clean up any corresponding pending invitation to avoid duplicates
-        const pendingConnectionKey = `pending-${invited_parent_id}`;
-        const cleanupResult = await client.query(
-            `DELETE FROM pending_activity_invitations 
-             WHERE activity_id = $1 AND pending_connection_id = $2`,
-            [activityId, pendingConnectionKey]
-        );
-        
-        if (cleanupResult.rowCount > 0) {
-            console.log(`🧹 Cleaned up ${cleanupResult.rowCount} pending invitation(s) for activity ${activityId}, user ${invited_parent_id}`);
-        }
-
-        client.release();
-
-        res.json({
-            success: true,
-            data: { 
-                id: invitationResult.rows[0].id,
-                message: 'Activity invitation sent successfully'
+            // Verify the activity exists and belongs to this user's child
+            const activityCheck = await client.query(
+                'SELECT a.*, c.parent_id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1',
+                [activityId]
+            );
+            
+            if (activityCheck.rows.length === 0) {
+                await client.query('ROLLBACK');
+                client.release();
+                return res.status(404).json({ success: false, error: 'Activity not found' });
             }
-        });
+            
+            const activity = activityCheck.rows[0];
+            if (activity.parent_id !== req.user.id) {
+                await client.query('ROLLBACK');
+                client.release();
+                return res.status(403).json({ success: false, error: 'Not authorized to invite to this activity' });
+            }
+
+            // Verify that the child belongs to the invited parent
+            const childCheck = await client.query(
+                'SELECT id, name, parent_id FROM children WHERE id = $1',
+                [child_id]
+            );
+            
+            if (childCheck.rows.length === 0) {
+                await client.query('ROLLBACK');
+                client.release();
+                return res.status(404).json({ success: false, error: 'Child not found' });
+            }
+            
+            const child = childCheck.rows[0];
+            if (child.parent_id !== invited_parent_id) {
+                await client.query('ROLLBACK');
+                client.release();
+                return res.status(400).json({ 
+                    success: false, 
+                    error: `Child ${child.name} does not belong to the invited parent. Child belongs to parent ID ${child.parent_id}, but invitation is for parent ID ${invited_parent_id}` 
+                });
+            }
+
+            // FIRST: Clean up any corresponding pending invitation to avoid duplicates
+            const pendingConnectionKey = `pending-${invited_parent_id}`;
+            const cleanupResult = await client.query(
+                `DELETE FROM pending_activity_invitations 
+                 WHERE activity_id = $1 AND pending_connection_id = $2`,
+                [activityId, pendingConnectionKey]
+            );
+            
+            if (cleanupResult.rowCount > 0) {
+                console.log(`🧹 Cleaned up ${cleanupResult.rowCount} pending invitation(s) for activity ${activityId}, user ${invited_parent_id}`);
+            }
+
+            // THEN: Create the activity invitation
+            console.log('🔧 Attempting to insert invitation with values:', {
+                activityId,
+                inviter_parent_id: req.user.id,
+                invited_parent_id,
+                child_id,
+                message
+            });
+
+            const invitationResult = await client.query(
+                `INSERT INTO activity_invitations 
+                 (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status) 
+                 VALUES ($1, $2, $3, $4, $5, 'pending') 
+                 RETURNING id`,
+                [activityId, req.user.id, invited_parent_id, child_id, message]
+            );
+
+            // Commit the transaction
+            await client.query('COMMIT');
+            client.release();
+
+            res.json({
+                success: true,
+                data: { 
+                    id: invitationResult.rows[0].id,
+                    message: 'Activity invitation sent successfully'
+                }
+            });
+
+        } catch (error) {
+            // Rollback on any error
+            await client.query('ROLLBACK');
+            client.release();
+            throw error;
+        }
     } catch (error) {
         console.error('Send activity invitation error:', error);
         res.status(500).json({ success: false, error: 'Failed to send activity invitation' });
