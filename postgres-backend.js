@@ -1995,10 +1995,10 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
         );
         console.log('📋 All connection requests for user:', allRequests.rows);
         
-        // Verify the request is for this user
+        // ✅ SECURITY: Verify the request is for this user using UUID
         const request = await client.query(
-            'SELECT * FROM connection_requests WHERE id = $1 AND target_parent_id = $2 AND status = $3',
-            [requestId, req.user.id, 'pending']
+            'SELECT * FROM connection_requests WHERE uuid = $1 AND target_parent_id = $2 AND status = $3',
+            [requestUuid, req.user.id, 'pending']
         );
 
         console.log('🔍 Specific request found:', request.rows);
@@ -2009,7 +2009,7 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
                 success: false, 
                 error: 'Connection request not found',
                 debug: {
-                    requestId,
+                    requestUuid,
                     userId: req.user.id,
                     allRequests: allRequests.rows
                 }
@@ -2280,11 +2280,12 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
 // Create Pending Invitations endpoint
 app.post('/api/activities/:activityId/pending-invitations', authenticateToken, async (req, res) => {
     try {
-        const { activityId } = req.params;
+        // ✅ SECURITY: Expect UUID instead of sequential ID
+        const activityUuid = req.params.activityId;
         const { pending_connections } = req.body;
 
         console.log('📝 Creating pending invitations:', {
-            activityId,
+            activityUuid,
             pending_connections,
             userId: req.user.id
         });
@@ -2295,10 +2296,10 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
 
         const client = await pool.connect();
         
-        // Verify the activity exists and belongs to this user's child
+        // ✅ SECURITY: Verify the activity exists and belongs to this user's child using UUID
         const activityCheck = await client.query(
-            'SELECT a.*, c.parent_id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1',
-            [activityId]
+            'SELECT a.*, c.parent_id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.uuid = $1',
+            [activityUuid]
         );
         
         if (activityCheck.rows.length === 0) {
@@ -2360,7 +2361,8 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
 // Activity Duplication endpoint
 app.post('/api/activities/:activityId/duplicate', authenticateToken, async (req, res) => {
     try {
-        const { activityId } = req.params;
+        // ✅ SECURITY: Expect UUID instead of sequential ID
+        const activityUuid = req.params.activityId;
         const { new_start_date, new_end_date } = req.body;
 
         if (!new_start_date) {
@@ -2369,10 +2371,10 @@ app.post('/api/activities/:activityId/duplicate', authenticateToken, async (req,
 
         const client = await pool.connect();
         
-        // Get the original activity and verify ownership
+        // ✅ SECURITY: Get the original activity and verify ownership using UUID
         const originalActivity = await client.query(
-            'SELECT a.*, c.parent_id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1',
-            [activityId]
+            'SELECT a.*, c.parent_id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.uuid = $1',
+            [activityUuid]
         );
         
         if (originalActivity.rows.length === 0) {
@@ -2591,18 +2593,20 @@ app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
 // Mark Activity Invitation as viewed endpoint
 app.post('/api/activity-invitations/:invitationId/view', authenticateToken, async (req, res) => {
     try {
-        const { invitationId } = req.params;
+        // ✅ SECURITY: Expect UUID instead of sequential ID
+        const invitationUuid = req.params.invitationId;
         
-        if (!invitationId || isNaN(invitationId)) {
-            return res.status(400).json({ success: false, error: 'Invalid invitation ID' });
+        // ✅ SECURITY: Validate UUID format instead of numeric check
+        if (!invitationUuid || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invitationUuid)) {
+            return res.status(400).json({ success: false, error: 'Invalid invitation UUID format' });
         }
 
         const client = await pool.connect();
         
-        // Verify the invitation exists and belongs to the user
+        // ✅ SECURITY: Verify the invitation exists and belongs to the user using UUID
         const invitation = await client.query(
-            'SELECT * FROM activity_invitations WHERE id = $1 AND invited_parent_id = $2',
-            [invitationId, req.user.id]
+            'SELECT * FROM activity_invitations WHERE uuid = $1 AND invited_parent_id = $2',
+            [invitationUuid, req.user.id]
         );
         
         if (invitation.rows.length === 0) {
@@ -2629,18 +2633,20 @@ app.post('/api/activity-invitations/:invitationId/view', authenticateToken, asyn
 // Mark Activity Invitation status change as viewed endpoint (for host notifications)
 app.post('/api/activity-invitations/:invitationId/mark-status-viewed', authenticateToken, async (req, res) => {
     try {
-        const { invitationId } = req.params;
+        // ✅ SECURITY: Expect UUID instead of sequential ID
+        const invitationUuid = req.params.invitationId;
         
-        if (!invitationId || isNaN(invitationId)) {
-            return res.status(400).json({ success: false, error: 'Invalid invitation ID' });
+        // ✅ SECURITY: Validate UUID format instead of numeric check
+        if (!invitationUuid || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invitationUuid)) {
+            return res.status(400).json({ success: false, error: 'Invalid invitation UUID format' });
         }
 
         const client = await pool.connect();
         
-        // Verify the invitation exists and belongs to this user (as the host)
+        // ✅ SECURITY: Verify the invitation exists and belongs to this user (as the host) using UUID
         const invitation = await client.query(
-            'SELECT * FROM activity_invitations WHERE id = $1',
-            [invitationId]
+            'SELECT * FROM activity_invitations WHERE uuid = $1',
+            [invitationUuid]
         );
         
         if (invitation.rows.length === 0) {
@@ -2673,20 +2679,26 @@ app.post('/api/activity-invitations/:invitationId/mark-status-viewed', authentic
 // Respond to Activity Invitation endpoint
 app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, async (req, res) => {
     try {
-        const { invitationId } = req.params;
+        // ✅ SECURITY: Expect UUID instead of sequential ID
+        const invitationUuid = req.params.invitationId;
         const { action } = req.body;
 
         if (!action || !['accept', 'reject'].includes(action)) {
             return res.status(400).json({ success: false, error: 'Valid action (accept/reject) is required' });
         }
 
+        // ✅ SECURITY: Validate UUID format
+        if (!invitationUuid || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invitationUuid)) {
+            return res.status(400).json({ success: false, error: 'Invalid invitation UUID format' });
+        }
+
         const client = await pool.connect();
         
-        // Verify the invitation exists and belongs to this user
+        // ✅ SECURITY: Verify the invitation exists and belongs to this user using UUID
         // Allow responding to pending invitations and changing accepted invitations to declined
         const invitation = await client.query(
-            'SELECT * FROM activity_invitations WHERE id = $1 AND invited_parent_id = $2 AND (status = $3 OR status = $4)',
-            [invitationId, req.user.id, 'pending', 'accepted']
+            'SELECT * FROM activity_invitations WHERE uuid = $1 AND invited_parent_id = $2 AND (status = $3 OR status = $4)',
+            [invitationUuid, req.user.id, 'pending', 'accepted']
         );
 
         if (invitation.rows.length === 0) {
