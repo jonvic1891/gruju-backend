@@ -1937,8 +1937,9 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
             return res.status(404).json({ success: false, error: 'Child not found' });
         }
 
+        // ✅ SECURITY: Only return necessary fields, not RETURNING *
         const result = await client.query(
-            'INSERT INTO connection_requests (requester_id, target_parent_id, child_id, target_child_id, message, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            'INSERT INTO connection_requests (requester_id, target_parent_id, child_id, target_child_id, message, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING uuid, message, status, created_at',
             [req.user.id, target_parent_id, child_id, target_child_id, message, 'pending']
         );
         
@@ -2066,13 +2067,15 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
 // Delete connection endpoint
 app.delete('/api/connections/:connectionId', authenticateToken, async (req, res) => {
     try {
-        const connectionId = parseInt(req.params.connectionId);
+        // ✅ SECURITY: Expect UUID instead of sequential ID
+        const connectionUuid = req.params.connectionId;
         const userId = req.user.id;
 
-        console.log('🗑️ DELETE connection request:', { connectionId, userId });
+        console.log('🗑️ DELETE connection request:', { connectionUuid, userId });
 
-        if (!connectionId || isNaN(connectionId)) {
-            return res.status(400).json({ success: false, error: 'Invalid connection ID' });
+        // ✅ SECURITY: Validate UUID format instead of numeric check
+        if (!connectionUuid || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(connectionUuid)) {
+            return res.status(400).json({ success: false, error: 'Invalid connection UUID format' });
         }
 
         const client = await pool.connect();
@@ -2090,18 +2093,18 @@ app.delete('/api/connections/:connectionId', authenticateToken, async (req, res)
         
         console.log('📋 All connections for user:', allUserConnections.rows);
         
-        // Now try to find the specific connection
+        // ✅ SECURITY: Find connection using UUID instead of sequential ID
         const connection = await client.query(`
-            SELECT c.*, 
+            SELECT c.id, c.uuid,
                    ch1.name as child1_name, ch1.parent_id as child1_parent_id,
                    ch2.name as child2_name, ch2.parent_id as child2_parent_id
             FROM connections c
             JOIN children ch1 ON c.child1_id = ch1.id
             JOIN children ch2 ON c.child2_id = ch2.id  
-            WHERE c.id = $1 
+            WHERE c.uuid = $1 
               AND (ch1.parent_id = $2 OR ch2.parent_id = $2) 
               AND c.status = 'active'
-        `, [connectionId, userId]);
+        `, [connectionUuid, userId]);
 
         console.log('🔍 Specific connection found:', connection.rows);
 
@@ -2111,7 +2114,7 @@ app.delete('/api/connections/:connectionId', authenticateToken, async (req, res)
                 success: false, 
                 error: 'Connection not found',
                 debug: {
-                    connectionId,
+                    connectionUuid,
                     userId,
                     allUserConnections: allUserConnections.rows
                 }
@@ -2121,10 +2124,10 @@ app.delete('/api/connections/:connectionId', authenticateToken, async (req, res)
         const connData = connection.rows[0];
         console.log('✅ Connection to delete:', connData);
 
-        // Update connection status to blocked (soft delete)
+        // ✅ SECURITY: Update connection using UUID
         const updateResult = await client.query(
-            'UPDATE connections SET status = $1 WHERE id = $2',
-            ['blocked', connectionId]
+            'UPDATE connections SET status = $1 WHERE uuid = $2',
+            ['blocked', connectionUuid]
         );
 
         console.log('🔄 Update result:', updateResult);
@@ -2852,20 +2855,23 @@ app.get('/api/activities/:activityId/test', (req, res) => {
 // Get activity participants (all invitees and their status)
 app.get('/api/activities/:activityId/participants', authenticateToken, async (req, res) => {
     try {
-        const { activityId } = req.params;
-        console.log(`🔍 Getting participants for activity ${activityId}, user ${req.user.id}`);
+        // ✅ SECURITY: Expect UUID instead of sequential ID
+        const activityUuid = req.params.activityId;
+        console.log(`🔍 Getting participants for activity ${activityUuid}, user ${req.user.id}`);
         
         const client = await pool.connect();
         
-        // First check if activity exists
-        console.log(`🔍 Checking if activity ${activityId} exists`);
-        const activityExists = await client.query('SELECT id, name FROM activities WHERE id = $1', [activityId]);
-        console.log(`📊 Activity ${activityId} exists:`, activityExists.rows.length > 0, activityExists.rows);
+        // ✅ SECURITY: Check if activity exists using UUID
+        console.log(`🔍 Checking if activity ${activityUuid} exists`);
+        const activityExists = await client.query('SELECT id, name FROM activities WHERE uuid = $1', [activityUuid]);
+        console.log(`📊 Activity ${activityUuid} exists:`, activityExists.rows.length > 0, activityExists.rows);
         
         if (activityExists.rows.length === 0) {
             client.release();
             return res.status(404).json({ success: false, error: 'Activity not found' });
         }
+        
+        const activityId = activityExists.rows[0].id; // Get sequential ID for internal queries
         
         // First verify that the user has permission to view this activity (either host, invited, or pending invitation)
         const permissionCheck = await client.query(`
