@@ -1783,11 +1783,20 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
         );
         console.log(`⚠️ Requests with NULL child_id:`, nullChildRequests.rows);
         
+        // ✅ SECURITY: Only return necessary fields, NO email/phone/address exposure
         const result = await client.query(
-            `SELECT cr.*, 
-                    u.username as requester_name, u.email as requester_email, u.family_name as requester_family_name,
-                    c1.name as child_name, c1.age as child_age, c1.grade as child_grade, c1.school as child_school,
-                    c2.name as target_child_name, c2.age as target_child_age, c2.grade as target_child_grade, c2.school as target_child_school
+            `SELECT cr.uuid as request_uuid,
+                    cr.message,
+                    cr.status,
+                    cr.created_at,
+                    u.username as requester_name,
+                    u.family_name as requester_family_name,
+                    c1.name as child_name,
+                    c1.age as child_age,
+                    c1.grade as child_grade,
+                    c2.name as target_child_name,
+                    c2.age as target_child_age,
+                    c2.grade as target_child_grade
              FROM connection_requests cr
              JOIN users u ON cr.requester_id = u.id
              LEFT JOIN children c1 ON cr.child_id = c1.id
@@ -1820,9 +1829,14 @@ app.get('/api/connections/sent-requests', authenticateToken, async (req, res) =>
         console.log(`📤 GET /api/connections/sent-requests - User ID: ${req.user.id}, Email: ${req.user.email}`);
         
         const client = await pool.connect();
+        // ✅ SECURITY: Only return necessary fields, NO email exposure  
         const result = await client.query(
-            `SELECT cr.*, 
-                    u.username as target_parent_name, u.email as target_parent_email, u.family_name as target_family_name,
+            `SELECT cr.uuid as request_uuid,
+                    cr.message,
+                    cr.status,
+                    cr.created_at,
+                    u.username as target_parent_name,
+                    u.family_name as target_family_name,
                     COALESCE(
                         CASE 
                             WHEN c1.first_name IS NOT NULL THEN 
@@ -1846,7 +1860,8 @@ app.get('/api/connections/sent-requests', authenticateToken, async (req, res) =>
                         END, 
                         c2.name
                     ) as target_child_name,
-                    c2.age as target_child_age, c2.grade as target_child_grade, c2.school as target_child_school
+                    c2.age as target_child_age,
+                    c2.grade as target_child_grade
              FROM connection_requests cr
              JOIN users u ON cr.target_parent_id = u.id
              JOIN children c1 ON cr.child_id = c1.id
@@ -1882,13 +1897,25 @@ app.get('/api/connections/search', authenticateToken, async (req, res) => {
         }
 
         const client = await pool.connect();
+        // ✅ SECURITY: Only return necessary fields for connection search, NO email/phone exposure
         const result = await client.query(
-            `SELECT u.id, u.username, u.email, u.phone,
-                    json_agg(json_build_object('id', c.id, 'name', c.name, 'age', c.age)) as children
+            `SELECT u.uuid as user_uuid,
+                    u.username,
+                    u.family_name,
+                    json_agg(
+                        CASE WHEN c.id IS NOT NULL 
+                        THEN json_build_object(
+                            'uuid', c.uuid, 
+                            'name', c.name, 
+                            'age', c.age,
+                            'grade', c.grade
+                        ) 
+                        ELSE NULL END
+                    ) FILTER (WHERE c.id IS NOT NULL) as children
              FROM users u
              LEFT JOIN children c ON u.id = c.parent_id
              WHERE u.id != $1 AND u.is_active = true AND (u.email ILIKE $2 OR u.phone ILIKE $2)
-             GROUP BY u.id, u.username, u.email, u.phone
+             GROUP BY u.uuid, u.username, u.family_name
              LIMIT 10`,
             [req.user.id, `%${q}%`]
         );
@@ -1945,13 +1972,20 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
         
         console.log('✅ Connection request created successfully:', result.rows[0]);
 
-        // Get detailed information for the response
+        // ✅ SECURITY: Get response information without exposing emails
         const detailedRequest = await client.query(
-            `SELECT cr.*, 
-                    u_req.username as requester_name, u_req.email as requester_email,
-                    u_target.username as target_parent_name, u_target.email as target_parent_email,
-                    c1.name as child_name, c1.age as child_age, c1.grade as child_grade, c1.school as child_school,
-                    c2.name as target_child_name, c2.age as target_child_age, c2.grade as target_child_grade, c2.school as target_child_school
+            `SELECT cr.uuid as request_uuid,
+                    cr.message,
+                    cr.status,
+                    cr.created_at,
+                    u_req.username as requester_name,
+                    u_target.username as target_parent_name,
+                    c1.name as child_name,
+                    c1.age as child_age,
+                    c1.grade as child_grade,
+                    c2.name as target_child_name,
+                    c2.age as target_child_age,
+                    c2.grade as target_child_grade
              FROM connection_requests cr
              JOIN users u_req ON cr.requester_id = u_req.id
              JOIN users u_target ON cr.target_parent_id = u_target.id
@@ -2436,10 +2470,21 @@ app.get('/api/calendar/connected-activities', authenticateToken, async (req, res
         // Get activities from connected families
         const query = `
             SELECT DISTINCT
-                a.*,
+                a.uuid as activity_uuid,
+                a.name,
+                a.description,
+                a.start_date,
+                a.end_date,
+                a.start_time,
+                a.end_time,
+                a.location,
+                a.website_url,
+                a.cost,
+                a.max_participants,
+                a.created_at,
+                a.updated_at,
                 c.name as child_name,
                 u.username as parent_name,
-                u.email as parent_email,
                 true as is_connected_activity,
                 false as is_host
             FROM activities a
@@ -2564,7 +2609,6 @@ app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
                 c_host.name as host_child_name,
                 u_host.family_name as host_family_name,
                 u_host.username as host_parent_name,
-                u_host.email as host_parent_email,
                 c_invited.name as invited_child_name
             FROM activity_invitations ai
             JOIN activities a ON ai.activity_id = a.id
