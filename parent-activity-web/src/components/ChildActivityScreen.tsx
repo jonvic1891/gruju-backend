@@ -225,12 +225,29 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       const startDate = startOfMonth.toISOString().split('T')[0];
       const endDate = endOfMonth.toISOString().split('T')[0];
       
+      // Load child's own activities
       const activitiesResponse = await apiService.getCalendarActivities(startDate, endDate);
-      if (activitiesResponse.success && activitiesResponse.data) {
-        const activitiesData = Array.isArray(activitiesResponse.data) ? activitiesResponse.data : [];
-        // Filter to only show activities for the current child
-        const childActivities = activitiesData.filter(activity => activity.child_id === child.id);
-        setActivities(childActivities);
+      const ownActivities = activitiesResponse.success && activitiesResponse.data 
+        ? (Array.isArray(activitiesResponse.data) ? activitiesResponse.data : [])
+          .filter(activity => activity.child_id === child.id)
+        : [];
+      
+      // Also load accepted invitations for this child's parent
+      const invitedActivitiesResponse = await apiService.getInvitedActivities(startDate, endDate);
+      const invitedActivities = invitedActivitiesResponse.success && invitedActivitiesResponse.data
+        ? (Array.isArray(invitedActivitiesResponse.data) ? invitedActivitiesResponse.data : [])
+          .filter(activity => activity.invited_child_id === child.id || activity.child_id === child.id)
+        : [];
+      
+      // Combine own activities and accepted invitations, avoiding duplicates
+      const allActivities = [...ownActivities];
+      invitedActivities.forEach(invitedActivity => {
+        if (!allActivities.some(activity => activity.id === invitedActivity.id)) {
+          allActivities.push({...invitedActivity, isInvitedActivity: true});
+        }
+      });
+      
+      setActivities(allActivities);
       } else {
         console.error('Failed to load activities:', activitiesResponse.error);
         setActivities([]);
