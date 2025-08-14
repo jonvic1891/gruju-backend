@@ -2665,8 +2665,8 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
             WHERE ai.activity_id = $1 AND ai.invited_parent_id = $2
             UNION
             SELECT 1 FROM pending_activity_invitations pai
-            WHERE pai.activity_id = $1 AND pai.pending_connection_key LIKE 'pending-%' 
-            AND pai.pending_connection_key = CONCAT('pending-', $2)
+            WHERE pai.activity_id = $1 AND pai.pending_connection_id LIKE 'pending-%' 
+            AND pai.pending_connection_id = CONCAT('pending-', $2)
         `, [activityId, req.user.id]);
         
         if (permissionCheck.rows.length === 0) {
