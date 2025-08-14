@@ -225,22 +225,36 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       const startDate = startOfMonth.toISOString().split('T')[0];
       const endDate = endOfMonth.toISOString().split('T')[0];
       
+      console.log(`📅 ChildActivityScreen - Loading activities for date range: ${startDate} to ${endDate}`);
+      
       // Load all activities (owned + invited) using the unified activities endpoint
       const activitiesResponse = await apiService.getCalendarActivities(startDate, endDate);
+      console.log('🔍 ChildActivityScreen - Activities API Response:', activitiesResponse);
+      
       if (activitiesResponse.success && activitiesResponse.data) {
         const allActivities = Array.isArray(activitiesResponse.data) ? activitiesResponse.data : [];
+        console.log(`📅 ChildActivityScreen - All activities from API: ${allActivities.length}`, allActivities);
         
         // Filter activities for this specific child
         // Include activities where:
         // 1. Child owns the activity (child_id matches)
         // 2. Child is invited to the activity (invited_child_id matches AND invitation_status is pending/accepted)
         const childActivities = allActivities.filter(activity => {
-          return activity.child_id === child.id || 
-                 (activity.invited_child_id === child.id && 
-                  activity.invitation_status && 
-                  activity.invitation_status !== 'none');
+          const ownsActivity = activity.child_id === child.id;
+          const isInvited = activity.invited_child_id === child.id && 
+                           activity.invitation_status && 
+                           activity.invitation_status !== 'none';
+          const shouldInclude = ownsActivity || isInvited;
+          
+          console.log(`🔍 Filtering "${activity.name}" for child ${child.name} (ID: ${child.id}):`);
+          console.log(`   - Owns: ${ownsActivity} (${activity.child_id} === ${child.id})`);
+          console.log(`   - Invited: ${isInvited} (${activity.invited_child_id} === ${child.id}, status: ${activity.invitation_status})`);
+          console.log(`   - Include: ${shouldInclude}`);
+          
+          return shouldInclude;
         });
         
+        console.log(`✅ ChildActivityScreen - Filtered activities for ${child.name}: ${childActivities.length}`, childActivities);
         setActivities(childActivities);
       } else {
         console.error('Failed to load activities:', activitiesResponse.error);

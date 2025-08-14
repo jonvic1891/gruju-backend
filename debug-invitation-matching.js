@@ -44,6 +44,7 @@ async function debugInvitationMatching() {
             activities.data.forEach((activity, i) => {
                 console.log(`\n   ${i + 1}. "${activity.name}" (Activity ID: ${activity.id})`);
                 console.log(`      - child_id: ${activity.child_id} (${activity.child_name})`);
+                console.log(`      - invited_child_id: ${activity.invited_child_id || 'NOT SET'}`);
                 console.log(`      - is_host: ${activity.is_host}`);
                 console.log(`      - invitation_status: ${activity.invitation_status}`);
                 console.log(`      - date: ${activity.start_date} at ${activity.start_time}`);
