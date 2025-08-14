@@ -2655,7 +2655,7 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
             return res.status(404).json({ success: false, error: 'Activity not found' });
         }
         
-        // First verify that the user has permission to view this activity (either host or invited)
+        // First verify that the user has permission to view this activity (either host, invited, or pending invitation)
         const permissionCheck = await client.query(`
             SELECT 1 FROM activities a
             INNER JOIN children c ON a.child_id = c.id
@@ -2663,6 +2663,10 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
             UNION
             SELECT 1 FROM activity_invitations ai
             WHERE ai.activity_id = $1 AND ai.invited_parent_id = $2
+            UNION
+            SELECT 1 FROM pending_activity_invitations pai
+            WHERE pai.activity_id = $1 AND pai.pending_connection_key LIKE 'pending-%' 
+            AND pai.pending_connection_key = CONCAT('pending-', $2)
         `, [activityId, req.user.id]);
         
         if (permissionCheck.rows.length === 0) {
