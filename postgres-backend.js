@@ -2703,11 +2703,26 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
             ORDER BY ai.created_at DESC
         `, [activityId]);
 
-        // Also get pending invitations that haven't been sent yet
+        // Get host's child ID to check for connections
+        const hostChildQuery = await client.query(`
+            SELECT c.id as host_child_id 
+            FROM activities a 
+            INNER JOIN children c ON a.child_id = c.id 
+            WHERE a.id = $1
+        `, [activityId]);
+        const hostChildId = hostChildQuery.rows[0]?.host_child_id;
+
+        // Also get pending invitations that haven't been sent yet, with connection status
         const pendingInvitationsQuery = await client.query(`
             SELECT pai.id as pending_id,
-                   'pending_connection' as status,
-                   'Pending connection - invitation will be sent when connection is accepted' as message,
+                   CASE 
+                       WHEN conn.id IS NOT NULL THEN 'active_connection_pending_invite'
+                       ELSE 'pending_connection'
+                   END as status,
+                   CASE 
+                       WHEN conn.id IS NOT NULL THEN 'Connected - invitation will be sent automatically'
+                       ELSE 'Pending connection - invitation will be sent when connection is accepted'
+                   END as message,
                    pai.created_at as invited_at,
                    null as responded_at,
                    null as viewed_at,
@@ -2715,13 +2730,21 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
                    u.id as parent_id,
                    c.name as child_name,
                    c.id as child_id,
-                   'pending' as invitation_type
+                   CASE 
+                       WHEN conn.id IS NOT NULL THEN 'active_pending'
+                       ELSE 'pending'
+                   END as invitation_type,
+                   conn.status as connection_status
             FROM pending_activity_invitations pai
             INNER JOIN users u ON CAST(REPLACE(pai.pending_connection_id, 'pending-', '') AS INTEGER) = u.id
             LEFT JOIN children c ON c.parent_id = u.id
+            LEFT JOIN connections conn ON (
+                (conn.child1_id = $2 AND conn.child2_id = c.id) OR 
+                (conn.child2_id = $2 AND conn.child1_id = c.id)
+            ) AND conn.status = 'active'
             WHERE pai.activity_id = $1
             ORDER BY pai.created_at DESC
-        `, [activityId]);
+        `, [activityId, hostChildId]);
         
         client.release();
         
