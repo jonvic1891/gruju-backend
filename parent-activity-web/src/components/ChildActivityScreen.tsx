@@ -300,7 +300,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const handleStatusChangeClicked = async (activity: Activity) => {
     // Show participants to see status changes, then mark all as viewed
     try {
-      const response = await apiService.getActivityParticipants(activity.activity_id || activity.id);
+      const response = await apiService.getActivityParticipants((activity as any).activity_uuid || (activity as any).uuid);
       
       if (response.success && response.data) {
         setActivityParticipants(response.data);
@@ -419,7 +419,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     navigateToPage('add-activity');
   };
 
-  const loadActivityParticipants = async (activityId: number) => {
+  const loadActivityParticipants = async (activityId: string) => {
     try {
       setLoadingParticipants(true);
       console.log('🔍 Loading participants for activity ID:', activityId);
@@ -510,22 +510,22 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       isDeclinedInvitation: activity.isDeclinedInvitation
     });
     
-    // For invitations, we need to get the original activity ID from the backend
+    // For invitations, we need to get the original activity UUID from the backend
     if (activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) {
-      // For invitations, we need to load participants using the original activity ID
-      // The invitation data should contain the original activity_id
-      const originalActivityId = (activity as any).activity_id || (activity as any).id;
-      console.log('📋 Loading participants for invitation with originalActivityId:', originalActivityId);
-      if (originalActivityId && typeof originalActivityId === 'number') {
-        loadActivityParticipants(originalActivityId);
+      // For invitations, we need to load participants using the original activity UUID
+      // The invitation data should contain the original activity_uuid
+      const originalActivityUuid = (activity as any).activity_uuid || (activity as any).uuid;
+      console.log('📋 Loading participants for invitation with originalActivityUuid:', originalActivityUuid);
+      if (originalActivityUuid && typeof originalActivityUuid === 'string') {
+        loadActivityParticipants(originalActivityUuid);
       } else {
-        console.error('❌ No valid activity ID found for invitation:', activity);
+        console.error('❌ No valid activity UUID found for invitation:', activity);
         setActivityParticipants(null);
       }
-    } else if (activity.id) {
-      // For regular activities, use the activity ID directly
-      console.log('📋 Loading participants for regular activity with ID:', activity.id);
-      loadActivityParticipants(activity.id);
+    } else if ((activity as any).activity_uuid) {
+      // For regular activities, use the activity UUID directly
+      console.log('📋 Loading participants for regular activity with UUID:', (activity as any).activity_uuid);
+      loadActivityParticipants((activity as any).activity_uuid);
     } else {
       console.error('❌ No activity ID found for activity:', activity);
       setActivityParticipants(null);
@@ -837,7 +837,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         alert(`Invitation sent to ${child.name}!`);
         // Reload participants to show the new invitation
         if (activityParticipants) {
-          loadActivityParticipants(activity.id);
+          loadActivityParticipants((activity as any).activity_uuid);
         }
       } else {
         alert(`Failed to send invitation: ${response.error}`);

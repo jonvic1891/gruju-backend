@@ -370,7 +370,7 @@ const CalendarScreen = () => {
     return 'All day';
   };
 
-  const loadActivityParticipants = async (activityId: number) => {
+  const loadActivityParticipants = async (activityId: string) => {
     try {
       setLoadingParticipants(true);
       const response = await apiService.getActivityParticipants(activityId);
@@ -391,9 +391,9 @@ const CalendarScreen = () => {
   const handleActivityClick = (activity: Activity) => {
     setSelectedActivity(activity);
     setShowActivityDetail(true);
-    // Load participants for the activity (if it's a real activity with an ID)
-    if (activity.id && !isPendingInvitation(activity)) {
-      loadActivityParticipants(activity.id);
+    // Load participants for the activity (if it's a real activity with a UUID)
+    if ((activity as any).activity_uuid && !isPendingInvitation(activity)) {
+      loadActivityParticipants((activity as any).activity_uuid);
     } else {
       setActivityParticipants(null);
     }
