@@ -2637,16 +2637,8 @@ app.get('/api/activities/:activityId/test', (req, res) => {
     res.json({ success: true, message: 'Test endpoint working', activityId: req.params.activityId });
 });
 
-// Get activity participants (all invitees and their status) - TEMPORARILY BYPASS AUTH FOR DEBUGGING
-app.get('/api/activities/:activityId/participants', (req, res, next) => {
-    console.log(`🚀 PARTICIPANTS API REQUEST: ${req.method} ${req.url} - ActivityID: ${req.params.activityId}`);
-    console.log(`🔑 Authorization header present: ${!!req.headers.authorization}`);
-    
-    // TEMPORARY: Bypass auth for debugging - set fake user
-    req.user = { id: 3, email: 'johnson@example.com' };
-    console.log(`🔧 DEBUGGING: Using fake user ID 3`);
-    next();
-}, async (req, res) => {
+// Get activity participants (all invitees and their status)
+app.get('/api/activities/:activityId/participants', authenticateToken, async (req, res) => {
     try {
         const { activityId } = req.params;
         console.log(`🔍 Getting participants for activity ${activityId}, user ${req.user.id}`);
@@ -2691,7 +2683,7 @@ app.get('/api/activities/:activityId/participants', (req, res, next) => {
             WHERE a.id = $1
         `, [activityId]);
         
-        // Get all invitees for this activity (now with database constraints ensuring data integrity)
+        // Get all invitees for this activity (actual invitations)
         const participantsQuery = await client.query(`
             SELECT ai.id as invitation_id,
                    ai.status,
@@ -2702,24 +2694,51 @@ app.get('/api/activities/:activityId/participants', (req, res, next) => {
                    u.username as parent_name,
                    u.id as parent_id,
                    c_invited.name as child_name,
-                   c_invited.id as child_id
+                   c_invited.id as child_id,
+                   'sent' as invitation_type
             FROM activity_invitations ai
             INNER JOIN users u ON ai.invited_parent_id = u.id
             INNER JOIN children c_invited ON ai.invited_child_id = c_invited.id
             WHERE ai.activity_id = $1
             ORDER BY ai.created_at DESC
         `, [activityId]);
+
+        // Also get pending invitations that haven't been sent yet
+        const pendingInvitationsQuery = await client.query(`
+            SELECT pai.id as pending_id,
+                   'pending_connection' as status,
+                   'Pending connection - invitation will be sent when connection is accepted' as message,
+                   pai.created_at as invited_at,
+                   null as responded_at,
+                   null as viewed_at,
+                   u.username as parent_name,
+                   u.id as parent_id,
+                   c.name as child_name,
+                   c.id as child_id,
+                   'pending' as invitation_type
+            FROM pending_activity_invitations pai
+            INNER JOIN users u ON CAST(REPLACE(pai.pending_connection_id, 'pending-', '') AS INTEGER) = u.id
+            LEFT JOIN children c ON c.parent_id = u.id
+            WHERE pai.activity_id = $1
+            ORDER BY pai.created_at DESC
+        `, [activityId]);
         
         client.release();
         
+        // Combine actual participants and pending invitations
+        const allParticipants = [
+            ...participantsQuery.rows,
+            ...pendingInvitationsQuery.rows
+        ];
+        
         const result = {
             host: hostQuery.rows[0] || null,
-            participants: participantsQuery.rows || []
+            participants: allParticipants
         };
         
-        console.log(`📊 Found ${participantsQuery.rows.length} participants for activity ${activityId}`);
+        console.log(`📊 Found ${participantsQuery.rows.length} sent invitations + ${pendingInvitationsQuery.rows.length} pending invitations = ${allParticipants.length} total for activity ${activityId}`);
         console.log(`🏠 Host:`, result.host);
-        console.log(`👥 Participants:`, result.participants);
+        console.log(`👥 All Participants:`, result.participants);
         
         const acceptedParticipants = result.participants.filter(p => p.status === 'accepted');
         console.log(`✅ ACCEPTED participants (${acceptedParticipants.length}):`, acceptedParticipants.map(p => ({
