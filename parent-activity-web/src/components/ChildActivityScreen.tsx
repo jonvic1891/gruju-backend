@@ -232,10 +232,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           .filter(activity => activity.child_id === child.id)
         : [];
       
-      // Also load accepted invitations for this child's parent
-      const invitedActivitiesResponse = await apiService.getInvitedActivities(startDate, endDate);
-      const invitedActivities = invitedActivitiesResponse.success && invitedActivitiesResponse.data
-        ? (Array.isArray(invitedActivitiesResponse.data) ? invitedActivitiesResponse.data : [])
+      // Also load ALL invitations (pending and accepted) for this child's parent
+      const allInvitationsResponse = await apiService.getAllInvitations(startDate, endDate);
+      const invitedActivities = allInvitationsResponse.success && allInvitationsResponse.data
+        ? (Array.isArray(allInvitationsResponse.data) ? allInvitationsResponse.data : [])
           .filter(activity => activity.invited_child_id === child.id || activity.child_id === child.id)
         : [];
       
