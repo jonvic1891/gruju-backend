@@ -2057,6 +2057,18 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
             [activityId, req.user.id, invited_parent_id, child_id, message]
         );
 
+        // Clean up any corresponding pending invitation to avoid duplicates
+        const pendingConnectionKey = `pending-${invited_parent_id}`;
+        const cleanupResult = await client.query(
+            `DELETE FROM pending_activity_invitations 
+             WHERE activity_id = $1 AND pending_connection_id = $2`,
+            [activityId, pendingConnectionKey]
+        );
+        
+        if (cleanupResult.rowCount > 0) {
+            console.log(`🧹 Cleaned up ${cleanupResult.rowCount} pending invitation(s) for activity ${activityId}, user ${invited_parent_id}`);
+        }
+
         client.release();
 
         res.json({
