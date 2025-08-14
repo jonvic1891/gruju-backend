@@ -761,6 +761,56 @@ async function logActivity(level, message, userId = null, metadata = null, req =
 }
 
 // Health check endpoint
+// Migration endpoint to fix existing activities
+app.post('/api/admin/migrate-is-shared', async (req, res) => {
+    try {
+        const client = await pool.connect();
+        
+        // Update activities that have auto_notify_new_connections = true
+        const autoNotifyResult = await client.query(`
+            UPDATE activities 
+            SET is_shared = true 
+            WHERE auto_notify_new_connections = true AND (is_shared = false OR is_shared IS NULL)
+        `);
+        
+        // Update activities that have pending invitations
+        const pendingInvitesResult = await client.query(`
+            UPDATE activities 
+            SET is_shared = true 
+            WHERE id IN (
+                SELECT DISTINCT pai.activity_id 
+                FROM pending_activity_invitations pai
+            ) AND (is_shared = false OR is_shared IS NULL)
+        `);
+        
+        // Update activities that have actual invitations
+        const actualInvitesResult = await client.query(`
+            UPDATE activities 
+            SET is_shared = true 
+            WHERE id IN (
+                SELECT DISTINCT ai.activity_id 
+                FROM activity_invitations ai
+            ) AND (is_shared = false OR is_shared IS NULL)
+        `);
+        
+        client.release();
+        
+        res.json({
+            success: true,
+            message: 'Migration completed',
+            results: {
+                auto_notify_activities: autoNotifyResult.rowCount,
+                pending_invitations_activities: pendingInvitesResult.rowCount,
+                actual_invitations_activities: actualInvitesResult.rowCount,
+                total_updated: autoNotifyResult.rowCount + pendingInvitesResult.rowCount + actualInvitesResult.rowCount
+            }
+        });
+    } catch (error) {
+        console.error('Migration error:', error);
+        res.status(500).json({ success: false, error: 'Migration failed' });
+    }
+});
+
 app.get('/health', async (req, res) => {
     try {
         const client = await pool.connect();
