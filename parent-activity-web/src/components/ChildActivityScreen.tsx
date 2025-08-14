@@ -233,10 +233,12 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         // Filter activities for this specific child
         // Include activities where:
         // 1. Child owns the activity (child_id matches)
-        // 2. Child is invited to the activity (invitation_status is pending or accepted)
+        // 2. Child is invited to the activity (invited_child_id matches AND invitation_status is pending/accepted)
         const childActivities = allActivities.filter(activity => {
           return activity.child_id === child.id || 
-                 (activity.invitation_status && activity.invitation_status !== 'none');
+                 (activity.invited_child_id === child.id && 
+                  activity.invitation_status && 
+                  activity.invitation_status !== 'none');
         });
         
         setActivities(childActivities);

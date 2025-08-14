@@ -1463,6 +1463,8 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
                 CASE WHEN c.parent_id = $1 THEN true ELSE false END as is_host,
                 -- Activity invitation status for this user's children
                 COALESCE(ai.status, 'none') as invitation_status,
+                -- Include invited child ID for proper frontend filtering
+                ai.invited_child_id,
                 -- Debug fields to see what each condition evaluates to
                 a.auto_notify_new_connections as debug_auto_notify,
                 (SELECT COUNT(*) FROM activity_invitations ai WHERE ai.activity_id = a.id) as debug_total_invitations,
