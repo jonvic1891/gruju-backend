@@ -1653,9 +1653,9 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
         
         // Debug: First check all connections for this user (including blocked ones)
         const allConnections = await client.query(
-            `SELECT c.*, 
-                    u1.id as child1_parent_id, u1.username as child1_parent_name, 
-                    u2.id as child2_parent_id, u2.username as child2_parent_name,
+            `SELECT c.id, c.status, c.created_at,
+                    u1.username as child1_parent_name, 
+                    u2.username as child2_parent_name,
                     ch1.name as child1_name, ch2.name as child2_name
              FROM connections c
              JOIN children ch1 ON c.child1_id = ch1.id
@@ -1674,10 +1674,11 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
         })));
         
         const result = await client.query(
-            `SELECT c.*, 
-                    u1.id as child1_parent_id, u1.username as child1_parent_name, 
-                    u2.id as child2_parent_id, u2.username as child2_parent_name,
-                    ch1.name as child1_name, ch2.name as child2_name
+            `SELECT c.id, c.status, c.created_at,
+                    u1.username as child1_parent_name, 
+                    u2.username as child2_parent_name,
+                    ch1.name as child1_name, ch2.name as child2_name,
+                    ch1.id as child1_id, ch2.id as child2_id
              FROM connections c
              JOIN children ch1 ON c.child1_id = ch1.id
              JOIN children ch2 ON c.child2_id = ch2.id  
