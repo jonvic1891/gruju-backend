@@ -2730,10 +2730,7 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
         // Also get pending invitations that haven't been sent yet, with connection status
         const pendingInvitationsQuery = await client.query(`
             SELECT pai.id as pending_id,
-                   CASE 
-                       WHEN conn.id IS NOT NULL THEN 'connected'
-                       ELSE 'pending_connection'
-                   END as status,
+                   'pending' as status,
                    CASE 
                        WHEN conn.id IS NOT NULL THEN 'Connected - invitation will be sent automatically'
                        ELSE 'Pending connection - invitation will be sent when connection is accepted'
