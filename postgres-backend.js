@@ -941,9 +941,11 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(401).json({ success: false, error: 'Invalid credentials' });
         }
 
+        // ✅ SECURITY: Use UUID in JWT instead of sequential ID
         const token = jwt.sign(
             { 
-                id: user.id, 
+                id: user.id, // Keep sequential ID for backward compatibility in JWT
+                uuid: user.uuid, // Add UUID for future use
                 email: user.email, 
                 role: user.role,
                 username: user.username 
@@ -955,11 +957,12 @@ app.post('/api/auth/login', async (req, res) => {
         await logActivity('info', `User logged in: ${email}`, user.id, null, req);
         client.release();
 
+        // ✅ SECURITY: Only return UUID in response, not sequential ID
         res.json({
             success: true,
             token,
             user: {
-                id: user.id,
+                uuid: user.uuid,
                 username: user.username,
                 email: user.email,
                 role: user.role,
@@ -1248,8 +1251,9 @@ app.put('/api/users/change-password', authenticateToken, async (req, res) => {
 app.get('/api/children', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
+        // ✅ SECURITY: Only select necessary fields and use UUID instead of sequential ID
         const result = await client.query(
-            `SELECT *, 
+            `SELECT uuid, name, first_name, last_name, age, grade, school, interests, created_at, updated_at,
              CASE 
                 WHEN first_name IS NOT NULL AND last_name IS NOT NULL AND last_name != '' 
                 THEN CONCAT(first_name, ' ', last_name)
@@ -1298,8 +1302,9 @@ app.post('/api/children', authenticateToken, async (req, res) => {
         }
 
         const client = await pool.connect();
+        // ✅ SECURITY: Only return necessary fields with UUID
         const result = await client.query(
-            'INSERT INTO children (name, first_name, last_name, parent_id, age, grade, school, interests) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+            'INSERT INTO children (name, first_name, last_name, parent_id, age, grade, school, interests) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING uuid, name, first_name, last_name, age, grade, school, interests, created_at, updated_at',
             [fullName, firstName, lastName, req.user.id, age, grade, school, interests]
         );
         client.release();
@@ -1316,14 +1321,14 @@ app.post('/api/children', authenticateToken, async (req, res) => {
 
 app.delete('/api/children/:id', authenticateToken, async (req, res) => {
     try {
-        const childId = parseInt(req.params.id);
+        const childUuid = req.params.id; // Now expecting UUID instead of sequential ID
         
         const client = await pool.connect();
         
-        // First check if the child belongs to this user
+        // ✅ SECURITY: Check if the child belongs to this user using UUID
         const child = await client.query(
-            'SELECT id FROM children WHERE id = $1 AND parent_id = $2',
-            [childId, req.user.id]
+            'SELECT id FROM children WHERE uuid = $1 AND parent_id = $2',
+            [childUuid, req.user.id]
         );
 
         if (child.rows.length === 0) {
@@ -1331,8 +1336,8 @@ app.delete('/api/children/:id', authenticateToken, async (req, res) => {
             return res.status(404).json({ success: false, error: 'Child not found' });
         }
 
-        // Delete child (activities will be deleted by CASCADE)
-        await client.query('DELETE FROM children WHERE id = $1', [childId]);
+        // ✅ SECURITY: Delete child using UUID (activities will be deleted by CASCADE)
+        await client.query('DELETE FROM children WHERE uuid = $1', [childUuid]);
         client.release();
 
         res.json({ success: true });
@@ -1492,7 +1497,21 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
         
         let query = `
             SELECT DISTINCT
-                a.*, 
+                -- ✅ SECURITY: Use UUIDs instead of sequential IDs
+                a.uuid as activity_uuid,
+                a.name, 
+                a.description,
+                a.start_date,
+                a.end_date, 
+                a.start_time,
+                a.end_time,
+                a.location,
+                a.website_url,
+                a.cost,
+                a.max_participants,
+                a.auto_notify_new_connections,
+                a.created_at,
+                a.updated_at,
                 c.name as child_name,
                 -- Use stored is_shared value
                 a.is_shared,
@@ -1500,8 +1519,8 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
                 CASE WHEN c.parent_id = $1 THEN true ELSE false END as is_host,
                 -- Activity invitation status for this user's children
                 COALESCE(ai.status, 'none') as invitation_status,
-                -- Include invited child ID for proper frontend filtering
-                ai.invited_child_id,
+                -- ✅ SECURITY: Use child UUID instead of ID for invited child
+                c_invited.uuid as invited_child_uuid,
                 -- Debug fields to see what each condition evaluates to
                 a.auto_notify_new_connections as debug_auto_notify,
                 (SELECT COUNT(*) FROM activity_invitations ai WHERE ai.activity_id = a.id) as debug_total_invitations,
@@ -1533,6 +1552,7 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
             LEFT JOIN activity_invitations ai ON a.id = ai.activity_id 
                 AND ai.invited_parent_id = $1 
                 AND ai.status IN ('pending', 'accepted')
+            LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
             WHERE (
                 -- Include owned activities
                 c.parent_id = $1 
@@ -1557,7 +1577,7 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
         console.log('🔍 Calendar Activities Debug:');
         console.log(`Found ${result.rows.length} activities for user ${req.user.id} (${req.user.email})`);
         result.rows.forEach((activity, index) => {
-            console.log(`${index + 1}. Activity: "${activity.name}" (ID: ${activity.id})`);
+            console.log(`${index + 1}. Activity: "${activity.name}" (UUID: ${activity.activity_uuid})`);
             console.log(`   - is_shared: ${activity.is_shared}`);
             console.log(`   - debug_auto_notify: ${activity.debug_auto_notify}`);
             console.log(`   - debug_total_invitations: ${activity.debug_total_invitations}`);
@@ -1583,9 +1603,9 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
         
         const client = await pool.connect();
         
-        // Verify the activity belongs to a child of this user
+        // ✅ SECURITY: Verify the activity belongs to this user using UUID
         const activityCheck = await client.query(
-            'SELECT a.id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1 AND c.parent_id = $2',
+            'SELECT a.id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.uuid = $1 AND c.parent_id = $2',
             [activityId, req.user.id]
         );
         
@@ -1601,12 +1621,13 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
         const processedCost = cost && cost.trim() ? parseFloat(cost.trim()) : null;
         const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
 
+        // ✅ SECURITY: Update using UUID and return minimal data
         const result = await client.query(
             `UPDATE activities SET 
                 name = $1, description = $2, start_date = $3, end_date = $4, 
                 start_time = $5, end_time = $6, location = $7, website_url = $8, 
                 cost = $9, max_participants = $10, updated_at = NOW()
-             WHERE id = $11 RETURNING *`,
+             WHERE uuid = $11 RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, updated_at`,
             [name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, activityId]
         );
         
@@ -1625,9 +1646,9 @@ app.delete('/api/activities/delete/:activityId', authenticateToken, async (req, 
         
         const client = await pool.connect();
         
-        // Verify the activity belongs to a child of this user
+        // ✅ SECURITY: Verify the activity belongs to this user using UUID
         const activityCheck = await client.query(
-            'SELECT a.id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1 AND c.parent_id = $2',
+            'SELECT a.id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.uuid = $1 AND c.parent_id = $2',
             [activityId, req.user.id]
         );
         
@@ -1636,7 +1657,8 @@ app.delete('/api/activities/delete/:activityId', authenticateToken, async (req, 
             return res.status(404).json({ success: false, error: 'Activity not found' });
         }
         
-        await client.query('DELETE FROM activities WHERE id = $1', [activityId]);
+        // ✅ SECURITY: Delete using UUID instead of sequential ID
+        await client.query('DELETE FROM activities WHERE uuid = $1', [activityId]);
         client.release();
         
         res.json({ success: true });
@@ -2845,16 +2867,14 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
         
         // Get all invitees for this activity (actual invitations)
         const participantsQuery = await client.query(`
-            SELECT ai.id as invitation_id,
+            SELECT ai.uuid as invitation_uuid,
                    ai.status,
                    ai.message,
                    ai.created_at as invited_at,
                    ai.updated_at as responded_at,
                    ai.viewed_at,
                    u.username as parent_name,
-                   u.id as parent_id,
                    c_invited.name as child_name,
-                   c_invited.id as child_id,
                    'sent' as invitation_type
             FROM activity_invitations ai
             INNER JOIN users u ON ai.invited_parent_id = u.id
@@ -2874,7 +2894,7 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
 
         // Also get pending invitations that haven't been sent yet, with connection status
         const pendingInvitationsQuery = await client.query(`
-            SELECT pai.id as pending_id,
+            SELECT pai.uuid as pending_uuid,
                    'pending' as status,
                    CASE 
                        WHEN conn.id IS NOT NULL THEN 'Connected - invitation will be sent automatically'
@@ -2884,9 +2904,7 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
                    null as responded_at,
                    null as viewed_at,
                    u.username as parent_name,
-                   u.id as parent_id,
                    c.name as child_name,
-                   c.id as child_id,
                    CASE 
                        WHEN conn.id IS NOT NULL THEN 'connected_pending_invite'
                        ELSE 'pending_connection'
