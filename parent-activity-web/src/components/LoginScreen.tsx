@@ -186,7 +186,7 @@ const LoginScreen = () => {
               className="password-toggle"
               onClick={() => setShowPassword(!showPassword)}
             >
-              {showPassword ? 'Hide' : 'Show'}
+              {showPassword ? '🙈' : '👁️'}
             </button>
           </div>
           
@@ -205,7 +205,7 @@ const LoginScreen = () => {
                 className="password-toggle"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               >
-                {showConfirmPassword ? 'Hide' : 'Show'}
+                {showConfirmPassword ? '🙈' : '👁️'}
               </button>
             </div>
           )}

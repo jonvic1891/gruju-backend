@@ -28,6 +28,7 @@
       "Bash(heroku logs:*)",
       "Bash(heroku run:*)"
     ],
-    "deny": []
+    "deny": [],
+    "defaultMode": "acceptEdits"
   }
 }

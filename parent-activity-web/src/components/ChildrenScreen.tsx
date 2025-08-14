@@ -41,10 +41,11 @@ interface ChildrenScreenProps {
   onNavigateToChildCalendar?: (child: Child) => void;
   initialSelectedChildId?: number | null;
   onChildSelectionChange?: (childId: number | null) => void;
-  onNavigateToConnections?: () => void;
+  onNavigateToConnections?: (isInActivityCreation?: boolean) => void;
+  shouldRestoreActivityCreation?: boolean;
 }
 
-const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, onNavigateToChildCalendar, initialSelectedChildId, onChildSelectionChange, onNavigateToConnections }) => {
+const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, onNavigateToChildCalendar, initialSelectedChildId, onChildSelectionChange, onNavigateToConnections, shouldRestoreActivityCreation }) => {
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -154,15 +155,41 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     try {
       const counts: Record<number, number> = {};
       
-      // Load activity count for each child
+      // Get date range for accepted invitations
+      const today = new Date();
+      const oneYearLater = new Date();
+      oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+      const startDate = today.toISOString().split('T')[0];
+      const endDate = oneYearLater.toISOString().split('T')[0];
+      
+      // Load activity count for each child (own activities + accepted invitations)
       for (const child of childrenData) {
         try {
-          const response = await apiService.getActivities(child.id);
-          if (response.success && response.data && Array.isArray(response.data)) {
-            counts[child.id] = response.data.length;
-          } else {
-            counts[child.id] = 0;
+          let totalCount = 0;
+          
+          // Count own activities
+          const ownActivitiesResponse = await apiService.getActivities(child.id);
+          if (ownActivitiesResponse.success && ownActivitiesResponse.data && Array.isArray(ownActivitiesResponse.data)) {
+            totalCount += ownActivitiesResponse.data.length;
           }
+          
+          // Count accepted invitations (connected activities)
+          const allInvitationsResponse = await apiService.getAllInvitations(startDate, endDate);
+          if (allInvitationsResponse.success && allInvitationsResponse.data) {
+            // Filter for this specific child's accepted invitations
+            const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
+            const currentUsername = currentUser.username;
+            
+            const childAcceptedInvitations = allInvitationsResponse.data.filter((invitation: any) => 
+              invitation.invited_child_name === child.name &&
+              invitation.status === 'accepted' &&
+              invitation.host_parent_username !== currentUsername
+            );
+            
+            totalCount += childAcceptedInvitations.length;
+          }
+          
+          counts[child.id] = totalCount;
         } catch (error) {
           console.error(`Failed to load activity count for child ${child.id}:`, error);
           counts[child.id] = 0;
@@ -177,8 +204,15 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
 
   const loadInvitationsForChildren = async (childrenData: Child[]) => {
     try {
-      // Get all activity invitations for this parent
-      const response = await apiService.getActivityInvitations();
+      // Use unified calendar invitations endpoint with a wide date range
+      const today = new Date();
+      const oneYearLater = new Date();
+      oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+      
+      const startDate = today.toISOString().split('T')[0];
+      const endDate = oneYearLater.toISOString().split('T')[0];
+      
+      const response = await apiService.getAllInvitations(startDate, endDate);
       if (response.success && response.data) {
         
         // Group invitations by child
@@ -189,19 +223,19 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
           invitationsByChild[child.id] = [];
         });
         
-        // Group invitations by the child they're for
+        // Filter for pending invitations only and group by child
         response.data.forEach((invitation: any) => {
           if (invitation.status === 'pending') {
-            // Find the child this invitation is for using child ID
+            // Find the child this invitation is for using child name
             const targetChild = childrenData.find(child => 
-              child.id === invitation.invited_child_id
+              child.name === invitation.invited_child_name
             );
             
             if (targetChild) {
-              // Add to the child's invitations
+              // Convert the calendar invitation format to match ActivityInvitation interface
               invitationsByChild[targetChild.id].push({
-                id: invitation.id,
-                activity_id: invitation.activity_id,
+                id: invitation.invitation_id,
+                activity_id: invitation.id,
                 activity_name: invitation.activity_name,
                 activity_description: invitation.activity_description,
                 start_date: invitation.start_date,
@@ -210,23 +244,27 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 end_time: invitation.end_time,
                 location: invitation.location,
                 status: invitation.status,
-                host_child_name: invitation.host_child_name,
+                host_child_name: invitation.child_name,
                 host_family_name: invitation.host_family_name,
-                host_parent_name: invitation.host_parent_name,
+                host_parent_name: invitation.host_parent_username,
                 host_parent_email: invitation.host_parent_email,
-                invited_child_id: invitation.invited_child_id,
+                invited_child_id: targetChild.id,
                 invited_child_name: invitation.invited_child_name,
-                message: invitation.message,
-                created_at: invitation.created_at
+                message: invitation.invitation_message,
+                created_at: invitation.created_at || new Date().toISOString()
               });
             }
           }
         });
         
         setChildInvitations(invitationsByChild);
+      } else {
+        console.error('Failed to load activity invitations:', response.error);
+        setChildInvitations({});
       }
     } catch (error) {
       console.error('Failed to load invitations:', error);
+      setChildInvitations({});
     }
   };
 
@@ -458,6 +496,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       onBack={handleBackToChildren}
       onDataChanged={loadChildren}
       onNavigateToConnections={onNavigateToConnections}
+      shouldRestoreActivityCreation={shouldRestoreActivityCreation}
     />;
   }
 

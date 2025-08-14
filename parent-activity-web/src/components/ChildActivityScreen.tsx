@@ -225,103 +225,29 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       const startDate = startOfMonth.toISOString().split('T')[0];
       const endDate = endOfMonth.toISOString().split('T')[0];
       
-      // Load child's own activities
+      // Load all activities (owned + invited) using the unified activities endpoint
       const activitiesResponse = await apiService.getCalendarActivities(startDate, endDate);
-      const ownActivities = activitiesResponse.success && activitiesResponse.data 
-        ? (Array.isArray(activitiesResponse.data) ? activitiesResponse.data : [])
-          .filter(activity => activity.child_id === child.id)
-        : [];
-      
-      // Also load ALL invitations (pending and accepted) for this child's parent
-      const allInvitationsResponse = await apiService.getAllInvitations(startDate, endDate);
-      const invitedActivities = allInvitationsResponse.success && allInvitationsResponse.data
-        ? (Array.isArray(allInvitationsResponse.data) ? allInvitationsResponse.data : [])
-          .filter(activity => activity.invited_child_id === child.id || activity.child_id === child.id)
-        : [];
-      
-      // Combine own activities and accepted invitations, avoiding duplicates
-      const allActivities = [...ownActivities];
-      invitedActivities.forEach(invitedActivity => {
-        if (!allActivities.some(activity => activity.id === invitedActivity.id)) {
-          allActivities.push({...invitedActivity, isInvitedActivity: true});
-        }
-      });
-      
-      setActivities(allActivities);
+      if (activitiesResponse.success && activitiesResponse.data) {
+        const allActivities = Array.isArray(activitiesResponse.data) ? activitiesResponse.data : [];
+        
+        // Filter activities for this specific child
+        // Include activities where:
+        // 1. Child owns the activity (child_id matches)
+        // 2. Child is invited to the activity (invitation_status is pending or accepted)
+        const childActivities = allActivities.filter(activity => {
+          return activity.child_id === child.id || 
+                 (activity.invitation_status && activity.invitation_status !== 'none');
+        });
+        
+        setActivities(childActivities);
       } else {
         console.error('Failed to load activities:', activitiesResponse.error);
         setActivities([]);
       }
       
-      console.log(`📩 Loading invitations for ${child.name} from ${startDate} to ${endDate}`);
-      console.log(`🔗 API URL will be: /api/calendar/pending-invitations?start=${startDate}&end=${endDate}`);
-      
-      // Load accepted/invited activities
-      const invitedResponse = await apiService.getInvitedActivities(startDate, endDate);
-      if (invitedResponse.success && invitedResponse.data) {
-        // Get current user info to filter out host's own invitations
-        const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
-        const currentUsername = currentUser.username;
-        
-        // Filter for this specific child but exclude invitations where current user is the host
-        const childInvitedActivities = invitedResponse.data.filter((invitation: any) => 
-          invitation.invited_child_name === child.name &&
-          invitation.host_parent_username !== currentUsername
-        );
-        
-        console.log(`✅ Found ${childInvitedActivities.length} accepted invitations for ${child.name}`);
-        setInvitedActivities(childInvitedActivities);
-      } else {
-        console.error('Failed to load invited activities:', invitedResponse.error);
-        setInvitedActivities([]);
-      }
-      
-      // Load pending invitations
-      const pendingResponse = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
-      if (pendingResponse.success && pendingResponse.data) {
-        // Get current user info to filter out host's own invitations
-        const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
-        const currentUsername = currentUser.username;
-        
-        // Filter for this specific child but exclude invitations where current user is the host
-        const childPendingInvitations = pendingResponse.data.filter((invitation: any) => 
-          invitation.invited_child_name === child.name &&
-          invitation.host_parent_username !== currentUsername
-        );
-        
-        console.log(`📩 Found ${childPendingInvitations.length} pending invitations for ${child.name}`);
-        setPendingInvitations(childPendingInvitations);
-      } else {
-        console.error('Failed to load pending invitations:', pendingResponse.error);
-        setPendingInvitations([]);
-      }
-      
-      // Load declined invitations
-      const declinedResponse = await apiService.getDeclinedInvitationsForCalendar(startDate, endDate);
-      if (declinedResponse.success && declinedResponse.data) {
-        // Get current user info to filter out host's own invitations
-        const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
-        const currentUsername = currentUser.username;
-        
-        // Filter for this specific child but exclude invitations where current user is the host
-        const childDeclinedInvitations = declinedResponse.data.filter((invitation: any) => 
-          invitation.invited_child_name === child.name &&
-          invitation.host_parent_username !== currentUsername
-        );
-        
-        console.log(`❌ Found ${childDeclinedInvitations.length} declined invitations for ${child.name}`);
-        setDeclinedInvitations(childDeclinedInvitations);
-      } else {
-        console.error('Failed to load declined invitations:', declinedResponse.error);
-        setDeclinedInvitations([]);
-      }
-      
     } catch (error) {
       console.error('Load activities error:', error);
       setActivities([]);
-      setInvitedActivities([]);
-      setPendingInvitations([]);
-      setDeclinedInvitations([]);
     } finally {
       setLoading(false);
     }

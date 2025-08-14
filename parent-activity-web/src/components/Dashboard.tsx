@@ -15,6 +15,7 @@ const Dashboard = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [cameFromActivity, setCameFromActivity] = useState(false);
+  const [shouldRestoreActivityCreation, setShouldRestoreActivityCreation] = useState(false);
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
@@ -35,8 +36,9 @@ const Dashboard = () => {
     setActiveTab('children');
   };
 
-  const handleNavigateToConnectionsFromActivity = () => {
+  const handleNavigateToConnectionsFromActivity = (isInActivityCreation: boolean = false) => {
     setCameFromActivity(true);
+    setShouldRestoreActivityCreation(isInActivityCreation);
     setActiveTab('connections');
   };
 
@@ -56,6 +58,7 @@ const Dashboard = () => {
           initialSelectedChildId={selectedChildId}
           onChildSelectionChange={setSelectedChildId}
           onNavigateToConnections={handleNavigateToConnectionsFromActivity}
+          shouldRestoreActivityCreation={shouldRestoreActivityCreation}
         />;
       case 'calendar':
         return <CalendarScreen />;
@@ -65,6 +68,10 @@ const Dashboard = () => {
           onReturnToActivity={() => {
             setCameFromActivity(false);
             setActiveTab('children');
+            // Reset the restore flag after using it
+            setTimeout(() => {
+              setShouldRestoreActivityCreation(false);
+            }, 200);
           }}
         />;
       case 'profile':

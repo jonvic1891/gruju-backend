@@ -1454,34 +1454,53 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
         const client = await pool.connect();
         
         let query = `
-            SELECT 
+            SELECT DISTINCT
                 a.*, 
                 c.name as child_name,
                 -- Use stored is_shared value
                 a.is_shared,
                 -- Determine if user is host (owns the activity)
-                true as is_host,
+                CASE WHEN c.parent_id = $1 THEN true ELSE false END as is_host,
+                -- Activity invitation status for this user's children
+                COALESCE(ai.status, 'none') as invitation_status,
                 -- Debug fields to see what each condition evaluates to
                 a.auto_notify_new_connections as debug_auto_notify,
                 (SELECT COUNT(*) FROM activity_invitations ai WHERE ai.activity_id = a.id) as debug_total_invitations,
                 (SELECT COUNT(*) FROM activity_invitations ai WHERE ai.activity_id = a.id AND ai.invited_parent_id = $1 AND ai.status = 'accepted') as debug_user_accepted_invitations,
-                -- Status change notification count for host's own activities
-                COALESCE((SELECT COUNT(*) FROM activity_invitations ai_status 
-                 WHERE ai_status.activity_id = a.id 
-                 AND ai_status.inviter_parent_id = $1 
-                 AND ai_status.status IN ('accepted', 'declined')
-                 AND ai_status.status_viewed_at IS NULL 
-                 AND ai_status.updated_at > ai_status.created_at), 0) as unviewed_status_changes,
-                -- Get distinct statuses for unviewed changes
-                (SELECT string_agg(DISTINCT ai_status.status, ',') FROM activity_invitations ai_status 
-                 WHERE ai_status.activity_id = a.id 
-                 AND ai_status.inviter_parent_id = $1 
-                 AND ai_status.status IN ('accepted', 'declined')
-                 AND ai_status.status_viewed_at IS NULL 
-                 AND ai_status.updated_at > ai_status.created_at) as unviewed_statuses
+                -- Status change notification count (only for host's own activities)
+                CASE 
+                    WHEN c.parent_id = $1 THEN 
+                        COALESCE((SELECT COUNT(*) FROM activity_invitations ai_status 
+                         WHERE ai_status.activity_id = a.id 
+                         AND ai_status.inviter_parent_id = $1 
+                         AND ai_status.status IN ('accepted', 'declined')
+                         AND ai_status.status_viewed_at IS NULL 
+                         AND ai_status.updated_at > ai_status.created_at), 0)
+                    ELSE 0
+                END as unviewed_status_changes,
+                -- Get distinct statuses for unviewed changes (only for host's own activities)
+                CASE 
+                    WHEN c.parent_id = $1 THEN 
+                        (SELECT string_agg(DISTINCT ai_status.status, ',') FROM activity_invitations ai_status 
+                         WHERE ai_status.activity_id = a.id 
+                         AND ai_status.inviter_parent_id = $1 
+                         AND ai_status.status IN ('accepted', 'declined')
+                         AND ai_status.status_viewed_at IS NULL 
+                         AND ai_status.updated_at > ai_status.created_at)
+                    ELSE NULL
+                END as unviewed_statuses
             FROM activities a 
             JOIN children c ON a.child_id = c.id 
-            WHERE c.parent_id = $1
+            LEFT JOIN activity_invitations ai ON a.id = ai.activity_id 
+                AND ai.invited_parent_id = $1 
+                AND ai.status IN ('pending', 'accepted')
+            WHERE (
+                -- Include owned activities
+                c.parent_id = $1 
+                OR 
+                -- Include activities where user's children are invited (pending or accepted)
+                ai.id IS NOT NULL
+            )
         `;
         let params = [req.user.id];
 
