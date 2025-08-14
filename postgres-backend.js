@@ -1350,10 +1350,11 @@ app.delete('/api/children/:id', authenticateToken, async (req, res) => {
 // Activities endpoints
 app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
     try {
-        const childId = parseInt(req.params.childId);
+        // ✅ SECURITY: Expect UUID instead of sequential ID
+        const childUuid = req.params.childId;
         
         console.log('🔍 GET /api/activities/:childId Debug:', {
-            childId,
+            childUuid,
             userId: req.user.id,
             userEmail: req.user.email,
             timestamp: new Date().toISOString()
@@ -1363,10 +1364,37 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
         const client = await pool.connect();
         
         try {
+            // ✅ SECURITY: First get the child's sequential ID from UUID for authorization
+            const childResult = await client.query(
+                'SELECT id FROM children WHERE uuid = $1 AND parent_id = $2',
+                [childUuid, req.user.id]
+            );
+            
+            if (childResult.rows.length === 0) {
+                client.release();
+                return res.status(404).json({ success: false, error: 'Child not found' });
+            }
+            
+            const childId = childResult.rows[0].id;
+            
             // Get activities for the child with invitation status
             const query = `
                 SELECT 
-                    a.*,
+                    -- ✅ SECURITY: Return UUID instead of sequential ID
+                    a.uuid as activity_uuid,
+                    a.name,
+                    a.description,
+                    a.start_date,
+                    a.end_date,
+                    a.start_time,
+                    a.end_time,
+                    a.location,
+                    a.website_url,
+                    a.cost,
+                    a.max_participants,
+                    a.auto_notify_new_connections,
+                    a.created_at,
+                    a.updated_at,
                     ai.status as invitation_status,
                     ai.inviter_parent_id,
                     a.is_shared,
@@ -1439,7 +1467,8 @@ function getDateForWeekday(currentDate, targetDay) {
 
 app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
     try {
-        const childId = parseInt(req.params.childId);
+        // ✅ SECURITY: Expect UUID instead of sequential ID
+        const childUuid = req.params.childId;
         const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections } = req.body;
 
         if (!name || !name.trim() || !start_date) {
@@ -1450,16 +1479,18 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
 
         const client = await pool.connect();
         
-        // First verify the child belongs to this user
+        // ✅ SECURITY: Verify the child belongs to this user using UUID
         const child = await client.query(
-            'SELECT id FROM children WHERE id = $1 AND parent_id = $2',
-            [childId, req.user.id]
+            'SELECT id FROM children WHERE uuid = $1 AND parent_id = $2',
+            [childUuid, req.user.id]
         );
 
         if (child.rows.length === 0) {
             client.release();
             return res.status(404).json({ success: false, error: 'Child not found' });
         }
+        
+        const childId = child.rows[0].id;
 
         // Convert empty strings to null for time fields
         const processedStartTime = start_time && start_time.trim() ? start_time.trim() : null;
@@ -1472,8 +1503,9 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         // Activities are shared if they have auto_notify_new_connections enabled (public/shareable)
         const isShared = auto_notify_new_connections || false;
 
+        // ✅ SECURITY: Only return necessary fields with UUID
         const result = await client.query(
-            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *',
+            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at',
             [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared]
         );
         client.release();
@@ -1943,10 +1975,11 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
 app.post('/api/connections/respond/:requestId', authenticateToken, async (req, res) => {
     try {
         console.log('🚨 ENDPOINT HIT: /api/connections/respond/:requestId');
-        const requestId = parseInt(req.params.requestId);
+        // ✅ SECURITY: Expect UUID instead of sequential ID
+        const requestUuid = req.params.requestId;
         const { action } = req.body;
 
-        console.log('📝 Connection request response:', { requestId, action, userId: req.user.id });
+        console.log('📝 Connection request response:', { requestUuid, action, userId: req.user.id });
 
         if (!['accept', 'reject'].includes(action)) {
             return res.status(400).json({ success: false, error: 'Invalid action' });
@@ -2120,11 +2153,12 @@ app.delete('/api/connections/:connectionId', authenticateToken, async (req, res)
 // Activity Invitation endpoint
 app.post('/api/activities/:activityId/invite', authenticateToken, async (req, res) => {
     try {
-        const { activityId } = req.params;
+        // ✅ SECURITY: Expect UUID instead of sequential ID
+        const { activityId } = req.params; // Now expecting UUID
         const { invited_parent_id, child_id, message } = req.body;
 
         console.log('🎯 Activity invite debug:', {
-            activityId,
+            activityUuid: activityId,
             invited_parent_id,
             child_id,
             message,
@@ -2146,9 +2180,9 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
             // Start transaction to ensure atomicity
             await client.query('BEGIN');
 
-            // Verify the activity exists and belongs to this user's child
+            // ✅ SECURITY: Verify the activity exists and belongs to this user's child using UUID
             const activityCheck = await client.query(
-                'SELECT a.*, c.parent_id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.id = $1',
+                'SELECT a.*, c.parent_id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.uuid = $1',
                 [activityId]
             );
             
