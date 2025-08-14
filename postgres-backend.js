@@ -1393,10 +1393,11 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
             SELECT 
                 a.*, 
                 c.name as child_name,
-                -- Determine if activity is shared (has accepted invitations only)
+                -- Determine if activity is shared (has any invitations or pending invitations)
                 CASE 
                     WHEN a.auto_notify_new_connections = true OR 
-                         EXISTS (SELECT 1 FROM activity_invitations ai WHERE ai.activity_id = a.id AND ai.status = 'accepted')
+                         EXISTS (SELECT 1 FROM activity_invitations ai WHERE ai.activity_id = a.id) OR
+                         EXISTS (SELECT 1 FROM pending_activity_invitations pai WHERE pai.activity_id = a.id)
                     THEN true 
                     ELSE false 
                 END as is_shared,
