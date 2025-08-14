@@ -2720,7 +2720,7 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
         const pendingInvitationsQuery = await client.query(`
             SELECT pai.id as pending_id,
                    CASE 
-                       WHEN conn.id IS NOT NULL THEN 'active_connection_pending_invite'
+                       WHEN conn.id IS NOT NULL THEN 'connected'
                        ELSE 'pending_connection'
                    END as status,
                    CASE 
@@ -2735,8 +2735,8 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
                    c.name as child_name,
                    c.id as child_id,
                    CASE 
-                       WHEN conn.id IS NOT NULL THEN 'active_pending'
-                       ELSE 'pending'
+                       WHEN conn.id IS NOT NULL THEN 'connected_pending_invite'
+                       ELSE 'pending_connection'
                    END as invitation_type,
                    conn.status as connection_status
             FROM pending_activity_invitations pai
