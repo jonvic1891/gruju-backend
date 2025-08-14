@@ -217,6 +217,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     try {
       setLoading(true);
       
+      console.log('🚀 ChildActivityScreen v2.0 - NEW VERSION WITH UNIFIED ACTIVITIES ENDPOINT');
+      
       // Load child's own activities using calendar endpoint to get status change notifications
       // Get date range for current month to load all relevant activities
       const now = new Date();
