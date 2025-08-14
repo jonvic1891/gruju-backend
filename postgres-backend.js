@@ -188,6 +188,20 @@ async function runMigrations() {
                 throw error;
             }
         }
+
+        // Migration 10: Add is_shared column to activities table
+        try {
+            await client.query(`
+                ALTER TABLE activities ADD COLUMN IF NOT EXISTS is_shared BOOLEAN DEFAULT false
+            `);
+            console.log('✅ Migration: Added is_shared column to activities table');
+        } catch (error) {
+            if (error.code === '42701') {
+                console.log('✅ Migration: is_shared column already exists');
+            } else {
+                console.log('ℹ️ Migration: Could not add is_shared column:', error.message);
+            }
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -1263,11 +1277,7 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
                     a.*,
                     ai.status as invitation_status,
                     ai.inviter_parent_id,
-                    CASE 
-                        WHEN a.auto_notify_new_connections = true OR 
-                             EXISTS (SELECT 1 FROM activity_invitations ai2 WHERE ai2.activity_id = a.id) THEN true 
-                        ELSE false 
-                    END as is_shared,
+                    a.is_shared,
                     CASE 
                         WHEN ai.invited_parent_id = $2 THEN false 
                         ELSE true 
@@ -1366,9 +1376,13 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         const processedCost = cost && cost.trim() ? parseFloat(cost.trim()) : null;
         const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
 
+        // Determine if activity should be marked as shared
+        // Activities are shared if they have auto_notify_new_connections enabled (public/shareable)
+        const isShared = auto_notify_new_connections || false;
+
         const result = await client.query(
-            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *',
-            [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false]
+            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *',
+            [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared]
         );
         client.release();
 
@@ -1393,14 +1407,8 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
             SELECT 
                 a.*, 
                 c.name as child_name,
-                -- Determine if activity is shared (has any invitations or pending invitations)
-                CASE 
-                    WHEN a.auto_notify_new_connections = true OR 
-                         EXISTS (SELECT 1 FROM activity_invitations ai WHERE ai.activity_id = a.id) OR
-                         EXISTS (SELECT 1 FROM pending_activity_invitations pai WHERE pai.activity_id = a.id)
-                    THEN true 
-                    ELSE false 
-                END as is_shared,
+                -- Use stored is_shared value
+                a.is_shared,
                 -- Determine if user is host (owns the activity)
                 true as is_host,
                 -- Debug fields to see what each condition evaluates to
@@ -2139,6 +2147,15 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
             }
         }
 
+        // Update the activity to mark it as shared since it now has pending invitations
+        if (insertedRecords.length > 0) {
+            await client.query(
+                'UPDATE activities SET is_shared = true WHERE id = $1',
+                [activityId]
+            );
+            console.log(`📝 Marked activity ${activityId} as shared (has pending invitations)`);
+        }
+
         client.release();
 
         res.json({
@@ -2187,8 +2204,8 @@ app.post('/api/activities/:activityId/duplicate', authenticateToken, async (req,
         // Create duplicate activity
         const duplicateResult = await client.query(
             `INSERT INTO activities 
-             (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
+             (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, is_shared) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
              RETURNING *`,
             [
                 activity.child_id,
@@ -2201,7 +2218,8 @@ app.post('/api/activities/:activityId/duplicate', authenticateToken, async (req,
                 activity.location,
                 activity.website_url,
                 activity.cost,
-                activity.max_participants
+                activity.max_participants,
+                activity.is_shared
             ]
         );
 
