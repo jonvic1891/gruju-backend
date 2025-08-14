@@ -326,7 +326,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   const loadConnectedChildren = async () => {
     try {
-      console.log('🔄 Loading connected children...');
+      console.log(`🔄 Loading connected children for host child: ${child.name} (ID: ${child.id})...`);
       const response = await apiService.getConnections();
       console.log('📡 Connections API response:', response);
       if (response.success && response.data) {
@@ -335,24 +335,15 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         const currentUsername = currentUser.username;
         console.log('👤 Current user:', currentUsername);
         
-        // Extract connected children from connections
+        // Extract connected children from connections, BUT ONLY for the specific host child
         const children: any[] = [];
         response.data.forEach((connection: any) => {
-          // For each connection, add the child that belongs to the OTHER family
+          // Only include connections where the current child (host child) is involved
+          const isChild1Host = connection.child1_id === child.id;
+          const isChild2Host = connection.child2_id === child.id;
           
-          // Add child1 if it belongs to the other family
-          if (connection.child1_name && connection.child1_parent_name !== currentUsername) {
-            children.push({
-              id: connection.child1_id,
-              name: connection.child1_name,
-              parentId: connection.child1_parent_id,
-              parentName: connection.child1_parent_name,
-              connectionId: connection.id
-            });
-          }
-          
-          // Add child2 if it belongs to the other family
-          if (connection.child2_name && connection.child2_parent_name !== currentUsername) {
+          if (isChild1Host && connection.child2_name && connection.child2_parent_name !== currentUsername) {
+            // Host child is child1, so add child2 as the connected child
             children.push({
               id: connection.child2_id,
               name: connection.child2_name,
@@ -360,10 +351,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               parentName: connection.child2_parent_name,
               connectionId: connection.id
             });
+            console.log(`   ✅ Added connected child: ${connection.child2_name} (connected to host child ${child.name})`);
+          } else if (isChild2Host && connection.child1_name && connection.child1_parent_name !== currentUsername) {
+            // Host child is child2, so add child1 as the connected child
+            children.push({
+              id: connection.child1_id,
+              name: connection.child1_name,
+              parentId: connection.child1_parent_id,
+              parentName: connection.child1_parent_name,
+              connectionId: connection.id
+            });
+            console.log(`   ✅ Added connected child: ${connection.child1_name} (connected to host child ${child.name})`);
           }
         });
         
-        console.log('✅ Connected children loaded:', children.length, children);
+        console.log(`✅ Connected children loaded for ${child.name}: ${children.length}`, children);
         setConnectedChildren(children);
       } else {
         console.log('❌ No connected children data or API error');

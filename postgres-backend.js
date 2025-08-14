@@ -202,6 +202,43 @@ async function runMigrations() {
                 console.log('ℹ️ Migration: Could not add is_shared column:', error.message);
             }
         }
+
+        // Migration 11: Add UUID columns for security (replace sequential IDs)
+        try {
+            console.log('🔐 Migration 11: Adding UUID columns for security...');
+            await client.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+            
+            // Add UUID columns to all tables
+            await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
+            await client.query(`ALTER TABLE children ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
+            await client.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
+            await client.query(`ALTER TABLE connections ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
+            await client.query(`ALTER TABLE activity_invitations ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
+            await client.query(`ALTER TABLE connection_requests ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
+            await client.query(`ALTER TABLE pending_activity_invitations ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
+            
+            // Generate UUIDs for existing records that don't have them
+            await client.query(`UPDATE users SET uuid = uuid_generate_v4() WHERE uuid IS NULL`);
+            await client.query(`UPDATE children SET uuid = uuid_generate_v4() WHERE uuid IS NULL`);
+            await client.query(`UPDATE activities SET uuid = uuid_generate_v4() WHERE uuid IS NULL`);
+            await client.query(`UPDATE connections SET uuid = uuid_generate_v4() WHERE uuid IS NULL`);
+            await client.query(`UPDATE activity_invitations SET uuid = uuid_generate_v4() WHERE uuid IS NULL`);
+            await client.query(`UPDATE connection_requests SET uuid = uuid_generate_v4() WHERE uuid IS NULL`);
+            await client.query(`UPDATE pending_activity_invitations SET uuid = uuid_generate_v4() WHERE uuid IS NULL`);
+            
+            // Add unique constraints on UUID columns
+            await client.query(`ALTER TABLE users ADD CONSTRAINT IF NOT EXISTS users_uuid_unique UNIQUE (uuid)`);
+            await client.query(`ALTER TABLE children ADD CONSTRAINT IF NOT EXISTS children_uuid_unique UNIQUE (uuid)`);
+            await client.query(`ALTER TABLE activities ADD CONSTRAINT IF NOT EXISTS activities_uuid_unique UNIQUE (uuid)`);
+            await client.query(`ALTER TABLE connections ADD CONSTRAINT IF NOT EXISTS connections_uuid_unique UNIQUE (uuid)`);
+            await client.query(`ALTER TABLE activity_invitations ADD CONSTRAINT IF NOT EXISTS activity_invitations_uuid_unique UNIQUE (uuid)`);
+            await client.query(`ALTER TABLE connection_requests ADD CONSTRAINT IF NOT EXISTS connection_requests_uuid_unique UNIQUE (uuid)`);
+            await client.query(`ALTER TABLE pending_activity_invitations ADD CONSTRAINT IF NOT EXISTS pending_activity_invitations_uuid_unique UNIQUE (uuid)`);
+            
+            console.log('✅ Migration 11: UUID columns added and populated');
+        } catch (error) {
+            console.log('ℹ️ Migration 11: UUID setup issue:', error.message);
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
