@@ -1148,7 +1148,8 @@ app.post('/api/auth/register', async (req, res) => {
         
         const token = jwt.sign(
             { 
-                id: newUser.id, 
+                id: newUser.id, // Keep for backward compatibility during migration
+                uuid: newUser.uuid, // Add UUID for secure authorization
                 email: newUser.email, 
                 role: newUser.role,
                 username: newUser.username 
@@ -1393,8 +1394,8 @@ app.get('/api/children', authenticateToken, async (req, res) => {
                 THEN first_name
                 ELSE name 
              END as display_name
-             FROM children WHERE parent_id = $1 ORDER BY created_at DESC`,
-            [req.user.id]
+             FROM children c JOIN users u ON c.parent_id = u.id WHERE u.uuid = $1 ORDER BY c.created_at DESC`,
+            [req.user.uuid]
         );
         client.release();
 
@@ -1496,10 +1497,10 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
         const client = await pool.connect();
         
         try {
-            // ✅ SECURITY: First get the child's sequential ID from UUID for authorization
+            // ✅ SECURITY: First get the child's sequential ID from UUID for authorization using parent UUID
             const childResult = await client.query(
-                'SELECT id FROM children WHERE uuid = $1 AND parent_id = $2',
-                [childUuid, req.user.id]
+                'SELECT c.id FROM children c JOIN users u ON c.parent_id = u.id WHERE c.uuid = $1 AND u.uuid = $2',
+                [childUuid, req.user.uuid]
             );
             
             if (childResult.rows.length === 0) {
@@ -1611,10 +1612,10 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
 
         const client = await pool.connect();
         
-        // ✅ SECURITY: Verify the child belongs to this user using UUID
+        // ✅ SECURITY: Verify the child belongs to this user using UUIDs
         const child = await client.query(
-            'SELECT id FROM children WHERE uuid = $1 AND parent_id = $2',
-            [childUuid, req.user.id]
+            'SELECT c.id FROM children c JOIN users u ON c.parent_id = u.id WHERE c.uuid = $1 AND u.uuid = $2',
+            [childUuid, req.user.uuid]
         );
 
         if (child.rows.length === 0) {
