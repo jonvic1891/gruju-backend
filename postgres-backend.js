@@ -2826,9 +2826,16 @@ app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
     }
 });
 
+// Test route to debug UUID routing
+app.post('/api/activity-invitations/test/:uuid/view', (req, res) => {
+    console.log('🧪 Test route hit with UUID:', req.params.uuid);
+    res.json({ success: true, message: 'Test route works', uuid: req.params.uuid });
+});
+
 // Mark Activity Invitation as viewed endpoint
 app.post('/api/activity-invitations/:invitationId/view', authenticateToken, async (req, res) => {
     try {
+        console.log('🔍 POST /api/activity-invitations/:invitationId/view called with:', req.params.invitationId);
         // ✅ SECURITY: Expect UUID instead of sequential ID
         const invitationUuid = req.params.invitationId;
         
@@ -2841,8 +2848,10 @@ app.post('/api/activity-invitations/:invitationId/view', authenticateToken, asyn
         
         // ✅ SECURITY: Verify the invitation exists and belongs to the user using UUID
         const invitation = await client.query(
-            'SELECT * FROM activity_invitations WHERE uuid = $1 AND invited_parent_id = $2',
-            [invitationUuid, req.user.id]
+            `SELECT ai.* FROM activity_invitations ai 
+             JOIN users u ON ai.invited_parent_id = u.id 
+             WHERE ai.uuid = $1 AND u.uuid = $2`,
+            [invitationUuid, req.user.uuid]
         );
         
         if (invitation.rows.length === 0) {
