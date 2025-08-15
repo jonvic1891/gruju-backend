@@ -474,7 +474,7 @@ async function createTables(client) {
                 target_parent_id INTEGER NOT NULL,
                 child_id INTEGER,
                 target_child_id INTEGER,
-                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
+                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
                 message TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -519,7 +519,7 @@ async function createTables(client) {
                     invited_parent_id INTEGER NOT NULL,
                     invited_child_id INTEGER,
                     message TEXT,
-                    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined')),
+                    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
@@ -743,7 +743,7 @@ async function insertDemoConnections(client) {
             target_parent_id: userMap['johnson@example.com'],
             child_id: childMap['Mia Wong'],
             target_child_id: childMap['Emma Johnson'],
-            status: 'declined',
+            status: 'rejected',
             message: 'Mia was hoping to join Emma for art class, but the timing didn\'t work out.'
         }
     ];
@@ -834,7 +834,7 @@ async function insertDemoConnections(client) {
                 inviter_parent_id: userMap['johnson@example.com'], // Emma's parent
                 invited_parent_id: userMap['thompson@example.com'], // Sophie's parent
                 child_id: childMap['Sophie Thompson'],
-                status: 'declined',  
+                status: 'rejected',  
                 message: 'Sorry, Sophie has a conflict that day.'
             }
         ];
@@ -1567,14 +1567,14 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
                     COALESCE((SELECT COUNT(*) FROM activity_invitations ai_status 
                      WHERE ai_status.activity_id = a.id 
                      AND ai_status.inviter_parent_id = $2 
-                     AND ai_status.status IN ('accepted', 'declined')
+                     AND ai_status.status IN ('accepted', 'rejected')
                      AND ai_status.status_viewed_at IS NULL 
                      AND ai_status.updated_at > ai_status.created_at), 0) as unviewed_status_changes,
                     -- Get distinct statuses for unviewed changes
                     (SELECT string_agg(DISTINCT ai_status.status, ',') FROM activity_invitations ai_status 
                      WHERE ai_status.activity_id = a.id 
                      AND ai_status.inviter_parent_id = $2 
-                     AND ai_status.status IN ('accepted', 'declined')
+                     AND ai_status.status IN ('accepted', 'rejected')
                      AND ai_status.status_viewed_at IS NULL 
                      AND ai_status.updated_at > ai_status.created_at) as unviewed_statuses
                 FROM activities a
@@ -1726,7 +1726,7 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
                         COALESCE((SELECT COUNT(*) FROM activity_invitations ai_status 
                          WHERE ai_status.activity_uuid = a.uuid 
                          AND ai_status.inviter_parent_id = $1 
-                         AND ai_status.status IN ('accepted', 'declined')
+                         AND ai_status.status IN ('accepted', 'rejected')
                          AND ai_status.status_viewed_at IS NULL 
                          AND ai_status.updated_at > ai_status.created_at), 0)
                     ELSE 0
@@ -1737,7 +1737,7 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
                         (SELECT string_agg(DISTINCT ai_status.status, ',') FROM activity_invitations ai_status 
                          WHERE ai_status.activity_uuid = a.uuid 
                          AND ai_status.inviter_parent_id = $1 
-                         AND ai_status.status IN ('accepted', 'declined')
+                         AND ai_status.status IN ('accepted', 'rejected')
                          AND ai_status.status_viewed_at IS NULL 
                          AND ai_status.updated_at > ai_status.created_at)
                     ELSE NULL
@@ -2229,7 +2229,7 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
             });
         }
 
-        const status = action === 'accept' ? 'accepted' : 'declined';
+        const status = action === 'accept' ? 'accepted' : 'rejected';
         console.log('🔄 Updating request status to:', status);
         
         const updateResult = await client.query(
@@ -3005,7 +3005,7 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
             return res.status(400).json({ success: false, error: 'Invitation is already accepted' });
         }
 
-        const status = action === 'accept' ? 'accepted' : 'declined';
+        const status = action === 'accept' ? 'accepted' : 'rejected';
         
         await client.query(
             'UPDATE activity_invitations SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE uuid = $2',
@@ -3074,7 +3074,7 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
 // REMOVED: Replaced with unified /api/calendar/invitations endpoint
 // - /api/calendar/invited-activities (accepted)
 // - /api/calendar/pending-invitations (pending)  
-// - /api/calendar/declined-invitations (declined)
+// - /api/calendar/declined-invitations (rejected)
 
 // Unified calendar endpoint for all invitations (pending, accepted, declined)
 app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
