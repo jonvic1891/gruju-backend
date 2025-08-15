@@ -2933,8 +2933,8 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
         // ✅ SECURITY: Verify the invitation exists and belongs to this user using UUID
         // Allow responding to pending invitations and changing accepted invitations to declined
         const invitation = await client.query(
-            'SELECT * FROM activity_invitations WHERE uuid = $1 AND invited_parent_id = $2 AND (status = $3 OR status = $4)',
-            [invitationUuid, req.user.id, 'pending', 'accepted']
+            'SELECT ai.* FROM activity_invitations ai INNER JOIN users u ON ai.invited_parent_id = u.id WHERE ai.uuid = $1 AND u.uuid = $2 AND (ai.status = $3 OR ai.status = $4)',
+            [invitationUuid, req.user.uuid, 'pending', 'accepted']
         );
 
         if (invitation.rows.length === 0) {
@@ -3125,15 +3125,17 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
         const permissionCheck = await client.query(`
             SELECT 1 FROM activities a
             INNER JOIN children c ON a.child_id = c.id
-            WHERE a.id = $1 AND c.parent_id = $2
+            INNER JOIN users u ON c.parent_id = u.id
+            WHERE a.id = $1 AND u.uuid = $2
             UNION
             SELECT 1 FROM activity_invitations ai
-            WHERE ai.activity_id = $1 AND ai.invited_parent_id = $2
+            INNER JOIN users u ON ai.invited_parent_id = u.id
+            WHERE ai.activity_id = $1 AND u.uuid = $2
             UNION
             SELECT 1 FROM pending_activity_invitations pai
             WHERE pai.activity_id = $1 AND pai.pending_connection_id LIKE 'pending-%' 
-            AND pai.pending_connection_id = CONCAT('pending-', $2)
-        `, [activityId, req.user.id]);
+            AND pai.pending_connection_id = CONCAT('pending-', (SELECT id FROM users WHERE uuid = $2))
+        `, [activityId, req.user.uuid]);
         
         if (permissionCheck.rows.length === 0) {
             client.release();
