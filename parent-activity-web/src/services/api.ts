@@ -161,8 +161,8 @@ class ApiService {
     return this.request('get', `/api/calendar/activities?start=${startDate}&end=${endDate}`);
   }
 
-  async createActivity(childId: number, activityData: any): Promise<ApiResponse<any>> {
-    return this.request('post', `/api/activities/${childId}`, activityData);
+  async createActivity(childUuid: string, activityData: any): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/activities/${childUuid}`, activityData);
   }
 
   async updateActivity(activityId: number, activityData: any): Promise<ApiResponse<any>> {

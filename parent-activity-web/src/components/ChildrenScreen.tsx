@@ -162,36 +162,33 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       const startDate = today.toISOString().split('T')[0];
       const endDate = oneYearLater.toISOString().split('T')[0];
       
-      // Load activity count for each child (own activities + accepted invitations)
-      for (const child of childrenData) {
-        try {
-          let totalCount = 0;
-          
-          // Count own activities
-          const ownActivitiesResponse = await apiService.getActivities(child.id);
-          if (ownActivitiesResponse.success && ownActivitiesResponse.data && Array.isArray(ownActivitiesResponse.data)) {
-            totalCount += ownActivitiesResponse.data.length;
-          }
-          
-          // Count accepted invitations (connected activities)
-          const allInvitationsResponse = await apiService.getAllInvitations(startDate, endDate);
-          if (allInvitationsResponse.success && allInvitationsResponse.data) {
-            // Filter for this specific child's accepted invitations
-            const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
-            const currentUsername = currentUser.username;
+      // Load activity count for each child using secure UUID-based filtering
+      const calendarActivitiesResponse = await apiService.getCalendarActivities(startDate, endDate);
+      if (calendarActivitiesResponse.success && calendarActivitiesResponse.data) {
+        const allActivities = Array.isArray(calendarActivitiesResponse.data) ? calendarActivitiesResponse.data : [];
+        
+        for (const child of childrenData) {
+          try {
+            // Filter activities for this specific child using UUIDs (same logic as ChildActivityScreen)
+            const childActivities = allActivities.filter(activity => {
+              const ownsActivity = activity.child_uuid === child.uuid;
+              const isInvited = activity.invited_child_uuid === child.uuid && 
+                               activity.invitation_status && 
+                               activity.invitation_status !== 'none';
+              return ownsActivity || isInvited;
+            });
             
-            const childAcceptedInvitations = allInvitationsResponse.data.filter((invitation: any) => 
-              invitation.invited_child_name === child.name &&
-              invitation.status === 'accepted' &&
-              invitation.host_parent_username !== currentUsername
-            );
-            
-            totalCount += childAcceptedInvitations.length;
+            counts[child.id] = childActivities.length;
+            console.log(`📊 Child ${child.name} (UUID: ${child.uuid}): ${childActivities.length} activities`);
+          } catch (error) {
+            console.error(`Failed to load activity count for child ${child.id}:`, error);
+            counts[child.id] = 0;
           }
-          
-          counts[child.id] = totalCount;
-        } catch (error) {
-          console.error(`Failed to load activity count for child ${child.id}:`, error);
+        }
+      } else {
+        console.error('Failed to load calendar activities for counts:', calendarActivitiesResponse.error);
+        // Set all counts to 0 if API fails
+        for (const child of childrenData) {
           counts[child.id] = 0;
         }
       }

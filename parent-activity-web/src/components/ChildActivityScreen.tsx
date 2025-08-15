@@ -653,7 +653,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             };
 
             try {
-              const createResponse = await apiService.createActivity(child.id, additionalActivityData);
+              const createResponse = await apiService.createActivity(child.uuid, additionalActivityData);
               if (createResponse.success) {
                 additionalActivitiesCreated++;
               }
@@ -727,7 +727,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           auto_notify_new_connections: isSharedActivity ? autoNotifyNewConnections : false
         };
 
-        const response = await apiService.createActivity(child.id, activityData);
+        console.log(`🔍 DEBUG: Creating activity for child UUID: ${child.uuid}, child ID: ${child.id}`);
+        const response = await apiService.createActivity(child.uuid, activityData);
+        console.log(`🔍 DEBUG: Create activity response:`, response);
         
         if (response.success) {
           createdActivities.push(response.data);
