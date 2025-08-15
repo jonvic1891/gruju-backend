@@ -2832,7 +2832,7 @@ app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
 });
 
 // Add broad logging middleware for ALL activity-invitations requests
-app.use('/api/activity-invitations/*', (req, res, next) => {
+app.use('/api/activity-invitations', (req, res, next) => {
     console.log(`🔍 ACTIVITY-INVITATIONS: ${req.method} ${req.path} ${req.originalUrl}`);
     next();
 });
