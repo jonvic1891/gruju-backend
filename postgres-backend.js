@@ -3366,8 +3366,20 @@ app.post('/api/activities/:activityUuid/cant-attend', authenticateToken, async (
             WHERE uuid = $2
         `, [newStatus, activityUuid]);
         
-        // TODO: Notify all invited guests about host's attendance status change
-        // This would be implemented in a future update to send notifications
+        // Notify all invited guests about host's attendance status change by updating their invitation messages
+        if (newStatus) { // Only notify when host marks can't attend (not when they unmark it)
+            await client.query(`
+                UPDATE activity_invitations 
+                SET message = $1, updated_at = NOW()
+                WHERE activity_uuid = $2 
+                AND status IN ('pending', 'accepted')
+            `, [
+                `🚫 HOST UPDATE: The host can't attend "${activity.name}" but the activity is still available for you to join with other participants.`,
+                activityUuid
+            ]);
+            
+            console.log(`📧 Updated invitation messages to notify guests about host can't attend`);
+        }
         
         console.log(`✅ Activity ${activityUuid} host_cant_attend updated from ${currentStatus} to ${newStatus}`);
         
