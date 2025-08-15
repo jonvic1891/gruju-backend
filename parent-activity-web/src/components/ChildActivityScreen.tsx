@@ -726,7 +726,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           end_date: date, // Single day activities for each date
           cost: newActivity.cost ? parseFloat(newActivity.cost) : undefined,
           max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : undefined,
-          auto_notify_new_connections: isSharedActivity ? autoNotifyNewConnections : false
+          auto_notify_new_connections: isSharedActivity ? autoNotifyNewConnections : false,
+          is_shared: isSharedActivity // Explicitly set is_shared when user creates shared activity
         };
 
         console.log(`🔍 DEBUG: Creating activity for child UUID: ${child.uuid}, child ID: ${child.id}`);
@@ -1381,7 +1382,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                       <div className="invited-participants">
                         <h4>Invited Children:</h4>
                         {(() => {
-                          const validParticipants = activityParticipants.participants.filter((participant: any) => participant.child_name && participant.child_id);
+                          const validParticipants = activityParticipants.participants.filter((participant: any) => participant.child_name && participant.child_uuid);
                           return validParticipants.length > 0 ? validParticipants.map((participant: any, index: number) => (
                             <div key={index} className="participant-item">
                               <div className="participant-info">
@@ -1430,7 +1431,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   ) : connectedChildren.length > 0 ? (
                     <div className="uninvited-children-list">
                       {connectedChildren
-                        .filter(child => !activityParticipants?.participants?.some((p: any) => p.child_id === child.id && p.child_name && p.child_id))
+                        .filter(child => !activityParticipants?.participants?.some((p: any) => p.child_uuid === child.id && p.child_name && p.child_uuid))
                         .map((child: any, index: number) => (
                           <div key={index} className="uninvited-child-item">
                             <div className="participant-info">
@@ -1444,7 +1445,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                             </button>
                           </div>
                         ))}
-                      {connectedChildren.filter(child => !activityParticipants?.participants?.some((p: any) => p.child_id === child.id && p.child_name && p.child_id)).length === 0 && (
+                      {connectedChildren.filter(child => !activityParticipants?.participants?.some((p: any) => p.child_uuid === child.id && p.child_name && p.child_uuid)).length === 0 && (
                         <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
                           All connected children have already been invited
                         </p>

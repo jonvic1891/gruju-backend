@@ -1601,7 +1601,7 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
     try {
         // ✅ SECURITY: Expect UUID instead of sequential ID
         const childUuid = req.params.childId;
-        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections } = req.body;
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared } = req.body;
 
         if (!name || !name.trim() || !start_date) {
             return res.status(400).json({ success: false, error: 'Activity name and start date are required' });
@@ -1632,8 +1632,8 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
 
         // Determine if activity should be marked as shared
-        // Activities are shared if they have auto_notify_new_connections enabled (public/shareable)
-        const isShared = auto_notify_new_connections || false;
+        // Activities are shared if explicitly marked as shared OR if they have auto_notify_new_connections enabled
+        const isShared = is_shared || auto_notify_new_connections || false;
 
         // ✅ SECURITY: Only return necessary fields with UUID
         const result = await client.query(
