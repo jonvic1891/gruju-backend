@@ -2853,8 +2853,8 @@ app.post('/api/activity-invitations/:invitationId/view', authenticateToken, asyn
         // Mark as viewed if not already viewed
         if (!invitation.rows[0].viewed_at) {
             await client.query(
-                'UPDATE activity_invitations SET viewed_at = NOW() WHERE id = $1',
-                [invitationId]
+                'UPDATE activity_invitations SET viewed_at = NOW() WHERE uuid = $1',
+                [invitationUuid]
             );
         }
 
