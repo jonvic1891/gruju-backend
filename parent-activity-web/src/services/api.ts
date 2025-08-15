@@ -259,10 +259,11 @@ class ApiService {
     }
   }
 
-  // Activity Invitations
-  async sendActivityInvitation(activityUuid: string, invitedParentUuid: string, childUuid?: string, message?: string): Promise<ApiResponse<any>> {
+  // Activity Invitations - TEMPORARY: Accept both UUIDs and IDs during migration
+  async sendActivityInvitation(activityUuid: string, invitedParentId: string | number, childUuid?: string, message?: string): Promise<ApiResponse<any>> {
     return this.request('post', `/api/activities/${activityUuid}/invite`, { 
-      invited_parent_uuid: invitedParentUuid,
+      invited_parent_id: typeof invitedParentId === 'number' ? invitedParentId : undefined,
+      invited_parent_uuid: typeof invitedParentId === 'string' ? invitedParentId : undefined,
       child_uuid: childUuid,
       message 
     });
