@@ -304,9 +304,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   };
 
-  const handleInvitationResponse = async (invitationId: number, action: 'accept' | 'reject') => {
+  const handleInvitationResponse = async (invitationUuid: string, action: 'accept' | 'reject') => {
     try {
-      const response = await apiService.respondToActivityInvitation(invitationId, action);
+      const response = await apiService.respondToActivityInvitation(invitationUuid, action);
       
       if (response.success) {
         const message = action === 'accept' 
@@ -508,7 +508,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             enhancedActivity = {
               ...activity,
               isPendingInvitation: true,
-              invitationId: matchingInvitation.invitation_id,
+              invitationUuid: matchingInvitation.invitation_uuid,
               invitation_message: matchingInvitation.invitation_message,
               host_child_name: matchingInvitation.host_child_name,
               host_parent_name: matchingInvitation.host_parent_username,
@@ -527,11 +527,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     
     // Mark invitation as viewed if this is any type of invitation
     if (enhancedActivity.isPendingInvitation || enhancedActivity.isAcceptedInvitation || enhancedActivity.isDeclinedInvitation) {
-      const invitationId = (enhancedActivity as any).invitationId || (enhancedActivity as any).invitation_id || enhancedActivity.id;
-      if (invitationId) {
+      const invitationUuid = (enhancedActivity as any).invitationUuid || (enhancedActivity as any).invitation_uuid;
+      if (invitationUuid) {
         try {
-          // Call the backend API to mark invitation as viewed
-          await apiService.markInvitationAsViewed(invitationId);
+          // Call the backend API to mark invitation as viewed using UUID
+          await apiService.markInvitationAsViewed(invitationUuid);
           // Set a flag to refresh data when returning from detail view
           sessionStorage.setItem('invitationViewed', 'true');
         } catch (error) {
@@ -1510,17 +1510,17 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             </button>
             
             {/* Show accept/decline buttons for pending invitations */}
-            {(selectedActivity as any).isPendingInvitation && (selectedActivity as any).invitationId && (
+            {(selectedActivity as any).isPendingInvitation && (selectedActivity as any).invitationUuid && (
               <>
                 <button
-                  onClick={() => handleInvitationResponse((selectedActivity as any).invitationId!, 'accept')}
+                  onClick={() => handleInvitationResponse((selectedActivity as any).invitationUuid!, 'accept')}
                   className="confirm-btn"
                   style={{ background: 'linear-gradient(135deg, #48bb78, #68d391)', marginRight: '8px' }}
                 >
                   ✅ Accept Invitation
                 </button>
                 <button
-                  onClick={() => handleInvitationResponse((selectedActivity as any).invitationId!, 'reject')}
+                  onClick={() => handleInvitationResponse((selectedActivity as any).invitationUuid!, 'reject')}
                   className="delete-btn"
                 >
                   ❌ Decline Invitation
@@ -1529,9 +1529,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             )}
             
             {/* Show decline button for accepted invitations */}
-            {(selectedActivity as any).isAcceptedInvitation && (selectedActivity as any).invitationId && (
+            {(selectedActivity as any).isAcceptedInvitation && (selectedActivity as any).invitationUuid && (
               <button
-                onClick={() => handleInvitationResponse((selectedActivity as any).invitationId!, 'reject')}
+                onClick={() => handleInvitationResponse((selectedActivity as any).invitationUuid!, 'reject')}
                 className="delete-btn"
                 style={{ background: 'linear-gradient(135deg, #e53e3e, #fc8181)', color: 'white' }}
               >

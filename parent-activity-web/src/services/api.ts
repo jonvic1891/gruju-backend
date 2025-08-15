@@ -299,12 +299,12 @@ class ApiService {
     };
   }
 
-  async respondToActivityInvitation(invitationId: number, action: 'accept' | 'reject'): Promise<ApiResponse<any>> {
-    return this.request('post', `/api/activity-invitations/${invitationId}/respond`, { action });
+  async respondToActivityInvitation(invitationUuid: string, action: 'accept' | 'reject'): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/activity-invitations/${invitationUuid}/respond`, { action });
   }
 
-  async markInvitationAsViewed(invitationId: number): Promise<ApiResponse<any>> {
-    return this.request('post', `/api/activity-invitations/${invitationId}/view`);
+  async markInvitationAsViewed(invitationUuid: string): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/activity-invitations/${invitationUuid}/view`);
   }
 
   async markStatusChangeAsViewed(invitationId: number): Promise<ApiResponse<any>> {
