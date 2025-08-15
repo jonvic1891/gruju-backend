@@ -2955,8 +2955,8 @@ app.post('/api/activity-invitations/:invitationId/mark-status-viewed', authentic
         // Mark status change as viewed if not already viewed
         if (!invitation.rows[0].status_viewed_at) {
             await client.query(
-                'UPDATE activity_invitations SET status_viewed_at = NOW() WHERE id = $1',
-                [invitationId]
+                'UPDATE activity_invitations SET status_viewed_at = NOW() WHERE uuid = $1',
+                [invitationUuid]
             );
         }
 
@@ -3008,15 +3008,15 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
         const status = action === 'accept' ? 'accepted' : 'declined';
         
         await client.query(
-            'UPDATE activity_invitations SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-            [status, invitationId]
+            'UPDATE activity_invitations SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE uuid = $2',
+            [status, invitationUuid]
         );
 
         // If invitation was accepted, create a connection between the children if one doesn't exist
         if (action === 'accept') {
             const invitationData = invitation.rows[0];
             console.log(`🔗 Processing accepted invitation:`, {
-                invitationId,
+                invitationUuid,
                 activityId: invitationData.activity_id,
                 invitedParentId: invitationData.invited_parent_id,
                 invitedChildId: invitationData.invited_child_id,
