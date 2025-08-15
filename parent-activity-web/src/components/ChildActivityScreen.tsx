@@ -228,6 +228,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setLoading(true);
       
       console.log('🚀 ChildActivityScreen v2.0 - NEW VERSION WITH UNIFIED ACTIVITIES ENDPOINT');
+      console.log(`🔍 DEBUG: Child object:`, {
+        id: child.id,
+        uuid: child.uuid,
+        name: child.name
+      });
       
       // Load child's own activities using calendar endpoint to get status change notifications
       // Get date range for current month to load all relevant activities
@@ -247,20 +252,20 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         const allActivities = Array.isArray(activitiesResponse.data) ? activitiesResponse.data : [];
         console.log(`📅 ChildActivityScreen - All activities from API: ${allActivities.length}`, allActivities);
         
-        // Filter activities for this specific child
+        // Filter activities for this specific child using UUIDs for security
         // Include activities where:
-        // 1. Child owns the activity (child_id matches)
-        // 2. Child is invited to the activity (invited_child_id matches AND invitation_status is pending/accepted)
+        // 1. Child owns the activity (child_uuid matches this child's UUID)
+        // 2. Child is invited to the activity (invited_child_uuid matches AND invitation_status is pending/accepted)
         const childActivities = allActivities.filter(activity => {
-          const ownsActivity = activity.child_id === child.id;
-          const isInvited = activity.invited_child_id === child.id && 
+          const ownsActivity = activity.child_uuid === child.uuid;
+          const isInvited = activity.invited_child_uuid === child.uuid && 
                            activity.invitation_status && 
                            activity.invitation_status !== 'none';
           const shouldInclude = ownsActivity || isInvited;
           
-          console.log(`🔍 Filtering "${activity.name}" for child ${child.name} (ID: ${child.id}):`);
-          console.log(`   - Owns: ${ownsActivity} (${activity.child_id} === ${child.id})`);
-          console.log(`   - Invited: ${isInvited} (${activity.invited_child_id} === ${child.id}, status: ${activity.invitation_status})`);
+          console.log(`🔍 Filtering "${activity.name}" for child ${child.name} (UUID: ${child.uuid}):`);
+          console.log(`   - Owns: ${ownsActivity} (${activity.child_uuid} === ${child.uuid})`);
+          console.log(`   - Invited: ${isInvited} (${activity.invited_child_uuid} === ${child.uuid}, status: ${activity.invitation_status})`);
           console.log(`   - Include: ${shouldInclude}`);
           
           return shouldInclude;
@@ -1739,7 +1744,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                               }
                             }}
                           />
-                          ✅ {connectedChild.name} ({connectedChild.parentName})
+                          ✅ {connectedChild.name}
                         </label>
                       ))}
                       
@@ -1759,7 +1764,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                               }
                             }}
                           />
-                          ⏳ {request.target_child_name} ({request.target_parent_name}) - <em style={{ fontSize: '12px' }}>pending connection</em>
+                          ⏳ {request.target_child_name} - <em style={{ fontSize: '12px' }}>pending connection</em>
                         </label>
                       ))}
                       
