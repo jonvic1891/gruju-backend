@@ -233,18 +233,69 @@ async function runMigrations() {
             await client.query(`UPDATE connection_requests SET uuid = uuid_generate_v4() WHERE uuid IS NULL`);
             await client.query(`UPDATE pending_activity_invitations SET uuid = uuid_generate_v4() WHERE uuid IS NULL`);
             
-            // Add unique constraints on UUID columns
-            await client.query(`ALTER TABLE users ADD CONSTRAINT IF NOT EXISTS users_uuid_unique UNIQUE (uuid)`);
-            await client.query(`ALTER TABLE children ADD CONSTRAINT IF NOT EXISTS children_uuid_unique UNIQUE (uuid)`);
-            await client.query(`ALTER TABLE activities ADD CONSTRAINT IF NOT EXISTS activities_uuid_unique UNIQUE (uuid)`);
-            await client.query(`ALTER TABLE connections ADD CONSTRAINT IF NOT EXISTS connections_uuid_unique UNIQUE (uuid)`);
-            await client.query(`ALTER TABLE activity_invitations ADD CONSTRAINT IF NOT EXISTS activity_invitations_uuid_unique UNIQUE (uuid)`);
-            await client.query(`ALTER TABLE connection_requests ADD CONSTRAINT IF NOT EXISTS connection_requests_uuid_unique UNIQUE (uuid)`);
-            await client.query(`ALTER TABLE pending_activity_invitations ADD CONSTRAINT IF NOT EXISTS pending_activity_invitations_uuid_unique UNIQUE (uuid)`);
+            // Add unique constraints on UUID columns (with error handling)
+            const constraints = [
+                { table: 'users', constraint: 'users_uuid_unique' },
+                { table: 'children', constraint: 'children_uuid_unique' },
+                { table: 'activities', constraint: 'activities_uuid_unique' },
+                { table: 'connections', constraint: 'connections_uuid_unique' },
+                { table: 'activity_invitations', constraint: 'activity_invitations_uuid_unique' },
+                { table: 'connection_requests', constraint: 'connection_requests_uuid_unique' },
+                { table: 'pending_activity_invitations', constraint: 'pending_activity_invitations_uuid_unique' }
+            ];
+            
+            for (const { table, constraint } of constraints) {
+                try {
+                    await client.query(`ALTER TABLE ${table} ADD CONSTRAINT ${constraint} UNIQUE (uuid)`);
+                    console.log(`✅ Added UUID constraint to ${table}`);
+                } catch (err) {
+                    if (err.message.includes('already exists')) {
+                        console.log(`ℹ️ UUID constraint already exists on ${table}`);
+                    } else {
+                        console.log(`⚠️ Error adding UUID constraint to ${table}:`, err.message);
+                    }
+                }
+            }
             
             console.log('✅ Migration 11: UUID columns added and populated');
         } catch (error) {
             console.log('ℹ️ Migration 11: UUID setup issue:', error.message);
+        }
+
+        // Migration 12: Fix orphaned activities without proper child_id links
+        try {
+            console.log('🔧 Migration 12: Fixing orphaned activities...');
+            
+            // Check for activities without valid child_id references
+            const orphanedActivities = await client.query(`
+                SELECT a.id, a.name, a.child_id
+                FROM activities a 
+                LEFT JOIN children c ON a.child_id = c.id 
+                WHERE c.id IS NULL
+            `);
+            
+            if (orphanedActivities.rows.length > 0) {
+                console.log(`⚠️ Found ${orphanedActivities.rows.length} orphaned activities:`, 
+                    orphanedActivities.rows.map(a => ({ id: a.id, name: a.name, child_id: a.child_id })));
+                
+                // For demo data, we can try to link activities based on naming patterns or delete them
+                // For now, let's delete orphaned activities as they can't be properly linked
+                const deleteResult = await client.query(`
+                    DELETE FROM activities 
+                    WHERE id NOT IN (
+                        SELECT a.id 
+                        FROM activities a 
+                        JOIN children c ON a.child_id = c.id
+                    )
+                `);
+                console.log(`🗑️ Deleted ${deleteResult.rowCount} orphaned activities`);
+            } else {
+                console.log('✅ No orphaned activities found');
+            }
+            
+            console.log('✅ Migration 12: Activity cleanup completed');
+        } catch (error) {
+            console.log('ℹ️ Migration 12: Activity cleanup issue:', error.message);
         }
         
     } catch (error) {
@@ -1552,6 +1603,8 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
                 a.created_at,
                 a.updated_at,
                 c.name as child_name,
+                -- ✅ SECURITY: Use child UUID instead of ID for activity owner
+                c.uuid as child_uuid,
                 -- Use stored is_shared value
                 a.is_shared,
                 -- Determine if user is host (owns the activity)
@@ -1622,6 +1675,11 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
             console.log(`   - debug_total_invitations: ${activity.debug_total_invitations}`);
             console.log(`   - debug_user_accepted_invitations: ${activity.debug_user_accepted_invitations}`);
             console.log(`   - child_name: ${activity.child_name}`);
+        });
+        
+        console.log('🔍 DEBUG: First 3 activities child_uuid check:');
+        result.rows.slice(0, 3).forEach((activity, index) => {
+            console.log(`   ${index + 1}. "${activity.name}": child_uuid=${activity.child_uuid}, child_name=${activity.child_name}`);
         });
 
         res.json({
