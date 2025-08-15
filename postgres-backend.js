@@ -2838,14 +2838,14 @@ app.use('/api/activity-invitations/*', (req, res, next) => {
 });
 
 // Mark Activity Invitation as viewed endpoint with explicit UUID pattern
-app.post(/^\/api\/activity-invitations\/([a-f0-9\-]{36})\/view$/, authenticateToken, async (req, res) => {
+app.post('/api/activity-invitations/:invitationUuid/view', authenticateToken, async (req, res) => {
     try {
-        console.log('🔍 POST /api/activity-invitations/UUID/view called with:', req.params[0]);
+        console.log('🔍 POST /api/activity-invitations/UUID/view called with:', req.params.invitationUuid);
         console.log('👤 req.user:', req.user);
         console.log('🆔 req.user.id:', req.user.id);
         console.log('🔗 req.user.uuid:', req.user.uuid);
         // ✅ SECURITY: Expect UUID instead of sequential ID
-        const invitationUuid = req.params[0];
+        const invitationUuid = req.params.invitationUuid;
         
         // ✅ SECURITY: Validate UUID format instead of numeric check
         if (!invitationUuid || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(invitationUuid)) {
