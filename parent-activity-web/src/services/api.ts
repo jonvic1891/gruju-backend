@@ -180,6 +180,10 @@ class ApiService {
     });
   }
 
+  async markActivityCantAttend(activityUuid: string): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/activities/${activityUuid}/cant-attend`);
+  }
+
   async getConnectedActivities(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
     return this.request('get', `/api/calendar/connected-activities?start=${startDate}&end=${endDate}`);
   }

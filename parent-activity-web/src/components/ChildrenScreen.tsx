@@ -6,6 +6,7 @@ import './ChildrenScreen.css';
 
 interface ActivityInvitation {
   id: number;
+  invitation_uuid?: string;
   activity_id: number;
   activity_name: string;
   activity_description?: string;
@@ -232,6 +233,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
               // Convert the calendar invitation format to match ActivityInvitation interface
               invitationsByChild[targetChild.id].push({
                 id: invitation.invitation_id,
+                invitation_uuid: invitation.invitation_uuid,
                 activity_id: invitation.id,
                 activity_name: invitation.activity_name,
                 activity_description: invitation.activity_description,
@@ -306,17 +308,17 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     }
   };
 
-  const handleInvitationResponse = async (invitationId: number, action: 'accept' | 'reject') => {
+  const handleInvitationResponse = async (invitationUuid: string, action: 'accept' | 'reject') => {
     try {
-      setProcessingInvitation(invitationId);
-      const response = await apiService.respondToActivityInvitation(invitationId, action);
+      setProcessingInvitation(parseInt(invitationUuid)); // Keep for UI state management
+      const response = await apiService.respondToActivityInvitation(invitationUuid, action);
       
       if (response.success) {
         // Remove the invitation from the child's list
         setChildInvitations(prev => {
           const updated = { ...prev };
           Object.keys(updated).forEach(childId => {
-            updated[parseInt(childId)] = updated[parseInt(childId)].filter(inv => inv.id !== invitationId);
+            updated[parseInt(childId)] = updated[parseInt(childId)].filter(inv => inv.invitation_uuid !== invitationUuid);
           });
           return updated;
         });
@@ -668,7 +670,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                               className="invitation-accept-btn"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleInvitationResponse(invitation.id, 'accept');
+                                handleInvitationResponse(invitation.invitation_uuid || String(invitation.id), 'accept');
                               }}
                               disabled={processingInvitation === invitation.id}
                             >
@@ -678,7 +680,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                               className="invitation-reject-btn"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleInvitationResponse(invitation.id, 'reject');
+                                handleInvitationResponse(invitation.invitation_uuid || String(invitation.id), 'reject');
                               }}
                               disabled={processingInvitation === invitation.id}
                             >

@@ -409,9 +409,9 @@ const CalendarScreen = () => {
     return false;
   };
 
-  const handleInvitationResponse = async (invitationId: number, action: 'accept' | 'reject') => {
+  const handleInvitationResponse = async (invitationUuid: string, action: 'accept' | 'reject') => {
     try {
-      const response = await apiService.respondToActivityInvitation(invitationId, action);
+      const response = await apiService.respondToActivityInvitation(invitationUuid, action);
       if (response.success) {
         const message = action === 'accept' 
           ? 'Invitation accepted! Activity will appear in your calendar.' 
@@ -795,14 +795,14 @@ const CalendarScreen = () => {
               {selectedActivity.isPendingInvitation && selectedActivity.invitationId && (
                 <>
                   <button
-                    onClick={() => handleInvitationResponse(selectedActivity.invitationId!, 'accept')}
+                    onClick={() => handleInvitationResponse(selectedActivity.invitationUuid || String(selectedActivity.invitationId!), 'accept')}
                     className="confirm-btn"
                     style={{ background: 'linear-gradient(135deg, #48bb78, #68d391)', marginRight: '8px' }}
                   >
                     ✅ Accept Invitation
                   </button>
                   <button
-                    onClick={() => handleInvitationResponse(selectedActivity.invitationId!, 'reject')}
+                    onClick={() => handleInvitationResponse(selectedActivity.invitationUuid || String(selectedActivity.invitationId!), 'reject')}
                     className="delete-btn"
                   >
                     ❌ Decline Invitation

@@ -495,13 +495,25 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         const endDate = oneYearLater.toISOString().split('T')[0];
         
         const pendingResponse = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
+        console.log('🔍 Checking for pending invitations for activity:', activity.name, activity.uuid || activity.activity_uuid);
+        console.log('📋 Pending invitations response:', pendingResponse);
         if (pendingResponse.success && pendingResponse.data) {
           // Look for a pending invitation that matches this activity
-          const matchingInvitation = pendingResponse.data.find((inv: any) => 
-            inv.activity_name === activity.name && 
-            inv.start_date === activity.start_date &&
-            inv.start_time === activity.start_time
-          );
+          const matchingInvitation = pendingResponse.data.find((inv: any) => {
+            // First try to match by activity UUID if available
+            if (activity.uuid && inv.activity_uuid) {
+              return inv.activity_uuid === activity.uuid;
+            }
+            if (activity.activity_uuid && inv.activity_uuid) {
+              return inv.activity_uuid === activity.activity_uuid;
+            }
+            // Fallback to matching by name, date, and time
+            return inv.activity_name === activity.name && 
+                   inv.start_date === activity.start_date &&
+                   inv.start_time === activity.start_time;
+          });
+          
+          console.log('🎯 Matching invitation found:', matchingInvitation);
           
           if (matchingInvitation) {
             // Convert this activity to a pending invitation format

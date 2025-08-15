@@ -173,13 +173,13 @@ const NotificationBell: React.FC = () => {
     }
   };
 
-  const handleAcceptInvitation = async (invitationId: number) => {
+  const handleAcceptInvitation = async (invitationUuid: string) => {
     try {
       setLoading(true);
-      const response = await apiService.respondToActivityInvitation(invitationId, 'accept');
+      const response = await apiService.respondToActivityInvitation(invitationUuid, 'accept');
       if (response.success) {
         // Remove from notifications
-        setNotifications(prev => prev.filter(n => n.id !== `invitation_${invitationId}`));
+        setNotifications(prev => prev.filter(n => n.id !== `invitation_${invitationUuid}`));
         alert('Activity invitation accepted! It will now appear in your calendar.');
       } else {
         alert(`Error: ${response.error}`);
@@ -191,13 +191,13 @@ const NotificationBell: React.FC = () => {
     }
   };
 
-  const handleRejectInvitation = async (invitationId: number) => {
+  const handleRejectInvitation = async (invitationUuid: string) => {
     try {
       setLoading(true);
-      const response = await apiService.respondToActivityInvitation(invitationId, 'reject');
+      const response = await apiService.respondToActivityInvitation(invitationUuid, 'reject');
       if (response.success) {
         // Remove from notifications
-        setNotifications(prev => prev.filter(n => n.id !== `invitation_${invitationId}`));
+        setNotifications(prev => prev.filter(n => n.id !== `invitation_${invitationUuid}`));
         alert('Activity invitation declined');
       } else {
         alert(`Error: ${response.error}`);

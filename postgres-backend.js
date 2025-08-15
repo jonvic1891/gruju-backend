@@ -985,6 +985,28 @@ app.post('/api/admin/migrate-is-shared', async (req, res) => {
     }
 });
 
+// Migration endpoint to add host_cant_attend field
+app.post('/api/admin/migrate-host-cant-attend', async (req, res) => {
+    try {
+        const client = await pool.connect();
+        
+        // Add host_cant_attend column if it doesn't exist
+        await client.query(`
+            ALTER TABLE activities 
+            ADD COLUMN IF NOT EXISTS host_cant_attend BOOLEAN DEFAULT FALSE
+        `);
+        
+        client.release();
+        res.json({ 
+            success: true, 
+            message: 'Added host_cant_attend field to activities table'
+        });
+    } catch (error) {
+        console.error('Migration error:', error);
+        res.status(500).json({ success: false, error: 'Migration failed' });
+    }
+});
+
 app.get('/health', async (req, res) => {
     try {
         const client = await pool.connect();
@@ -1680,6 +1702,7 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
                 a.cost,
                 a.max_participants,
                 a.auto_notify_new_connections,
+                a.host_cant_attend,
                 a.created_at,
                 a.updated_at,
                 c.name as child_name,
@@ -3291,6 +3314,72 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
             userId: req.user.id
         });
         res.status(500).json({ success: false, error: 'Failed to get activity participants' });
+    }
+});
+
+// Mark activity as "can't attend" by host
+app.post('/api/activities/:activityUuid/cant-attend', authenticateToken, async (req, res) => {
+    try {
+        const activityUuid = req.params.activityUuid;
+        const userUuid = req.user.uuid || req.user.id;
+        
+        console.log(`🚫 Host marking activity ${activityUuid} as can't attend for user ${userUuid}`);
+        
+        const client = await pool.connect();
+        
+        // Get user UUID if not in JWT token
+        if (!req.user.uuid) {
+            console.log('🔍 No UUID in JWT, fetching from database...');
+            const userResult = await client.query('SELECT uuid FROM users WHERE id = $1', [req.user.id]);
+            if (userResult.rows.length > 0) {
+                userUuid = userResult.rows[0].uuid;
+                console.log('✅ Found user UUID:', userUuid);
+            } else {
+                client.release();
+                return res.status(404).json({ success: false, error: 'User not found' });
+            }
+        }
+        
+        // Verify user owns this activity
+        const ownershipCheck = await client.query(`
+            SELECT a.id, a.name, a.host_cant_attend, c.parent_id, u.uuid as parent_uuid
+            FROM activities a 
+            JOIN children c ON a.child_id = c.id 
+            JOIN users u ON c.parent_id = u.id 
+            WHERE a.uuid = $1 AND u.uuid = $2
+        `, [activityUuid, userUuid]);
+        
+        if (ownershipCheck.rows.length === 0) {
+            client.release();
+            return res.status(403).json({ success: false, error: 'You can only mark your own activities as can\'t attend' });
+        }
+        
+        const activity = ownershipCheck.rows[0];
+        const currentStatus = activity.host_cant_attend;
+        
+        // Toggle the can't attend status
+        const newStatus = !currentStatus;
+        
+        await client.query(`
+            UPDATE activities 
+            SET host_cant_attend = $1, updated_at = NOW()
+            WHERE uuid = $2
+        `, [newStatus, activityUuid]);
+        
+        // TODO: Notify all invited guests about host's attendance status change
+        // This would be implemented in a future update to send notifications
+        
+        console.log(`✅ Activity ${activityUuid} host_cant_attend updated from ${currentStatus} to ${newStatus}`);
+        
+        client.release();
+        res.json({ 
+            success: true, 
+            message: newStatus ? 'Marked as can\'t attend' : 'Marked as can attend',
+            host_cant_attend: newStatus
+        });
+    } catch (error) {
+        console.error('🚨 Mark can\'t attend error:', error);
+        res.status(500).json({ success: false, error: 'Failed to update attendance status' });
     }
 });
 

@@ -59,6 +59,7 @@ export interface Activity {
   isAcceptedInvitation?: boolean;
   isDeclinedInvitation?: boolean;
   invitationId?: number;
+  invitationUuid?: string;
   hostParent?: string;
   message?: string;
   host_child_name?: string;
