@@ -2474,7 +2474,7 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
                 `INSERT INTO activity_invitations 
                  (activity_id, activity_uuid, inviter_parent_id, inviter_parent_uuid, invited_parent_id, invited_parent_uuid, invited_child_id, invited_child_uuid, message, status) 
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending') 
-                 RETURNING id`,
+                 RETURNING uuid`,
                 [activity.id, activityId, req.user.id, req.user.uuid, finalInvitedParentId, finalInvitedParentUuid, child.id, child_uuid, message]
             );
 
@@ -2485,7 +2485,7 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
             res.json({
                 success: true,
                 data: { 
-                    id: invitationResult.rows[0].id,
+                    uuid: invitationResult.rows[0].uuid,
                     message: 'Activity invitation sent successfully'
                 }
             });
@@ -2546,12 +2546,12 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
                     `INSERT INTO pending_activity_invitations (activity_id, pending_connection_id) 
                      VALUES ($1, $2) 
                      ON CONFLICT (activity_id, pending_connection_id) DO NOTHING
-                     RETURNING id`,
+                     RETURNING uuid`,
                     [activityId, pendingConnectionId]
                 );
                 
                 if (result.rows.length > 0) {
-                    insertedRecords.push({ id: result.rows[0].id, pending_connection_id: pendingConnectionId });
+                    insertedRecords.push({ uuid: result.rows[0].uuid, pending_connection_id: pendingConnectionId });
                 }
             } catch (error) {
                 console.error(`Failed to insert pending invitation for ${pendingConnectionId}:`, error);
@@ -2993,10 +2993,10 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
                     const connectionResult = await client.query(
                         `INSERT INTO connections (child1_id, child2_id, status, created_at) 
                          VALUES ($1, $2, 'active', CURRENT_TIMESTAMP)
-                         RETURNING id`,
+                         RETURNING uuid`,
                         [hostChildId, invitedChildId]
                     );
-                    console.log(`✅ Created connection ${connectionResult.rows[0].id} between children ${hostChildId} and ${invitedChildId} after accepting activity invitation`);
+                    console.log(`✅ Created connection ${connectionResult.rows[0].uuid} between children ${hostChildId} and ${invitedChildId} after accepting activity invitation`);
                 } else {
                     console.log(`ℹ️ Connection already exists between children ${hostChildId} and ${invitedChildId}:`, existingConnection.rows[0]);
                 }
