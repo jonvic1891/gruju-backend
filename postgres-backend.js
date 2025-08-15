@@ -297,6 +297,48 @@ async function runMigrations() {
         } catch (error) {
             console.log('ℹ️ Migration 12: Activity cleanup issue:', error.message);
         }
+
+        // Migration 13: Convert activity_invitations to use UUIDs instead of sequential IDs
+        try {
+            console.log('🔄 Migration 13: Converting activity_invitations to use UUIDs...');
+            
+            // Add UUID columns to activity_invitations table
+            await client.query(`
+                ALTER TABLE activity_invitations 
+                ADD COLUMN IF NOT EXISTS activity_uuid UUID,
+                ADD COLUMN IF NOT EXISTS invited_child_uuid UUID
+            `);
+            
+            // Update activity_uuid by joining with activities table
+            await client.query(`
+                UPDATE activity_invitations ai
+                SET activity_uuid = a.uuid
+                FROM activities a
+                WHERE ai.activity_id = a.id AND ai.activity_uuid IS NULL
+            `);
+            
+            // Update invited_child_uuid by joining with children table
+            await client.query(`
+                UPDATE activity_invitations ai
+                SET invited_child_uuid = c.uuid
+                FROM children c
+                WHERE ai.invited_child_id = c.id AND ai.invited_child_uuid IS NULL
+            `);
+            
+            // Delete any orphaned invitations that couldn't be matched
+            const orphanedInvitations = await client.query(`
+                DELETE FROM activity_invitations 
+                WHERE activity_uuid IS NULL OR invited_child_uuid IS NULL
+            `);
+            
+            if (orphanedInvitations.rowCount > 0) {
+                console.log(`🗑️ Deleted ${orphanedInvitations.rowCount} orphaned activity invitations`);
+            }
+            
+            console.log('✅ Migration 13: Activity invitations UUID conversion completed');
+        } catch (error) {
+            console.log('ℹ️ Migration 13: UUID conversion issue:', error.message);
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -1615,13 +1657,13 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
                 c_invited.uuid as invited_child_uuid,
                 -- Debug fields to see what each condition evaluates to
                 a.auto_notify_new_connections as debug_auto_notify,
-                (SELECT COUNT(*) FROM activity_invitations ai WHERE ai.activity_id = a.id) as debug_total_invitations,
-                (SELECT COUNT(*) FROM activity_invitations ai WHERE ai.activity_id = a.id AND ai.invited_parent_id = $1 AND ai.status = 'accepted') as debug_user_accepted_invitations,
+                (SELECT COUNT(*) FROM activity_invitations ai WHERE ai.activity_uuid = a.uuid) as debug_total_invitations,
+                (SELECT COUNT(*) FROM activity_invitations ai WHERE ai.activity_uuid = a.uuid AND ai.invited_parent_id = $1 AND ai.status = 'accepted') as debug_user_accepted_invitations,
                 -- Status change notification count (only for host's own activities)
                 CASE 
                     WHEN c.parent_id = $1 THEN 
                         COALESCE((SELECT COUNT(*) FROM activity_invitations ai_status 
-                         WHERE ai_status.activity_id = a.id 
+                         WHERE ai_status.activity_uuid = a.uuid 
                          AND ai_status.inviter_parent_id = $1 
                          AND ai_status.status IN ('accepted', 'declined')
                          AND ai_status.status_viewed_at IS NULL 
@@ -1632,7 +1674,7 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
                 CASE 
                     WHEN c.parent_id = $1 THEN 
                         (SELECT string_agg(DISTINCT ai_status.status, ',') FROM activity_invitations ai_status 
-                         WHERE ai_status.activity_id = a.id 
+                         WHERE ai_status.activity_uuid = a.uuid 
                          AND ai_status.inviter_parent_id = $1 
                          AND ai_status.status IN ('accepted', 'declined')
                          AND ai_status.status_viewed_at IS NULL 
@@ -2310,9 +2352,9 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
                 return res.status(403).json({ success: false, error: 'Not authorized to invite to this activity' });
             }
 
-            // Verify that the child belongs to the invited parent
+            // ✅ SECURITY: Verify that the child belongs to the invited parent using UUID
             const childCheck = await client.query(
-                'SELECT id, name, parent_id FROM children WHERE id = $1',
+                'SELECT id, name, parent_id FROM children WHERE uuid = $1',
                 [child_id]
             );
             
@@ -2337,28 +2379,30 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
             const cleanupResult = await client.query(
                 `DELETE FROM pending_activity_invitations 
                  WHERE activity_id = $1 AND pending_connection_id = $2`,
-                [activityId, pendingConnectionKey]
+                [activity.id, pendingConnectionKey]
             );
             
             if (cleanupResult.rowCount > 0) {
-                console.log(`🧹 Cleaned up ${cleanupResult.rowCount} pending invitation(s) for activity ${activityId}, user ${invited_parent_id}`);
+                console.log(`🧹 Cleaned up ${cleanupResult.rowCount} pending invitation(s) for activity ${activity.id}, user ${invited_parent_id}`);
             }
 
-            // THEN: Create the activity invitation
+            // THEN: Create the activity invitation using UUIDs
             console.log('🔧 Attempting to insert invitation with values:', {
-                activityId,
+                activityUuid: activityId,
+                activity_id: activity.id,
                 inviter_parent_id: req.user.id,
                 invited_parent_id,
-                child_id,
+                child_uuid: child_id,
+                child_id: child.id,
                 message
             });
 
             const invitationResult = await client.query(
                 `INSERT INTO activity_invitations 
-                 (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status) 
-                 VALUES ($1, $2, $3, $4, $5, 'pending') 
+                 (activity_id, activity_uuid, inviter_parent_id, invited_parent_id, invited_child_id, invited_child_uuid, message, status) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') 
                  RETURNING id`,
-                [activityId, req.user.id, invited_parent_id, child_id, message]
+                [activity.id, activityId, req.user.id, invited_parent_id, child.id, child_id, message]
             );
 
             // Commit the transaction
@@ -2685,10 +2729,10 @@ app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
                 u_host.username as host_parent_name,
                 c_invited.name as invited_child_name
             FROM activity_invitations ai
-            JOIN activities a ON ai.activity_id = a.id
+            JOIN activities a ON ai.activity_uuid = a.uuid
             JOIN children c_host ON a.child_id = c_host.id
             JOIN users u_host ON c_host.parent_id = u_host.id
-            LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
+            LEFT JOIN children c_invited ON ai.invited_child_uuid = c_invited.uuid
             WHERE ai.invited_parent_id = $1
             AND ai.status = 'pending'
             AND ai.viewed_at IS NULL
@@ -3045,13 +3089,14 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
                    ai.viewed_at,
                    u.username as parent_name,
                    c_invited.name as child_name,
+                   c_invited.uuid as child_uuid,
                    'sent' as invitation_type
             FROM activity_invitations ai
             INNER JOIN users u ON ai.invited_parent_id = u.id
-            INNER JOIN children c_invited ON ai.invited_child_id = c_invited.id
-            WHERE ai.activity_id = $1
+            INNER JOIN children c_invited ON ai.invited_child_uuid = c_invited.uuid
+            WHERE ai.activity_uuid = $1
             ORDER BY ai.created_at DESC
-        `, [activityId]);
+        `, [activityUuid]);
 
         // Get host's child ID to check for connections
         const hostChildQuery = await client.query(`
