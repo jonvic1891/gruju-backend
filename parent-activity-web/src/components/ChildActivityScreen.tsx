@@ -1002,17 +1002,20 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
 
     try {
-      // Instead of deleting, we'll mark the host as can't attend
-      // This would require a backend endpoint to update host attendance status
-      // For now, we'll show an alert about the feature
-      alert('This feature will be implemented to mark you as unable to attend while keeping the activity active for invited children.');
+      const activityUuid = activity.activity_uuid || activity.uuid;
+      if (!activityUuid) {
+        alert('Activity UUID not found. Cannot update attendance status.');
+        return;
+      }
       
-      // TODO: Implement backend endpoint for host can't attend
-      // const response = await apiService.markHostCantAttend(activity.id);
-      // if (response.success) {
-      //   loadActivities();
-      //   setCurrentPage('main');
-      // }
+      const response = await apiService.markActivityCantAttend(activityUuid);
+      if (response.success) {
+        alert('Activity marked as "Can\'t Attend". The activity will show as grey in your calendar and guests will be notified.');
+        loadActivities();
+        navigateToPage('main');
+      } else {
+        alert(`Failed to update attendance status: ${response.error}`);
+      }
     } catch (error) {
       console.error('Host can\'t attend error:', error);
       alert('Failed to update attendance status');
@@ -1050,6 +1053,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     
     // Grey for declined invitations (guest perspective - declined invitation)
     if (activity.is_host === false && activity.invitation_status === 'rejected') {
+      return {
+        background: 'linear-gradient(135deg, #a0aec0, #cbd5e0)',
+        borderColor: '#718096'
+      };
+    }
+    
+    // Grey for activities where host can't attend
+    if (activity.host_cant_attend === true) {
       return {
         background: 'linear-gradient(135deg, #a0aec0, #cbd5e0)',
         borderColor: '#718096'
