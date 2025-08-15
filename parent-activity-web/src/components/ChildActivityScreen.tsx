@@ -251,8 +251,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       if (activitiesResponse.success && activitiesResponse.data) {
         const allActivities = Array.isArray(activitiesResponse.data) ? activitiesResponse.data : [];
         console.log(`📅 ChildActivityScreen - All activities from API: ${allActivities.length}`, allActivities);
+        console.log(`🔍 DETAILED API ANALYSIS:`);
+        console.log(`   - Total activities in API: ${allActivities.length}`);
+        console.log(`   - Current child UUID: ${child.uuid}`);
+        console.log(`   - Activities breakdown:`);
+        allActivities.forEach((activity, index) => {
+          console.log(`     ${index + 1}. "${activity.name}"`);
+          console.log(`        - child_uuid: ${activity.child_uuid}`);
+          console.log(`        - invited_child_uuid: ${activity.invited_child_uuid}`);
+          console.log(`        - is_host: ${activity.is_host}`);
+          console.log(`        - invitation_status: ${activity.invitation_status}`);
+          console.log(`        - Owned by this child: ${activity.child_uuid === child.uuid}`);
+          console.log(`        - Invited: ${activity.invited_child_uuid === child.uuid && activity.invitation_status !== 'none'}`);
+        });
         
-        // Filter activities for this specific child using UUIDs for security
+        // Filter activities for this specific child using UUIDs only (secure)
         // Include activities where:
         // 1. Child owns the activity (child_uuid matches this child's UUID)
         // 2. Child is invited to the activity (invited_child_uuid matches AND invitation_status is pending/accepted)
@@ -272,6 +285,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         });
         
         console.log(`✅ ChildActivityScreen - Filtered activities for ${child.name}: ${childActivities.length}`, childActivities);
+        console.log(`📊 FILTERING SUMMARY:`);
+        console.log(`   - API returned: ${allActivities.length} activities`);
+        console.log(`   - Filtered to: ${childActivities.length} activities`);
+        console.log(`   - Filtered out: ${allActivities.length - childActivities.length} activities`);
+        
         setActivities(childActivities);
       } else {
         console.error('Failed to load activities:', activitiesResponse.error);
