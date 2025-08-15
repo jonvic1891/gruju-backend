@@ -2868,11 +2868,13 @@ app.post('/api/activity-invitations/:invitationUuid/view', authenticateToken, as
             }
         }
         
-        // ✅ SECURITY: Verify the invitation exists and belongs to the user using UUID
+        // ✅ SECURITY: Verify the invitation exists and user has permission to view it
+        // Allow both invited parent (to mark invitation as seen) AND host parent (to mark responses as seen)
         const invitation = await client.query(
             `SELECT ai.* FROM activity_invitations ai 
-             JOIN users u ON ai.invited_parent_id = u.id 
-             WHERE ai.uuid = $1 AND u.uuid = $2`,
+             JOIN users invited_user ON ai.invited_parent_id = invited_user.id 
+             JOIN users host_user ON ai.inviter_parent_id = host_user.id 
+             WHERE ai.uuid = $1 AND (invited_user.uuid = $2 OR host_user.uuid = $2)`,
             [invitationUuid, userUuid]
         );
         
