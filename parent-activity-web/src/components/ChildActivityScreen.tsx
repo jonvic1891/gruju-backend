@@ -384,6 +384,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               uuid: connection.child2_uuid, 
               name: connection.child2_name,
               parentId: connection.child2_parent_id,
+              parentUuid: connection.child2_parent_uuid,
               parentName: connection.child2_parent_name,
               connectionId: connection.connection_uuid || connection.id
             });
@@ -395,6 +396,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               uuid: connection.child1_uuid,
               name: connection.child1_name,
               parentId: connection.child1_parent_id,
+              parentUuid: connection.child1_parent_uuid,
               parentName: connection.child1_parent_name,
               connectionId: connection.connection_uuid || connection.id
             });
@@ -759,6 +761,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
       // If it's a shared activity, send invitations to selected connected children
       if (isSharedActivity && selectedConnectedChildren.length > 0 && createdActivities.length > 0) {
+        console.log(`🎯 Sending invitations for ${createdActivities.length} activities to ${selectedConnectedChildren.length} children`);
+        
         for (const activity of createdActivities) {
           for (const childId of selectedConnectedChildren) {
             try {
@@ -769,17 +773,25 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               }
               
               // Find the connected child data to get the parent ID
+              // childId is now a UUID since we use UUIDs for connected children
               const connectedChild = connectedChildren.find(cc => cc.id === childId);
-              if (connectedChild && typeof childId === 'number') {
+              console.log(`🔍 Looking for connected child with UUID: ${childId}`, connectedChild);
+              
+              if (connectedChild) {
+                console.log(`📧 Sending invitation to ${connectedChild.name} (parent UUID: ${connectedChild.parentUuid})`);
+                console.log(`🔍 Activity data:`, activity);
                 await apiService.sendActivityInvitation(
-                  activity.id, 
-                  connectedChild.parentId, // Use the correct parent ID
-                  childId, // The child ID for the invitation
+                  activity.uuid || String(activity.id), // Use UUID if available, fallback to id
+                  connectedChild.parentUuid, // Use the parent UUID for security
+                  typeof childId === 'string' ? childId : undefined, // The child UUID for the invitation
                   `${child.name} would like to invite your child to join: ${activity.name}`
                 );
+                console.log(`✅ Invitation sent successfully`);
+              } else {
+                console.error(`❌ Could not find connected child with UUID: ${childId}`);
               }
             } catch (inviteError) {
-              console.error('Failed to send invitation:', inviteError);
+              console.error('❌ Failed to send invitation:', inviteError);
             }
           }
         }
@@ -843,9 +855,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
     try {
       const response = await apiService.sendActivityInvitation(
-        invitingActivity.id, 
+        invitingActivity.uuid || String(invitingActivity.id), 
         invitedParentId, 
-        childId, 
+        childId ? String(childId) : undefined, 
         invitationMessage
       );
       
@@ -866,9 +878,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const handleInviteSpecificChild = async (activity: Activity, child: any) => {
     try {
       const response = await apiService.sendActivityInvitation(
-        activity.id,
-        child.parentId,
-        child.id,
+        activity.uuid || String(activity.id),
+        child.parentUuid,
+        typeof child.id === 'string' ? child.id : undefined,
         `Hi! I'd like to invite ${child.name} to join us for "${activity.name}" on ${formatDate(activity.start_date)}. Let me know if you're interested!`
       );
       

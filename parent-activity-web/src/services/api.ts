@@ -260,10 +260,10 @@ class ApiService {
   }
 
   // Activity Invitations
-  async sendActivityInvitation(activityId: number, invitedParentId: number, childId?: number, message?: string): Promise<ApiResponse<any>> {
-    return this.request('post', `/api/activities/${activityId}/invite`, { 
-      invited_parent_id: invitedParentId,
-      child_id: childId,
+  async sendActivityInvitation(activityUuid: string, invitedParentUuid: string, childUuid?: string, message?: string): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/activities/${activityUuid}/invite`, { 
+      invited_parent_uuid: invitedParentUuid,
+      child_uuid: childUuid,
       message 
     });
   }

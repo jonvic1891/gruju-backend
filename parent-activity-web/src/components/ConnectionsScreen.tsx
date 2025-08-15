@@ -227,9 +227,9 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
             console.log(`📧 Sending invitation for activity "${activity.name}" to child ${inviteChildId}`);
             
             const inviteResponse = await apiService.sendActivityInvitation(
-              activity.id,
+              activity.uuid || String(activity.id),
               newConnectionParentId,
-              inviteChildId,
+              typeof inviteChildId === 'string' ? inviteChildId : undefined,
               `Welcome to our connection! ${activity.child_name} would like to invite your child to join: ${activity.name}`
             );
             

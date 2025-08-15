@@ -339,6 +339,38 @@ async function runMigrations() {
         } catch (error) {
             console.log('ℹ️ Migration 13: UUID conversion issue:', error.message);
         }
+
+        // Migration 14: Add parent UUIDs and update invitation system
+        try {
+            console.log('🔄 Migration 14: Adding parent UUIDs to activity_invitations...');
+            
+            // Add parent UUID columns to activity_invitations table
+            await client.query(`
+                ALTER TABLE activity_invitations 
+                ADD COLUMN IF NOT EXISTS inviter_parent_uuid UUID,
+                ADD COLUMN IF NOT EXISTS invited_parent_uuid UUID
+            `);
+            
+            // Update inviter_parent_uuid by joining with users table
+            await client.query(`
+                UPDATE activity_invitations ai
+                SET inviter_parent_uuid = u.uuid
+                FROM users u
+                WHERE ai.inviter_parent_id = u.id AND ai.inviter_parent_uuid IS NULL
+            `);
+            
+            // Update invited_parent_uuid by joining with users table
+            await client.query(`
+                UPDATE activity_invitations ai
+                SET invited_parent_uuid = u.uuid
+                FROM users u
+                WHERE ai.invited_parent_id = u.id AND ai.invited_parent_uuid IS NULL
+            `);
+            
+            console.log('✅ Migration 14: Parent UUIDs added to activity_invitations completed');
+        } catch (error) {
+            console.log('ℹ️ Migration 14: Parent UUID conversion issue:', error.message);
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -1843,6 +1875,8 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
                     u2.username as child2_parent_name,
                     u1.id as child1_parent_id,
                     u2.id as child2_parent_id,
+                    u1.uuid as child1_parent_uuid,
+                    u2.uuid as child2_parent_uuid,
                     ch1.name as child1_name, 
                     ch2.name as child2_name,
                     ch1.uuid as child1_uuid, 
@@ -2308,23 +2342,23 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
     try {
         // ✅ SECURITY: Expect UUID instead of sequential ID
         const { activityId } = req.params; // Now expecting UUID
-        const { invited_parent_id, child_id, message } = req.body;
+        const { invited_parent_uuid, child_uuid, message } = req.body;
 
         console.log('🎯 Activity invite debug:', {
             activityUuid: activityId,
-            invited_parent_id,
-            child_id,
+            invited_parent_uuid,
+            child_uuid,
             message,
             userId: req.user.id
         });
 
-        if (!invited_parent_id) {
-            return res.status(400).json({ success: false, error: 'Invited parent ID is required' });
+        if (!invited_parent_uuid) {
+            return res.status(400).json({ success: false, error: 'Invited parent UUID is required' });
         }
         
-        // CRITICAL VALIDATION: child_id is required and must not be null
-        if (!child_id) {
-            return res.status(400).json({ success: false, error: 'Child ID is required - cannot create invitation without specifying which child to invite' });
+        // CRITICAL VALIDATION: child_uuid is required and must not be null
+        if (!child_uuid) {
+            return res.status(400).json({ success: false, error: 'Child UUID is required - cannot create invitation without specifying which child to invite' });
         }
 
         const client = await pool.connect();
@@ -2352,10 +2386,10 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
                 return res.status(403).json({ success: false, error: 'Not authorized to invite to this activity' });
             }
 
-            // ✅ SECURITY: Verify that the child belongs to the invited parent using UUID
+            // ✅ SECURITY: Verify that the child belongs to the invited parent using UUIDs
             const childCheck = await client.query(
-                'SELECT id, name, parent_id FROM children WHERE uuid = $1',
-                [child_id]
+                'SELECT c.id, c.name, c.parent_id, u.uuid as parent_uuid FROM children c JOIN users u ON c.parent_id = u.id WHERE c.uuid = $1',
+                [child_uuid]
             );
             
             if (childCheck.rows.length === 0) {
@@ -2365,14 +2399,28 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
             }
             
             const child = childCheck.rows[0];
-            if (child.parent_id !== invited_parent_id) {
+            if (child.parent_uuid !== invited_parent_uuid) {
                 await client.query('ROLLBACK');
                 client.release();
                 return res.status(400).json({ 
                     success: false, 
-                    error: `Child ${child.name} does not belong to the invited parent. Child belongs to parent ID ${child.parent_id}, but invitation is for parent ID ${invited_parent_id}` 
+                    error: `Child ${child.name} does not belong to the invited parent. Child belongs to parent UUID ${child.parent_uuid}, but invitation is for parent UUID ${invited_parent_uuid}` 
                 });
             }
+            
+            // Get the invited parent's sequential ID for database operations
+            const invitedParentCheck = await client.query(
+                'SELECT id FROM users WHERE uuid = $1',
+                [invited_parent_uuid]
+            );
+            
+            if (invitedParentCheck.rows.length === 0) {
+                await client.query('ROLLBACK');
+                client.release();
+                return res.status(404).json({ success: false, error: 'Invited parent not found' });
+            }
+            
+            const invited_parent_id = invitedParentCheck.rows[0].id;
 
             // FIRST: Clean up any corresponding pending invitation to avoid duplicates
             const pendingConnectionKey = `pending-${invited_parent_id}`;
@@ -2391,18 +2439,20 @@ app.post('/api/activities/:activityId/invite', authenticateToken, async (req, re
                 activityUuid: activityId,
                 activity_id: activity.id,
                 inviter_parent_id: req.user.id,
+                inviter_parent_uuid: req.user.uuid,
                 invited_parent_id,
-                child_uuid: child_id,
+                invited_parent_uuid,
+                child_uuid: child_uuid,
                 child_id: child.id,
                 message
             });
 
             const invitationResult = await client.query(
                 `INSERT INTO activity_invitations 
-                 (activity_id, activity_uuid, inviter_parent_id, invited_parent_id, invited_child_id, invited_child_uuid, message, status) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') 
+                 (activity_id, activity_uuid, inviter_parent_id, inviter_parent_uuid, invited_parent_id, invited_parent_uuid, invited_child_id, invited_child_uuid, message, status) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending') 
                  RETURNING id`,
-                [activity.id, activityId, req.user.id, invited_parent_id, child.id, child_id, message]
+                [activity.id, activityId, req.user.id, req.user.uuid, invited_parent_id, invited_parent_uuid, child.id, child_uuid, message]
             );
 
             // Commit the transaction
