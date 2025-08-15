@@ -290,7 +290,50 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         console.log(`   - Filtered to: ${childActivities.length} activities`);
         console.log(`   - Filtered out: ${allActivities.length - childActivities.length} activities`);
         
-        setActivities(childActivities);
+        // Also load rejected invitations to include them as grey activities
+        console.log('🔍 Loading rejected invitations...');
+        const invitationsResponse = await apiService.getAllInvitations(startDate, endDate);
+        
+        if (invitationsResponse.success && invitationsResponse.data) {
+          const rejectedInvitations = invitationsResponse.data.filter(
+            invitation => invitation.status === 'rejected' && 
+                         invitation.invited_child_name === child.name
+          );
+          
+          console.log(`🔍 Found ${rejectedInvitations.length} rejected invitations for ${child.name}:`, rejectedInvitations);
+          
+          // Convert rejected invitations to activity format and add them
+          const rejectedActivities = rejectedInvitations.map(invitation => ({
+            activity_uuid: invitation.activity_uuid,
+            name: invitation.activity_name,
+            description: invitation.activity_description,
+            start_date: invitation.start_date,
+            end_date: invitation.end_date,
+            start_time: invitation.start_time,
+            end_time: invitation.end_time,
+            location: invitation.location,
+            website_url: invitation.website_url,
+            cost: invitation.cost,
+            child_name: invitation.child_name,
+            child_uuid: invitation.child_uuid,
+            is_host: false,
+            is_shared: true,
+            invitation_status: 'rejected',
+            invited_child_uuid: child.uuid,
+            invitationUuid: invitation.invitation_uuid,
+            isRejectedInvitation: true,
+            host_parent_name: invitation.host_parent_username
+          }));
+          
+          // Merge rejected invitations with existing activities
+          const allActivitiesWithRejected = [...childActivities, ...rejectedActivities];
+          console.log(`✅ Total activities including rejected: ${allActivitiesWithRejected.length}`);
+          
+          setActivities(allActivitiesWithRejected);
+        } else {
+          console.log('No invitations data or failed to load invitations');
+          setActivities(childActivities);
+        }
       } else {
         console.error('Failed to load activities:', activitiesResponse.error);
         setActivities([]);
