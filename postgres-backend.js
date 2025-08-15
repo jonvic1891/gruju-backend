@@ -889,12 +889,17 @@ function authenticateToken(req, res, next) {
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) {
+        console.log(`🔒 No token provided for ${req.method} ${req.path}`);
         return res.sendStatus(401);
     }
 
     jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
-        if (err) return res.sendStatus(403);
+        if (err) {
+            console.log(`🔒 JWT verification failed for ${req.method} ${req.path}:`, err.message);
+            return res.sendStatus(403);
+        }
         req.user = user;
+        console.log(`✅ Authenticated user ${user.id} (${user.email}) for ${req.method} ${req.path}`);
         next();
     });
 }
