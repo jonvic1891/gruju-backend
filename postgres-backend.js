@@ -2831,13 +2831,13 @@ app.get('/api/activity-invitations', authenticateToken, async (req, res) => {
     }
 });
 
-// Test route to debug UUID routing
-app.post('/api/activity-invitations/test/:uuid/view', (req, res) => {
-    console.log('🧪 Test route hit with UUID:', req.params.uuid);
-    res.json({ success: true, message: 'Test route works', uuid: req.params.uuid });
+// Add logging middleware for this specific route pattern
+app.use('/api/activity-invitations/:id/view', (req, res, next) => {
+    console.log(`🔍 ROUTE MIDDLEWARE: ${req.method} ${req.path} - params:`, req.params);
+    next();
 });
 
-// Mark Activity Invitation as viewed endpoint
+// Mark Activity Invitation as viewed endpoint  
 app.post('/api/activity-invitations/:invitationId/view', authenticateToken, async (req, res) => {
     try {
         console.log('🔍 POST /api/activity-invitations/:invitationId/view called with:', req.params.invitationId);
