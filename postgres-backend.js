@@ -208,14 +208,21 @@ async function runMigrations() {
             console.log('🔐 Migration 11: Adding UUID columns for security...');
             await client.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
             
-            // Add UUID columns to all tables
-            await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
-            await client.query(`ALTER TABLE children ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
-            await client.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
-            await client.query(`ALTER TABLE connections ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
-            await client.query(`ALTER TABLE activity_invitations ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
-            await client.query(`ALTER TABLE connection_requests ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
-            await client.query(`ALTER TABLE pending_activity_invitations ADD COLUMN IF NOT EXISTS uuid UUID DEFAULT uuid_generate_v4()`);
+            // Add UUID columns to all tables (using safer syntax)
+            const tables = ['users', 'children', 'activities', 'connections', 'activity_invitations', 'connection_requests', 'pending_activity_invitations'];
+            
+            for (const table of tables) {
+                try {
+                    await client.query(`ALTER TABLE ${table} ADD COLUMN uuid UUID DEFAULT uuid_generate_v4()`);
+                    console.log(`✅ Added UUID column to ${table}`);
+                } catch (err) {
+                    if (err.message.includes('already exists')) {
+                        console.log(`ℹ️ UUID column already exists in ${table}`);
+                    } else {
+                        console.log(`⚠️ Error adding UUID to ${table}:`, err.message);
+                    }
+                }
+            }
             
             // Generate UUIDs for existing records that don't have them
             await client.query(`UPDATE users SET uuid = uuid_generate_v4() WHERE uuid IS NULL`);
@@ -1251,9 +1258,9 @@ app.put('/api/users/change-password', authenticateToken, async (req, res) => {
 app.get('/api/children', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
-        // ✅ SECURITY: Only select necessary fields and use UUID instead of sequential ID
+        // ✅ SECURITY: Return both UUID and ID for backward compatibility during transition
         const result = await client.query(
-            `SELECT uuid, name, first_name, last_name, age, grade, school, interests, created_at, updated_at,
+            `SELECT id, uuid, name, first_name, last_name, age, grade, school, interests, created_at, updated_at,
              CASE 
                 WHEN first_name IS NOT NULL AND last_name IS NOT NULL AND last_name != '' 
                 THEN CONCAT(first_name, ' ', last_name)
@@ -1727,12 +1734,19 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
             status: c.status
         })));
         
+        // ✅ SECURITY: Only include child UUIDs for frontend matching, removed child IDs for security
         const result = await client.query(
-            `SELECT c.id, c.status, c.created_at,
+            `SELECT c.uuid as connection_uuid,
+                    c.status, 
+                    c.created_at,
                     u1.username as child1_parent_name, 
                     u2.username as child2_parent_name,
-                    ch1.name as child1_name, ch2.name as child2_name,
-                    ch1.id as child1_id, ch2.id as child2_id
+                    u1.id as child1_parent_id,
+                    u2.id as child2_parent_id,
+                    ch1.name as child1_name, 
+                    ch2.name as child2_name,
+                    ch1.uuid as child1_uuid, 
+                    ch2.uuid as child2_uuid
              FROM connections c
              JOIN children ch1 ON c.child1_id = ch1.id
              JOIN children ch2 ON c.child2_id = ch2.id  
@@ -1747,7 +1761,9 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
             id: c.id,
             child1: c.child1_name,
             child2: c.child2_name,
-            status: c.status
+            status: c.status,
+            child1_uuid: c.child1_uuid,
+            child2_uuid: c.child2_uuid
         })));
         
         client.release();
