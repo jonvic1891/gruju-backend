@@ -2836,6 +2836,9 @@ app.post('/api/activity-invitations/test/:uuid/view', (req, res) => {
 app.post('/api/activity-invitations/:invitationId/view', authenticateToken, async (req, res) => {
     try {
         console.log('🔍 POST /api/activity-invitations/:invitationId/view called with:', req.params.invitationId);
+        console.log('👤 req.user:', req.user);
+        console.log('🆔 req.user.id:', req.user.id);
+        console.log('🔗 req.user.uuid:', req.user.uuid);
         // ✅ SECURITY: Expect UUID instead of sequential ID
         const invitationUuid = req.params.invitationId;
         
@@ -2846,12 +2849,26 @@ app.post('/api/activity-invitations/:invitationId/view', authenticateToken, asyn
 
         const client = await pool.connect();
         
+        // Get user UUID if not available in JWT
+        let userUuid = req.user.uuid;
+        if (!userUuid) {
+            console.log('🔍 No UUID in JWT, fetching from database...');
+            const userResult = await client.query('SELECT uuid FROM users WHERE id = $1', [req.user.id]);
+            if (userResult.rows.length > 0) {
+                userUuid = userResult.rows[0].uuid;
+                console.log('✅ Found user UUID:', userUuid);
+            } else {
+                client.release();
+                return res.status(404).json({ success: false, error: 'User not found' });
+            }
+        }
+        
         // ✅ SECURITY: Verify the invitation exists and belongs to the user using UUID
         const invitation = await client.query(
             `SELECT ai.* FROM activity_invitations ai 
              JOIN users u ON ai.invited_parent_id = u.id 
              WHERE ai.uuid = $1 AND u.uuid = $2`,
-            [invitationUuid, req.user.uuid]
+            [invitationUuid, userUuid]
         );
         
         if (invitation.rows.length === 0) {
