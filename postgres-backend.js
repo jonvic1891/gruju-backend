@@ -3032,13 +3032,13 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
         const client = await pool.connect();
         
         const query = `
-            SELECT DISTINCT a.id, a.name as activity_name, a.start_date, a.end_date, a.start_time, a.end_time, 
+            SELECT DISTINCT a.uuid as activity_uuid, a.name as activity_name, a.start_date, a.end_date, a.start_time, a.end_time, 
                     a.website_url, a.created_at, a.updated_at, a.description as activity_description, 
                     a.location, a.cost,
-                    c.name as child_name, c.id as child_id,
+                    c.name as child_name, c.uuid as child_uuid,
                     u.username as host_parent_username,
                     ai.message as invitation_message,
-                    ai.id as invitation_id,
+                    ai.uuid as invitation_uuid,
                     ai.status,
                     ai.viewed_at,
                     c_invited.name as invited_child_name
@@ -3057,7 +3057,7 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
         
         // Debug: Check ALL activity invitations for this user (no date filter)
         const debugQuery = await client.query(
-            'SELECT ai.*, a.name as activity_name FROM activity_invitations ai JOIN activities a ON ai.activity_id = a.id WHERE ai.invited_parent_id = $1 OR ai.inviter_parent_id = $1',
+            'SELECT ai.uuid as invitation_uuid, ai.status, a.name as activity_name, a.start_date FROM activity_invitations ai JOIN activities a ON ai.activity_id = a.id WHERE ai.invited_parent_id = $1 OR ai.inviter_parent_id = $1',
             [req.user.id]
         );
         console.log(`🔍 DEBUG: Found ${debugQuery.rows.length} total activity invitations for user ${req.user.id} (any date):`, 
@@ -3065,7 +3065,7 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
                 activity: r.activity_name,
                 status: r.status,
                 start_date: r.start_date,
-                invitation_id: r.id
+                invitation_uuid: r.invitation_uuid
             }))
         );
         
@@ -3075,14 +3075,14 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
             date: r.start_date,
             child: r.invited_child_name,
             status: r.status,
-            invitation_id: r.invitation_id
+            invitation_uuid: r.invitation_uuid
         })));
         
         const acceptedInvitations = result.rows.filter(r => r.status === 'accepted');
         console.log(`✅ Found ${acceptedInvitations.length} ACCEPTED invitations:`, acceptedInvitations.map(r => ({
             activity: r.activity_name,
             child: r.invited_child_name,
-            invitation_id: r.invitation_id
+            invitation_uuid: r.invitation_uuid
         })));
         
         client.release();
