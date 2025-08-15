@@ -481,12 +481,53 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const handleActivityClick = async (activity: Activity) => {
-    setSelectedActivity(activity);
+    // Check if this activity has a pending invitation for the current user
+    let enhancedActivity = { ...activity };
+    
+    // If this is a regular activity (not already marked as invitation), check if user has pending invitation
+    if (!activity.isPendingInvitation && !activity.isAcceptedInvitation && !activity.isDeclinedInvitation) {
+      try {
+        // Check pending invitations to see if current user has an invitation for this activity
+        const today = new Date();
+        const oneYearLater = new Date();
+        oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+        const startDate = today.toISOString().split('T')[0];
+        const endDate = oneYearLater.toISOString().split('T')[0];
+        
+        const pendingResponse = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
+        if (pendingResponse.success && pendingResponse.data) {
+          // Look for a pending invitation that matches this activity
+          const matchingInvitation = pendingResponse.data.find((inv: any) => 
+            inv.activity_name === activity.name && 
+            inv.start_date === activity.start_date &&
+            inv.start_time === activity.start_time
+          );
+          
+          if (matchingInvitation) {
+            // Convert this activity to a pending invitation format
+            enhancedActivity = {
+              ...activity,
+              isPendingInvitation: true,
+              invitationId: matchingInvitation.invitation_id,
+              invitation_message: matchingInvitation.invitation_message,
+              host_child_name: matchingInvitation.host_child_name,
+              host_parent_name: matchingInvitation.host_parent_username,
+              activity_uuid: matchingInvitation.activity_uuid
+            } as any;
+            console.log('🎯 Enhanced activity with pending invitation data:', enhancedActivity);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check for pending invitations:', error);
+      }
+    }
+    
+    setSelectedActivity(enhancedActivity);
     navigateToPage('activity-detail');
     
     // Mark invitation as viewed if this is any type of invitation
-    if (activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation) {
-      const invitationId = (activity as any).invitation_id || activity.id;
+    if (enhancedActivity.isPendingInvitation || enhancedActivity.isAcceptedInvitation || enhancedActivity.isDeclinedInvitation) {
+      const invitationId = (enhancedActivity as any).invitationId || (enhancedActivity as any).invitation_id || enhancedActivity.id;
       if (invitationId) {
         try {
           // Call the backend API to mark invitation as viewed
