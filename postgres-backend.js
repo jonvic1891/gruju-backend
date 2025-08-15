@@ -1386,13 +1386,13 @@ app.get('/api/children', authenticateToken, async (req, res) => {
         const client = await pool.connect();
         // ✅ SECURITY: Return both UUID and ID for backward compatibility during transition
         const result = await client.query(
-            `SELECT id, uuid, name, first_name, last_name, age, grade, school, interests, created_at, updated_at,
+            `SELECT c.id, c.uuid, c.name, c.first_name, c.last_name, c.age, c.grade, c.school, c.interests, c.created_at, c.updated_at,
              CASE 
-                WHEN first_name IS NOT NULL AND last_name IS NOT NULL AND last_name != '' 
-                THEN CONCAT(first_name, ' ', last_name)
-                WHEN first_name IS NOT NULL 
-                THEN first_name
-                ELSE name 
+                WHEN c.first_name IS NOT NULL AND c.last_name IS NOT NULL AND c.last_name != '' 
+                THEN CONCAT(c.first_name, ' ', c.last_name)
+                WHEN c.first_name IS NOT NULL 
+                THEN c.first_name
+                ELSE c.name 
              END as display_name
              FROM children c JOIN users u ON c.parent_id = u.id WHERE u.uuid = $1 ORDER BY c.created_at DESC`,
             [req.user.uuid]
