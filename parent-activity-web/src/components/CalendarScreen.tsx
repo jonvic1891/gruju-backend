@@ -207,7 +207,7 @@ const CalendarScreen = () => {
     if (status === 'accepted') {
       return '✅'; // Accepted invite
     }
-    if (status === 'declined') {
+    if (status === 'rejected') {
       return '❌'; // Rejected invite
     }
     return '🔔'; // General notification
@@ -220,8 +220,8 @@ const CalendarScreen = () => {
     if (status === 'accepted') {
       return '#4CAF50'; // Green for accepted
     }
-    if (status === 'declined') {
-      return '#F44336'; // Red for declined
+    if (status === 'rejected') {
+      return '#F44336'; // Red for rejected
     }
     return '#9E9E9E'; // Gray for other
   };
@@ -415,7 +415,7 @@ const CalendarScreen = () => {
       if (response.success) {
         const message = action === 'accept' 
           ? 'Invitation accepted! Activity will appear in your calendar.' 
-          : 'Invitation declined.';
+          : 'Invitation rejected.';
         alert(message);
         // Reload all activities to reflect the change
         loadActivities();
@@ -761,8 +761,8 @@ const CalendarScreen = () => {
                                   {participant.status === 'accepted' && (
                                     <span style={{ color: '#48bb78', fontSize: '12px' }}>✅ Accepted</span>
                                   )}
-                                  {participant.status === 'declined' && (
-                                    <span style={{ color: '#a0aec0', fontSize: '12px' }}>❌ Declined</span>
+                                  {participant.status === 'rejected' && (
+                                    <span style={{ color: '#a0aec0', fontSize: '12px' }}>❌ Rejected</span>
                                   )}
                                 </div>
                               </div>

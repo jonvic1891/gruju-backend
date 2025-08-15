@@ -1006,7 +1006,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
     
     // Grey for declined invitations (guest perspective - declined invitation)
-    if (activity.is_host === false && activity.invitation_status === 'declined') {
+    if (activity.is_host === false && activity.invitation_status === 'rejected') {
       return {
         background: 'linear-gradient(135deg, #a0aec0, #cbd5e0)',
         borderColor: '#718096'
@@ -1267,7 +1267,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             <div className="activity-details-form">
               <div className="form-row">
                 <label><strong>Activity Name:</strong></label>
-                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
                   <input
                     type="text"
                     value={newActivity.name}
@@ -1282,7 +1282,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
               <div className="form-row">
                 <label><strong>Description:</strong></label>
-                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
                   <textarea
                     value={newActivity.description}
                     onChange={(e) => setNewActivity({...newActivity, description: e.target.value})}
@@ -1296,7 +1296,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               </div>
 
               {/* Date Selection Section */}
-              {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+              {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
                 <div className="date-selection-section">
                   <label className="section-label">Select Activity Dates</label>
                   <p className="section-description">Click dates to select/deselect them. You can choose multiple dates for recurring activities.</p>
@@ -1321,7 +1321,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               <div className="form-row-group">
                 <div className="form-row">
                   <label><strong>Start Time:</strong></label>
-                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
                     <TimePickerDropdown
                       value={newActivity.start_time}
                       onChange={(time) => setNewActivity({...newActivity, start_time: time})}
@@ -1334,7 +1334,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
                 <div className="form-row">
                   <label><strong>End Time:</strong></label>
-                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
                     <TimePickerDropdown
                       value={newActivity.end_time}
                       onChange={(time) => setNewActivity({...newActivity, end_time: time})}
@@ -1348,7 +1348,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
               <div className="form-row">
                 <label><strong>Location:</strong></label>
-                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
                   <input
                     type="text"
                     value={newActivity.location}
@@ -1363,7 +1363,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
               <div className="form-row">
                 <label><strong>Website:</strong></label>
-                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
                   <input
                     type="url"
                     value={newActivity.website_url}
@@ -1387,7 +1387,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               <div className="form-row-group">
                 <div className="form-row">
                   <label><strong>Cost:</strong></label>
-                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
                     <input
                       type="number"
                       value={newActivity.cost}
@@ -1404,7 +1404,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
                 <div className="form-row">
                   <label><strong>Max Participants:</strong></label>
-                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation ? (
+                  {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
                     <input
                       type="number"
                       value={newActivity.max_participants}
@@ -1448,8 +1448,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                                 {participant.status === 'accepted' && (
                                   <span style={{ color: '#48bb78', fontSize: '12px' }}>✅ Accepted</span>
                                 )}
-                                {participant.status === 'declined' && (
-                                  <span style={{ color: '#a0aec0', fontSize: '12px' }}>❌ Declined</span>
+                                {participant.status === 'rejected' && (
+                                  <span style={{ color: '#a0aec0', fontSize: '12px' }}>❌ Rejected</span>
                                 )}
                               </div>
                             </div>
@@ -1475,7 +1475,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             </div>
             
             {/* Show uninvited connected children for host activities */}
-            {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation && (
+            {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation && (
               <div className="uninvited-children-section">
                 <div className="detail-item">
                   <strong>Invite More Children:</strong>
@@ -1551,8 +1551,19 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               </button>
             )}
             
+            {/* Show accept button for rejected invitations */}
+            {(selectedActivity as any).isRejectedInvitation && (selectedActivity as any).invitationUuid && (
+              <button
+                onClick={() => handleInvitationResponse((selectedActivity as any).invitationUuid!, 'accept')}
+                className="confirm-btn"
+                style={{ background: 'linear-gradient(135deg, #48bb78, #68d391)', color: 'white' }}
+              >
+                ✅ Accept Invitation
+              </button>
+            )}
+            
             {/* Show enhanced buttons for activity host */}
-            {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation && (
+            {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation && (
               <>
                 <button
                   onClick={handleUpdateActivity}
@@ -1572,7 +1583,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             )}
             
             {/* For non-host activities, show informational text */}
-            {!selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isDeclinedInvitation && (
+            {!selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation && (
               <div className="host-info">
                 <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
                   Only the activity host can edit this activity
@@ -2308,7 +2319,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                                   ✅
                                 </span>
                               )}
-                              {(activity as any).unviewed_statuses.includes('declined') && (
+                              {(activity as any).unviewed_statuses.includes('rejected') && (
                                 <span 
                                   className="status-icon" 
                                   onClick={() => handleStatusChangeClicked(activity)}

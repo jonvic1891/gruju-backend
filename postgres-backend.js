@@ -2987,10 +2987,10 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
         const client = await pool.connect();
         
         // ✅ SECURITY: Verify the invitation exists and belongs to this user using UUID
-        // Allow responding to pending invitations and changing accepted invitations to declined
+        // Allow responding to pending invitations, changing accepted invitations to rejected, and changing rejected back to accepted
         const invitation = await client.query(
-            'SELECT ai.* FROM activity_invitations ai INNER JOIN users u ON ai.invited_parent_id = u.id WHERE ai.uuid = $1 AND u.uuid = $2 AND (ai.status = $3 OR ai.status = $4)',
-            [invitationUuid, req.user.uuid, 'pending', 'accepted']
+            'SELECT ai.* FROM activity_invitations ai INNER JOIN users u ON ai.invited_parent_id = u.id WHERE ai.uuid = $1 AND u.uuid = $2 AND (ai.status = $3 OR ai.status = $4 OR ai.status = $5)',
+            [invitationUuid, req.user.uuid, 'pending', 'accepted', 'rejected']
         );
 
         if (invitation.rows.length === 0) {
