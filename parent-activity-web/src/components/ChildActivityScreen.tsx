@@ -177,6 +177,15 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     restoreActivityDraft();
   }, [child.id]);
 
+  // Load connections when shared activity is enabled
+  useEffect(() => {
+    if (isSharedActivity && connectedChildren.length === 0) {
+      console.log('🔄 Loading connections because shared activity was enabled...');
+      loadConnectedChildren();
+      loadPendingConnectionRequests();
+    }
+  }, [isSharedActivity]);
+
   // Handle browser back button and internal navigation
   useEffect(() => {
     const handlePopState = (event: PopStateEvent) => {
@@ -326,7 +335,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   const loadConnectedChildren = async () => {
     try {
-      console.log(`🔄 Loading connected children for host child: ${child.name} (ID: ${child.id})...`);
+      console.log(`🔄 Loading connected children for host child: ${child.name} (ID: ${child.id}, UUID: ${child.uuid})...`);
       const response = await apiService.getConnections();
       console.log('📡 Connections API response:', response);
       if (response.success && response.data) {
@@ -338,28 +347,33 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         // Extract connected children from connections, BUT ONLY for the specific host child
         const children: any[] = [];
         response.data.forEach((connection: any) => {
+          // ✅ SECURITY: Use UUIDs for matching instead of sequential IDs
           // Only include connections where the current child (host child) is involved
-          const isChild1Host = connection.child1_id === child.id;
-          const isChild2Host = connection.child2_id === child.id;
+          console.log(`🔍 Checking connection: child1_uuid=${connection.child1_uuid}, child2_uuid=${connection.child2_uuid}, host_child_uuid=${child.uuid}`);
+          const isChild1Host = connection.child1_uuid === child.uuid;
+          const isChild2Host = connection.child2_uuid === child.uuid;
+          console.log(`🔍 Host matching: isChild1Host=${isChild1Host}, isChild2Host=${isChild2Host}`);
           
           if (isChild1Host && connection.child2_name && connection.child2_parent_name !== currentUsername) {
             // Host child is child1, so add child2 as the connected child
             children.push({
-              id: connection.child2_id,
+              id: connection.child2_uuid, // Use UUID as primary ID for security
+              uuid: connection.child2_uuid, 
               name: connection.child2_name,
               parentId: connection.child2_parent_id,
               parentName: connection.child2_parent_name,
-              connectionId: connection.id
+              connectionId: connection.connection_uuid || connection.id
             });
             console.log(`   ✅ Added connected child: ${connection.child2_name} (connected to host child ${child.name})`);
           } else if (isChild2Host && connection.child1_name && connection.child1_parent_name !== currentUsername) {
             // Host child is child2, so add child1 as the connected child
             children.push({
-              id: connection.child1_id,
+              id: connection.child1_uuid, // Use UUID as primary ID for security
+              uuid: connection.child1_uuid,
               name: connection.child1_name,
               parentId: connection.child1_parent_id,
               parentName: connection.child1_parent_name,
-              connectionId: connection.id
+              connectionId: connection.connection_uuid || connection.id
             });
             console.log(`   ✅ Added connected child: ${connection.child1_name} (connected to host child ${child.name})`);
           }

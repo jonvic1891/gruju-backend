@@ -11,6 +11,7 @@ export interface User {
 
 export interface Child {
   id: number;
+  uuid: string; // UUID field for secure identification
   name: string;
   first_name?: string;
   last_name?: string;
@@ -26,6 +27,8 @@ export interface Child {
 
 export interface Activity {
   id: number;
+  activity_uuid?: string; // UUID field for secure activity identification
+  uuid?: string; // Alternative UUID field name for compatibility
   child_id: number;
   name: string;
   description?: string;
@@ -64,10 +67,21 @@ export interface Activity {
 
 export interface Connection {
   id: number;
+  uuid?: string; // UUID field for secure connection identification
+  connection_uuid?: string; // Alternative UUID field name
   child1_id: number;
+  child1_uuid?: string; // UUID for child1
   child2_id: number;
+  child2_uuid?: string; // UUID for child2
   status: 'active' | 'deleted';
   created_at: string;
+  // Extended fields from backend joins
+  child1_name?: string;
+  child1_parent_name?: string;
+  child1_parent_id?: number;
+  child2_name?: string;
+  child2_parent_name?: string;
+  child2_parent_id?: number;
 }
 
 export interface ConnectionRequest {
