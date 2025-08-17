@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+// React Router hooks removed - let Dashboard handle navigation
 import ApiService from '../services/api';
 import { Child, Activity } from '../types';
 import TimePickerDropdown from './TimePickerDropdown';
@@ -10,10 +11,12 @@ interface ChildActivityScreenProps {
   onBack: () => void;
   onDataChanged?: () => void;
   onNavigateToConnections?: () => void;
+  onNavigateToActivity?: (child: Child, activity: any) => void;
+  initialActivityUuid?: string;
   shouldRestoreActivityCreation?: boolean;
 }
 
-const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack, onDataChanged, onNavigateToConnections, shouldRestoreActivityCreation }) => {
+const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack, onDataChanged, onNavigateToConnections, onNavigateToActivity, initialActivityUuid, shouldRestoreActivityCreation }) => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [invitedActivities, setInvitedActivities] = useState<any[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
@@ -186,33 +189,71 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   }, [isSharedActivity]);
 
-  // Handle browser back button and internal navigation
+  // Handle initial activity UUID for direct navigation to specific activities
   useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      if (event.state && event.state.page) {
-        setCurrentPage(event.state.page);
-      } else {
-        // If no state and we're at the main page, go back to children screen
-        if (currentPage === 'main') {
-          onBack();
-        } else {
-          setCurrentPage('main');
+    console.log('🔄 URL Activity UUID effect triggered:', { initialActivityUuid, activitiesLength: activities.length, currentPage });
+    
+    if (initialActivityUuid && activities.length > 0) {
+      console.log('🔍 Looking for activity with UUID:', initialActivityUuid);
+      console.log('📋 Available activities:', activities.map(a => ({ 
+        id: a.id, 
+        name: a.name, 
+        uuid: (a as any).uuid, 
+        activity_uuid: (a as any).activity_uuid 
+      })));
+      
+      const activity = activities.find(a => {
+        const activityUuid = (a as any).uuid || (a as any).activity_uuid;
+        return activityUuid === initialActivityUuid;
+      });
+      
+      console.log('🎯 Found activity:', activity);
+      
+      if (activity) {
+        // For initial activity navigation from URL, go to detail page (same as clicking activity)
+        console.log('✅ Setting selected activity and navigating to detail page');
+        setSelectedActivity(activity);
+        
+        // Populate newActivity state with selected activity data (same as in handleActivityClick)
+        setNewActivity({
+          name: activity.name || '',
+          description: activity.description || '',
+          start_date: activity.start_date ? activity.start_date.split('T')[0] : '',
+          end_date: activity.end_date ? activity.end_date.split('T')[0] : '',
+          start_time: activity.start_time || '',
+          end_time: activity.end_time || '',
+          location: activity.location || '',
+          website_url: (activity as any).website_url || '',
+          cost: (activity as any).cost ? String((activity as any).cost) : '',
+          max_participants: (activity as any).max_participants ? String((activity as any).max_participants) : '',
+          auto_notify_new_connections: (activity as any).auto_notify_new_connections || false
+        });
+        
+        // Load participants for the activity (same as in handleActivityClick)
+        const activityUuid = (activity as any).activity_uuid || (activity as any).uuid;
+        if (activityUuid) {
+          console.log('🔄 Loading participants for activity UUID:', activityUuid);
+          loadActivityParticipants(activityUuid);
         }
+        
+        setCurrentPage('activity-detail');
+        console.log('📄 Force set currentPage to activity-detail');
+      } else {
+        console.log('❌ Activity not found with UUID:', initialActivityUuid);
+        // If activity not found, go to main page
+        setSelectedActivity(null);
+        setCurrentPage('main');
       }
-    };
-
-    // Add event listener for browser back button
-    window.addEventListener('popstate', handlePopState);
-
-    // Push initial state for main page
-    if (window.history.state === null) {
-      window.history.replaceState({ page: 'main', childActivity: true }, '', window.location.href);
+    } else if (!initialActivityUuid) {
+      // When no activity UUID in URL, ensure we're on main page
+      console.log('🏠 No activity UUID, ensuring we are on main page');
+      setSelectedActivity(null);
+      setCurrentPage('main');
     }
+  }, [initialActivityUuid, activities]);
 
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, [currentPage, onBack]);
+  // Remove popstate handling - let React Router handle URL changes and Dashboard handle navigation
+  // The component should respond to URL changes through props, not manage browser history directly
 
   // Watch for page changes to refresh data when returning to main after viewing invitations
   useEffect(() => {
@@ -361,7 +402,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         loadActivities();
         
         // Close the detail modal and refresh parent data
-        navigateToPage('main');
+        goBack();
         onDataChanged?.();
       } else {
         alert(`Error: ${response.error || 'Failed to respond to invitation'}`);
@@ -383,9 +424,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         // Mark all unviewed status changes as viewed for this activity
         // Find the invitation ID from the participants data and mark it as viewed
         if (response.data.participants && response.data.participants.length > 0) {
-          const invitationWithStatusChange = response.data.participants.find((p: any) => p.invitation_id);
-          if (invitationWithStatusChange && invitationWithStatusChange.invitation_id) {
-            await apiService.markStatusChangeAsViewed(invitationWithStatusChange.invitation_id);
+          const invitationWithStatusChange = response.data.participants.find((p: any) => p.invitation_uuid);
+          if (invitationWithStatusChange && invitationWithStatusChange.invitation_uuid) {
+            await apiService.markStatusChangeAsViewed(invitationWithStatusChange.invitation_uuid);
           }
         }
         
@@ -524,6 +565,13 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const handleActivityClick = async (activity: Activity) => {
+    // Use proper navigation if available to navigate to activity-specific URL
+    if (onNavigateToActivity) {
+      onNavigateToActivity(child, activity);
+      return;
+    }
+
+    // Fallback to old behavior for backwards compatibility
     // Check if this activity has a pending invitation for the current user
     let enhancedActivity = { ...activity };
     
@@ -767,7 +815,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
         alert(successMessage);
         loadActivities(); // Reload activities to reflect changes
-        navigateToPage('main'); // Go back to main page
+        goBack(); // Go back to main page
       } else {
         alert(`Error: ${response.error || 'Failed to update activity'}`);
       }
@@ -784,7 +832,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       try {
         const response = await apiService.deleteActivity(activity.id);
         if (response.success) {
-          navigateToPage('main');
+          goBack();
           loadActivities();
           alert('Activity deleted successfully');
         } else {
@@ -913,7 +961,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setAutoNotifyNewConnections(false);
       setSelectedConnectedChildren([]);
       clearActivityDraft(); // Clear the saved draft after successful creation
-      navigateToPage('main');
+      goBack();
       loadActivities();
       
       const message = createdActivities.length === 1 
@@ -960,7 +1008,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       
       if (response.success) {
         alert('Invitation sent successfully!');
-        navigateToPage('main');
+        goBack();
         setInvitingActivity(null);
         setInvitationMessage('');
       } else {
@@ -1012,7 +1060,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       if (response.success) {
         alert('Activity marked as "Can\'t Attend". The activity will show as grey in your calendar and guests will be notified.');
         loadActivities();
-        navigateToPage('main');
+        goBack();
       } else {
         alert(`Failed to update attendance status: ${response.error}`);
       }
@@ -1118,7 +1166,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         description: invitation.activity_description,
         isAcceptedInvitation: true,
         showAcceptedIcon: !invitation.viewed_at, // Only show green tick if not viewed
-        invitationId: invitation.invitation_id,
+        invitationId: invitation.invitation_uuid,
         hostParent: invitation.host_parent_username,
         host_child_name: invitation.host_child_name,
         host_parent_name: invitation.host_parent_username,
@@ -1137,7 +1185,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         description: invitation.activity_description,
         isPendingInvitation: true, // Always true for pending invitations (for color)
         showEnvelope: !invitation.viewed_at, // Only show envelope if not viewed
-        invitationId: invitation.invitation_id,
+        invitationId: invitation.invitation_uuid,
         hostParent: invitation.host_parent_username,
         host_child_name: invitation.host_child_name,
         host_parent_name: invitation.host_parent_username
@@ -1155,7 +1203,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         description: invitation.activity_description,
         isDeclinedInvitation: true,
         showDeclinedIcon: !invitation.viewed_at, // Only show red cross if not viewed
-        invitationId: invitation.invitation_id,
+        invitationId: invitation.invitation_uuid,
         hostParent: invitation.host_parent_username,
         host_child_name: invitation.host_child_name,
         host_parent_name: invitation.host_parent_username
@@ -1172,7 +1220,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           description: invitation.activity_description,
           isAcceptedInvitation: true,
           showAcceptedIcon: !invitation.viewed_at,
-          invitationId: invitation.invitation_id,
+          invitationId: invitation.invitation_uuid,
           host_child_name: invitation.host_child_name,
           host_parent_name: invitation.host_parent_username,
           is_shared: true
@@ -1185,7 +1233,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           description: invitation.activity_description,
           isPendingInvitation: true,
           showEnvelope: !invitation.viewed_at,
-          invitationId: invitation.invitation_id,
+          invitationId: invitation.invitation_uuid,
           host_child_name: invitation.host_child_name,
           host_parent_name: invitation.host_parent_username
         })),
@@ -1197,7 +1245,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           description: invitation.activity_description,
           isDeclinedInvitation: true,
           showDeclinedIcon: !invitation.viewed_at,
-          invitationId: invitation.invitation_id,
+          invitationId: invitation.invitation_uuid,
           host_child_name: invitation.host_child_name,
           host_parent_name: invitation.host_parent_username
         }))
@@ -1264,6 +1312,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   // Page navigation function
 
   const navigateToPage = (page: typeof currentPage) => {
+    console.log('🧭 navigateToPage called:', { from: currentPage, to: page });
     if (page !== currentPage) {
       // If returning to main and an invitation was viewed, refresh both local and parent data
       if (page === 'main' && sessionStorage.getItem('invitationViewed') === 'true') {
@@ -1273,18 +1322,37 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       }
       
       setCurrentPage(page);
+      console.log('📄 Page set to:', page);
       // Push new state to history
       window.history.pushState({ page }, '', window.location.href);
+    } else {
+      console.log('⚠️ Page navigation skipped - already on:', page);
     }
   };
 
   const goBack = () => {
-    // Use browser's back functionality
-    window.history.back();
+    // Always use logical navigation back to the page they came from
+    // This goes back to the main child activities page, not browser history
+    if (onBack) {
+      onBack();
+    } else {
+      // Fallback: go to main page instead of browser back
+      navigateToPage('main');
+    }
   };
 
   // Render different pages based on currentPage state
+  console.log('🎬 Render - currentPage:', currentPage, 'selectedActivity:', selectedActivity?.name);
+  
   if (currentPage === 'activity-detail' && selectedActivity) {
+    console.log('🎯 Rendering activity detail page for:', selectedActivity.name);
+    console.log('📊 Activity details:', {
+      name: selectedActivity.name,
+      is_host: selectedActivity.is_host,
+      isPendingInvitation: (selectedActivity as any).isPendingInvitation,
+      isAcceptedInvitation: (selectedActivity as any).isAcceptedInvitation,
+      description: selectedActivity.description
+    });
     return (
       <div className="child-activity-screen">
         <div className="activity-header">
@@ -1317,8 +1385,22 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               </div>
             )}
             
+
             {/* Activity Details Form - Always Editable for Host */}
             <div className="activity-details-form">
+              
+              {/* Activity Calendar Display - Always show the activity date */}
+              {selectedActivity.start_date && (
+                <div className="date-selection-section">
+                  <label className="section-label">Activity Date</label>
+                  <p className="section-description">This activity is scheduled for the highlighted date.</p>
+                  <CalendarDatePicker
+                    selectedDates={[selectedActivity.start_date.split('T')[0]]}
+                    onChange={() => {}} // Read-only for viewing
+                  />
+                </div>
+              )}
+              
               <div className="form-row">
                 <label><strong>Activity Name:</strong></label>
                 {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
@@ -1349,28 +1431,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 )}
               </div>
 
-              {/* Date Selection Section */}
-              {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
-                <div className="date-selection-section">
-                  <label className="section-label">Select Activity Dates</label>
-                  <p className="section-description">Click dates to select/deselect them. You can choose multiple dates for recurring activities.</p>
-                  <CalendarDatePicker
-                    selectedDates={selectedDates}
-                    onChange={setSelectedDates}
-                    minDate={new Date().toISOString().split('T')[0]}
-                  />
-                </div>
-              ) : (
-                <div className="form-row">
-                  <label><strong>Activity Dates:</strong></label>
-                  <span className="readonly-value">
-                    📅 {formatDate(selectedActivity.start_date)}
-                    {selectedActivity.end_date && selectedActivity.end_date.split('T')[0] !== selectedActivity.start_date.split('T')[0] && 
-                      ` - ${formatDate(selectedActivity.end_date)}`
-                    }
-                  </span>
-                </div>
-              )}
 
               <div className="form-row-group">
                 <div className="form-row">

@@ -64,12 +64,13 @@ const NotificationBell: React.FC = () => {
 
       // Load parent's children first to filter invitations
       const childrenResponse = await apiService.getChildren();
-      const parentChildIds = childrenResponse.success && childrenResponse.data 
+      const parentChildren = childrenResponse.success && childrenResponse.data 
         ? (Array.isArray(childrenResponse.data) 
            ? childrenResponse.data 
            : (childrenResponse.data as any)?.data || []
-          ).map((child: any) => child.id)
+          )
         : [];
+      const parentChildIds = parentChildren.map((child: any) => child.id);
       
       // Load connection requests
       const requestsResponse = await apiService.getConnectionRequests();
@@ -112,6 +113,42 @@ const NotificationBell: React.FC = () => {
             timestamp: pendingInvitations[0].created_at,
             read: false,
             data: pendingInvitations
+          });
+        }
+      }
+
+      // Load hosted activity notifications (activities where our children are hosts and guests have responded)
+      const today = new Date();
+      const oneYearLater = new Date();
+      oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+      const startDate = today.toISOString().split('T')[0];
+      const endDate = oneYearLater.toISOString().split('T')[0];
+      
+      const calendarActivitiesResponse = await apiService.getCalendarActivities(startDate, endDate);
+      if (calendarActivitiesResponse.success && calendarActivitiesResponse.data) {
+        const allActivities = Array.isArray(calendarActivitiesResponse.data) ? calendarActivitiesResponse.data : [];
+        
+        // Count activities with unviewed responses where our children are hosts
+        let totalHostedNotifications = 0;
+        for (const activity of allActivities) {
+          const hostChild = parentChildren.find((child: any) => child.uuid === activity.child_uuid);
+          const hasUnviewedResponses = parseInt(activity.unviewed_status_changes || '0') > 0;
+          
+          if (hostChild && hasUnviewedResponses) {
+            totalHostedNotifications += parseInt(activity.unviewed_status_changes || '0');
+          }
+        }
+        
+        // Add hosted activity notification summary if there are any
+        if (totalHostedNotifications > 0) {
+          allNotifications.push({
+            id: 'hosted_activity_responses_summary',
+            type: 'activity_invitation' as const,
+            title: 'Activity Responses',
+            message: `You have ${totalHostedNotifications} new response${totalHostedNotifications !== 1 ? 's' : ''} to your activities`,
+            timestamp: new Date().toISOString(),
+            read: false,
+            data: { count: totalHostedNotifications }
           });
         }
       }

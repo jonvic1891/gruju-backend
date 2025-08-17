@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import './LoginScreen.css';
 
@@ -14,6 +15,7 @@ const LoginScreen = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [phone, setPhone] = useState('');
   const { login, register, isLoading } = useAuth();
+  const navigate = useNavigate();
 
   // Clear all form fields when switching between login and register modes
   useEffect(() => {
@@ -96,12 +98,16 @@ const LoginScreen = () => {
       }
       
       const result = await register({ username: `${firstName} ${lastName}`, email, phone, password });
-      if (!result.success) {
+      if (result.success) {
+        navigate('/children', { replace: true });
+      } else {
         alert(`Registration Failed: ${result.error}`);
       }
     } else {
       const result = await login({ email, password });
-      if (!result.success) {
+      if (result.success) {
+        navigate('/children', { replace: true });
+      } else {
         alert(`Login Failed: ${result.error}`);
       }
     }
@@ -116,7 +122,9 @@ const LoginScreen = () => {
       password: demoAccount.password 
     });
     
-    if (!result.success) {
+    if (result.success) {
+      navigate('/children', { replace: true });
+    } else {
       alert(`Login Failed: ${result.error}`);
     }
   };

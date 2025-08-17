@@ -1,4 +1,5 @@
 import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginScreen from './components/LoginScreen';
 import Dashboard from './components/Dashboard';
@@ -6,6 +7,8 @@ import './App.css';
 
 const AppContent = () => {
   const { isAuthenticated, isLoading, user } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // Enhanced debug logging
   console.log('AppContent rendering:', { 
@@ -25,6 +28,7 @@ const AppContent = () => {
     });
   }, [isAuthenticated, isLoading, user]);
 
+
   if (isLoading) {
     console.log('Showing loading screen');
     return (
@@ -36,9 +40,20 @@ const AppContent = () => {
   }
 
   if (isAuthenticated) {
-    console.log('User authenticated, rendering Dashboard');
+    console.log('User authenticated, rendering Dashboard with routing');
     try {
-      return <Dashboard />;
+      return (
+        <Routes>
+          <Route path="/children" element={<Dashboard initialTab="children" />} />
+          <Route path="/children/:childUuid/activities" element={<Dashboard initialTab="children" />} />
+          <Route path="/children/:childUuid/activities/:activityUuid" element={<Dashboard initialTab="children" />} />
+          <Route path="/calendar" element={<Dashboard initialTab="calendar" />} />
+          <Route path="/connections" element={<Dashboard initialTab="connections" />} />
+          <Route path="/profile" element={<Dashboard initialTab="profile" />} />
+          <Route path="/admin" element={<Dashboard initialTab="admin" />} />
+          <Route path="/" element={<Navigate to="/children" replace />} />
+        </Routes>
+      );
     } catch (error) {
       console.error('Error rendering authenticated content:', error);
       return (
@@ -67,7 +82,9 @@ function App() {
   return (
     <div className="App">
       <AuthProvider>
-        <AppContent />
+        <Router>
+          <AppContent />
+        </Router>
       </AuthProvider>
     </div>
   );

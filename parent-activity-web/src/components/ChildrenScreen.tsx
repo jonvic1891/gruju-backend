@@ -39,14 +39,18 @@ interface ConnectionRequest {
 
 interface ChildrenScreenProps {
   onNavigateToCalendar?: () => void;
-  onNavigateToChildCalendar?: (child: Child) => void;
+  onNavigateToChildCalendar?: (child: Child, activityDate?: string) => void;
+  onNavigateToChildActivities?: (child: Child) => void;
+  onNavigateToActivity?: (child: Child, activity: any) => void;
+  onNavigateBack?: () => void;
   initialSelectedChildId?: number | null;
+  initialActivityUuid?: string;
   onChildSelectionChange?: (childId: number | null) => void;
   onNavigateToConnections?: (isInActivityCreation?: boolean) => void;
   shouldRestoreActivityCreation?: boolean;
 }
 
-const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, onNavigateToChildCalendar, initialSelectedChildId, onChildSelectionChange, onNavigateToConnections, shouldRestoreActivityCreation }) => {
+const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, onNavigateToChildCalendar, onNavigateToChildActivities, onNavigateToActivity, onNavigateBack, initialSelectedChildId, initialActivityUuid, onChildSelectionChange, onNavigateToConnections, shouldRestoreActivityCreation }) => {
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -57,6 +61,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
   const [childActivityCounts, setChildActivityCounts] = useState<Record<number, number>>({});
   const [childInvitations, setChildInvitations] = useState<Record<number, ActivityInvitation[]>>({});
   const [childConnections, setChildConnections] = useState<Record<number, ConnectionRequest[]>>({});
+  const [hostedActivityNotifications, setHostedActivityNotifications] = useState<any[]>([]);
   const [processingInvitation, setProcessingInvitation] = useState<number | null>(null);
   const [processingConnection, setProcessingConnection] = useState<number | null>(null);
   const [activityDraft, setActivityDraft] = useState<any>(null);
@@ -134,10 +139,11 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
           : (response.data as any)?.data || [];
         setChildren(childrenData);
         
-        // Load activity counts, invitations, and connection requests for each child
+        // Load activity counts, invitations, connection requests, and hosted activity notifications
         await loadActivityCounts(childrenData);
         await loadInvitationsForChildren(childrenData);
         await loadConnectionRequestsForChildren(childrenData);
+        await loadHostedActivityNotifications(childrenData);
       } else {
         console.error('Failed to load children:', response.error);
         alert(`Error: ${response.error || 'Failed to load children'}`);
@@ -308,6 +314,85 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     }
   };
 
+  const loadHostedActivityNotifications = async (childrenData: Child[]) => {
+    try {
+      // Get date range for checking hosted activities
+      const today = new Date();
+      const oneYearLater = new Date();
+      oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+      const startDate = today.toISOString().split('T')[0];
+      const endDate = oneYearLater.toISOString().split('T')[0];
+      
+      // Get all calendar activities where we are the host
+      const calendarActivitiesResponse = await apiService.getCalendarActivities(startDate, endDate);
+      if (calendarActivitiesResponse.success && calendarActivitiesResponse.data) {
+        const allActivities = Array.isArray(calendarActivitiesResponse.data) ? calendarActivitiesResponse.data : [];
+        
+        const notifications: any[] = [];
+        
+        // Check each activity where one of our children is the host AND has unviewed responses
+        for (const activity of allActivities) {
+          const hostChild = childrenData.find(child => child.uuid === activity.child_uuid);
+          const hasUnviewedResponses = parseInt(activity.unviewed_status_changes || '0') > 0;
+          
+          if (hostChild && hasUnviewedResponses) {
+            try {
+              // Get participants for this activity to get detailed response information
+              const participantsResponse = await apiService.getActivityParticipants(activity.activity_uuid || activity.uuid);
+              if (participantsResponse.success && participantsResponse.data) {
+                const participants = participantsResponse.data.participants || [];
+                
+                // Since calendar activities says there are unviewed responses, find non-pending participants
+                // We can't rely on status_viewed_at since it's missing from the API, but we know there are unviewed responses
+                const responseParticipants = participants.filter((p: any) => 
+                  p.status !== 'pending'
+                );
+                
+                if (responseParticipants.length > 0) {
+                  notifications.push({
+                    activity_id: activity.id,
+                    activity_uuid: activity.activity_uuid || activity.uuid,
+                    activity_name: activity.name,
+                    start_date: activity.start_date,
+                    start_time: activity.start_time,
+                    end_time: activity.end_time,
+                    host_child_id: hostChild.id,
+                    host_child_name: hostChild.name,
+                    unviewed_responses: responseParticipants,
+                    total_unviewed: parseInt(activity.unviewed_status_changes),
+                    unviewed_statuses: activity.unviewed_statuses
+                  });
+                }
+              }
+            } catch (error) {
+              console.error(`Failed to load participants for activity ${activity.id}:`, error);
+              // Fallback: create notification without detailed participant info
+              notifications.push({
+                activity_id: activity.id,
+                activity_uuid: activity.activity_uuid || activity.uuid,
+                activity_name: activity.name,
+                start_date: activity.start_date,
+                start_time: activity.start_time,
+                end_time: activity.end_time,
+                host_child_id: hostChild.id,
+                host_child_name: hostChild.name,
+                unviewed_responses: [],
+                total_unviewed: parseInt(activity.unviewed_status_changes),
+                unviewed_statuses: activity.unviewed_statuses
+              });
+            }
+          }
+        }
+        
+        setHostedActivityNotifications(notifications);
+        console.log(`📊 Found ${notifications.length} hosted activities with unviewed responses`);
+      }
+    } catch (error) {
+      console.error('Failed to load hosted activity notifications:', error);
+      setHostedActivityNotifications([]);
+    }
+  };
+
   const handleInvitationResponse = async (invitationUuid: string, action: 'accept' | 'reject') => {
     try {
       setProcessingInvitation(parseInt(invitationUuid)); // Keep for UI state management
@@ -371,6 +456,27 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       alert('Failed to respond to connection request');
     } finally {
       setProcessingConnection(null);
+    }
+  };
+
+  const handleMarkHostedActivityAsViewed = async (activityNotification: any) => {
+    try {
+      // Mark all unviewed responses for this activity as viewed
+      for (const response of activityNotification.unviewed_responses) {
+        if (response.invitation_uuid) {
+          await apiService.markStatusChangeAsViewed(response.invitation_uuid);
+        }
+      }
+      
+      // Remove this notification from the list
+      setHostedActivityNotifications(prev => 
+        prev.filter(n => n.activity_uuid !== activityNotification.activity_uuid)
+      );
+      
+      // Also refresh the notification bell
+      loadChildren();
+    } catch (error) {
+      console.error('Failed to mark hosted activity as viewed:', error);
     }
   };
 
@@ -460,10 +566,14 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
   }, [initialSelectedChildId, children]);
 
   const handleChildClick = (child: Child) => {
-    setSelectedChild(child);
-    onChildSelectionChange?.(child.id);
-    // Push state for child selection
-    window.history.pushState({ selectedChildId: child.id }, '', window.location.href);
+    // Use proper navigation to change the URL
+    if (onNavigateToChildActivities) {
+      onNavigateToChildActivities(child);
+    } else {
+      // Fallback to old behavior if navigation prop not provided
+      setSelectedChild(child);
+      onChildSelectionChange?.(child.id);
+    }
   };
 
   const handleBackToChildren = () => {
@@ -476,8 +586,13 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     
     setSelectedChild(null);
     onChildSelectionChange?.(null);
-    // Use browser back functionality
-    window.history.back();
+    
+    // Use proper navigation if available, otherwise fallback to browser back
+    if (onNavigateBack) {
+      onNavigateBack();
+    } else {
+      window.history.back();
+    }
   };
 
   if (loading) {
@@ -495,6 +610,8 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       onBack={handleBackToChildren}
       onDataChanged={loadChildren}
       onNavigateToConnections={onNavigateToConnections}
+      onNavigateToActivity={onNavigateToActivity}
+      initialActivityUuid={initialActivityUuid}
       shouldRestoreActivityCreation={shouldRestoreActivityCreation}
     />;
   }
@@ -600,12 +717,13 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                   {childActivityCounts[child.id] || 0} {childActivityCounts[child.id] === 1 ? 'Activity' : 'Activities'}
                 </div>
 
-                {/* Notifications - Activity Invitations and Connection Requests */}
+                {/* Notifications - Activity Invitations, Connection Requests, and Hosted Activity Responses */}
                 {((childInvitations[child.id] && childInvitations[child.id].length > 0) || 
-                  (childConnections[child.id] && childConnections[child.id].length > 0)) && (
+                  (childConnections[child.id] && childConnections[child.id].length > 0) ||
+                  (hostedActivityNotifications.filter(n => n.host_child_id === child.id).length > 0)) && (
                   <div className="child-invitations">
                     <div className="invitations-header">
-                      📩 {(childInvitations[child.id]?.length || 0) + (childConnections[child.id]?.length || 0)} Notification{((childInvitations[child.id]?.length || 0) + (childConnections[child.id]?.length || 0)) !== 1 ? 's' : ''}
+                      📩 {(childInvitations[child.id]?.length || 0) + (childConnections[child.id]?.length || 0) + hostedActivityNotifications.filter(n => n.host_child_id === child.id).length} Notification{((childInvitations[child.id]?.length || 0) + (childConnections[child.id]?.length || 0) + hostedActivityNotifications.filter(n => n.host_child_id === child.id).length) !== 1 ? 's' : ''}
                     </div>
                     
                     {/* Connection Requests */}
@@ -690,10 +808,73 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                               className="invitation-calendar-btn"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onNavigateToChildCalendar?.(child);
+                                onNavigateToChildCalendar?.(child, invitation.start_date);
                               }}
                             >
                               See in Calendar
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Hosted Activity Notifications */}
+                    {hostedActivityNotifications.filter(n => n.host_child_id === child.id).map((notification) => {
+                      const formatDate = (dateString: string) => {
+                        const date = new Date(dateString);
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const year = date.getFullYear();
+                        return `${day}/${month}/${year}`;
+                      };
+
+                      const timeRange = notification.start_time && notification.end_time 
+                        ? ` at ${notification.start_time}-${notification.end_time}`
+                        : notification.start_time
+                        ? ` at ${notification.start_time}`
+                        : '';
+
+                      // Create notification message - use detailed names if available, otherwise use summary
+                      let responseMessage = '';
+                      if (notification.unviewed_responses && notification.unviewed_responses.length > 0) {
+                        // Detailed message with names
+                        responseMessage = notification.unviewed_responses
+                          .map((r: any) => `${r.parent_name || 'Someone'} ${r.status === 'accepted' ? 'accepted' : 'declined'}`)
+                          .join(', ');
+                      } else {
+                        // Fallback summary message
+                        const statusTypes = notification.unviewed_statuses ? notification.unviewed_statuses.split(',').join('/') : 'responses';
+                        responseMessage = `${notification.total_unviewed} unviewed ${statusTypes}`;
+                      }
+
+                      return (
+                        <div key={`hosted_${notification.activity_uuid}`} className="invitation-item" onClick={(e) => e.stopPropagation()}>
+                          <div className="invitation-message">
+                            📅 Activity "{notification.activity_name}" on {formatDate(notification.start_date)}{timeRange}: {responseMessage}
+                          </div>
+                          <div className="invitation-actions">
+                            <button
+                              className="invitation-calendar-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMarkHostedActivityAsViewed(notification);
+                              }}
+                            >
+                              Mark as Read
+                            </button>
+                            <button
+                              className="invitation-calendar-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Navigate to the host child's activity screen
+                                const hostChild = children.find(c => c.id === notification.host_child_id);
+                                if (hostChild) {
+                                  // This will navigate to the child's individual activity screen
+                                  handleChildClick(hostChild);
+                                }
+                              }}
+                            >
+                              View Activity
                             </button>
                           </div>
                         </div>

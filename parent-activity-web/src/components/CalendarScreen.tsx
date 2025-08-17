@@ -6,14 +6,19 @@ import './CalendarScreen.css';
 
 console.log('📦 CalendarScreen.tsx loaded');
 
-const CalendarScreen = () => {
-  console.log('🎯 CalendarScreen component rendering...');
+interface CalendarScreenProps {
+  initialDate?: string;
+  onNavigateToActivity?: (child: Child, activity: Activity) => void;
+}
+
+const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, onNavigateToActivity }) => {
+  console.log('🎯 CalendarScreen component rendering with initialDate:', initialDate);
   
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(initialDate ? new Date(initialDate) : new Date());
   const [showAddModal, setShowAddModal] = useState(false);
   const [children, setChildren] = useState<Child[]>([]);
   const [connectionRequests, setConnectionRequests] = useState<any[]>([]);
@@ -389,6 +394,23 @@ const CalendarScreen = () => {
   };
 
   const handleActivityClick = (activity: Activity) => {
+    // If navigation prop is available, use it to navigate to activity-specific URL
+    if (onNavigateToActivity) {
+      // Find the child that owns this activity
+      const activityWithChild = activity as any;
+      const childUuid = activityWithChild.child_uuid;
+      
+      if (childUuid) {
+        // Find the child object with this UUID
+        const child = children.find(c => c.uuid === childUuid);
+        if (child) {
+          onNavigateToActivity(child, activity);
+          return;
+        }
+      }
+    }
+
+    // Fallback to modal behavior if navigation not available or child not found
     setSelectedActivity(activity);
     setShowActivityDetail(true);
     // Load participants for the activity (if it's a real activity with a UUID)

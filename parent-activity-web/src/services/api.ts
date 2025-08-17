@@ -311,8 +311,8 @@ class ApiService {
     return this.request('post', `/api/activity-invitations/${invitationUuid}/view`);
   }
 
-  async markStatusChangeAsViewed(invitationId: number): Promise<ApiResponse<any>> {
-    return this.request('post', `/api/activity-invitations/${invitationId}/mark-status-viewed`);
+  async markStatusChangeAsViewed(invitationUuid: string): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/activity-invitations/${invitationUuid}/mark-status-viewed`);
   }
 
   async getActivityParticipants(activityId: string): Promise<ApiResponse<any>> {

@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import ApiService from '../services/api';
 import ChildrenScreen from './ChildrenScreen';
 import CalendarScreen from './CalendarScreen';
 import ConnectionsScreen from './ConnectionsScreen';
@@ -10,14 +12,120 @@ import './Dashboard.css';
 
 type Tab = 'children' | 'calendar' | 'connections' | 'profile' | 'admin';
 
-const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState<Tab>('children');
+interface DashboardProps {
+  initialTab?: Tab;
+}
+
+const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams();
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [cameFromActivity, setCameFromActivity] = useState(false);
   const [shouldRestoreActivityCreation, setShouldRestoreActivityCreation] = useState(false);
+  const [navigationKey, setNavigationKey] = useState(0);
+  const [calendarInitialDate, setCalendarInitialDate] = useState<string | undefined>(undefined);
+  const [children, setChildren] = useState<any[]>([]);
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const apiService = ApiService.getInstance();
+
+  // Load children on mount
+  useEffect(() => {
+    const loadChildren = async () => {
+      try {
+        const response = await apiService.getChildren();
+        if (response.success && response.data) {
+          const childrenData = Array.isArray(response.data) 
+            ? response.data 
+            : (response.data as any)?.data || [];
+          setChildren(childrenData);
+        }
+      } catch (error) {
+        console.error('Failed to load children:', error);
+      }
+    };
+    
+    loadChildren();
+  }, []);
+
+  // Get UUIDs from URL params - React Router handles this automatically
+  const activityUuid = params.activityUuid;
+  const childUuid = params.childUuid;
+
+  // Resolve child UUID from URL to internal ID (only when path includes /activities)
+  useEffect(() => {
+    const path = location.pathname;
+    
+    console.log('🔄 Dashboard URL change:', { childUuid, path, childrenCount: children.length });
+    
+    // Only set selectedChildId if we're on a child activities path
+    if (childUuid && children.length > 0 && path.includes('/activities')) {
+      const child = children.find(c => c.uuid === childUuid);
+      if (child) {
+        console.log('✅ Setting selectedChildId:', child.id, 'for UUID:', childUuid);
+        setSelectedChildId(child.id);
+      } else {
+        console.log('❌ Child not found for UUID:', childUuid);
+        setSelectedChildId(null);
+      }
+    } else if (path === '/children') {
+      // Clear selected child when on main children page
+      console.log('🏠 Clearing selectedChildId for main children page');
+      setSelectedChildId(null);
+    } else if (path.includes('/activities') && !childUuid) {
+      // Handle case where we're on activities path but no childUuid
+      console.log('🏠 Clearing selectedChildId - on activities path but no childUuid');
+      setSelectedChildId(null);
+    }
+  }, [childUuid, children, location.pathname]);
+  
+  // Debug URL and params changes
+  useEffect(() => {
+    console.log('🎯 URL/Params changed:', { 
+      pathname: location.pathname, 
+      childUuid: params.childUuid, 
+      activityUuid: params.activityUuid
+    });
+  }, [location.pathname, params.childUuid, params.activityUuid]);
+
+  // Listen for browser navigation events and force component reset
+  useEffect(() => {
+    const handlePopState = () => {
+      console.log('🔙 Browser back/forward navigation detected, forcing component reset');
+      setNavigationKey(prev => prev + 1);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Sync activeTab with URL
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.startsWith('/children')) {
+      setActiveTab('children');
+      // Extract child UUID from URL if present (from /children/:childUuid/activities)
+      const childUuid = params.childUuid;
+      if (childUuid && path.includes('/activities')) {
+        // Find child by UUID and set the ID for internal state
+        // This will be set when children are loaded
+        console.log('Child UUID from URL:', childUuid);
+      } else if (path === '/children') {
+        setSelectedChildId(null);
+      }
+    } else if (path === '/calendar') {
+      setActiveTab('calendar');
+    } else if (path === '/connections') {
+      setActiveTab('connections');
+    } else if (path === '/profile') {
+      setActiveTab('profile');
+    } else if (path === '/admin') {
+      setActiveTab('admin');
+    }
+  }, [location.pathname, params.childUuid]);
 
 
 
@@ -25,49 +133,192 @@ const Dashboard = () => {
     if (tab === 'connections') {
       handleNavigateToConnections();
     } else {
-      setActiveTab(tab);
+      navigate(`/${tab}`);
+      if (tab !== 'calendar') {
+        setCalendarInitialDate(undefined);
+      }
     }
     setMobileMenuOpen(false);
   };
 
   const handleChildSelection = (child: any) => {
-    // Set the selected child ID and ensure we're on the children tab
-    setSelectedChildId(child.id);
-    setActiveTab('children');
+    // Navigate to child-specific URL using UUID
+    const targetURL = `/children/${child.uuid}/activities`;
+    console.log('🔄 Child selection navigation:', targetURL);
+    
+    // Try direct window.location assignment to force browser navigation
+    console.log('🚀 Using window.location.href for child selection navigation');
+    const fullURL = `${window.location.origin}${targetURL}`;
+    window.location.href = fullURL;
+    setCalendarInitialDate(undefined);
   };
 
   const handleNavigateToConnectionsFromActivity = (isInActivityCreation: boolean = false) => {
     setCameFromActivity(true);
     setShouldRestoreActivityCreation(isInActivityCreation);
-    setActiveTab('connections');
+    setCalendarInitialDate(undefined);
+    navigate('/connections');
   };
 
   const handleNavigateToConnections = () => {
     setCameFromActivity(false);
-    setActiveTab('connections');
+    setCalendarInitialDate(undefined);
+    navigate('/connections');
   };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'children':
-        return <ChildrenScreen 
-          onNavigateToCalendar={() => setActiveTab('calendar')} 
-          onNavigateToChildCalendar={(child) => {
-            handleChildSelection(child);
+        return <ChildrenScreen
+          key={`${location.pathname}-${navigationKey}`}
+          onNavigateToCalendar={() => {
+            setCalendarInitialDate(undefined);
+            navigate('/calendar');
+          }} 
+          onNavigateToChildCalendar={(child, activityDate) => {
+            if (activityDate) {
+              setCalendarInitialDate(activityDate);
+            }
+            const targetURL = `/children/${child.uuid}/activities`;
+            console.log('🔄 Navigating to child calendar activities:', targetURL);
+            
+            // Try direct window.location assignment to force browser navigation
+            console.log('🚀 Using window.location.href for child calendar navigation');
+            const fullURL = `${window.location.origin}${targetURL}`;
+            window.location.href = fullURL;
+          }}
+          onNavigateToChildActivities={(child) => {
+            const targetURL = `/children/${child.uuid}/activities`;
+            console.log('🔄 Navigating to child activities:', targetURL);
+            console.log('📚 History before child activities navigation:', {
+              length: window.history.length,
+              currentURL: window.location.href
+            });
+            
+            // Try direct window.location assignment to force browser navigation
+            console.log('🚀 Using window.location.href for navigation');
+            const fullURL = `${window.location.origin}${targetURL}`;
+            window.location.href = fullURL;
+          }}
+          onNavigateToActivity={(child, activity) => {
+            const childActivitiesPath = `/children/${child.uuid}/activities`;
+            const activityPath = `${childActivitiesPath}/${activity.uuid || activity.activity_uuid}`;
+            
+            console.log('🔄 Activity navigation from ChildActivityScreen:', { 
+              currentPath: location.pathname, 
+              childActivitiesPath, 
+              activityPath,
+              historyLength: window.history.length 
+            });
+            
+            // Log current history state before navigation
+            console.log('📚 Browser history before navigation:', {
+              length: window.history.length,
+              state: window.history.state,
+              currentURL: window.location.href
+            });
+            
+            // Force React Router to create a new history entry by using push navigation
+            // This ensures browser back button will work properly
+            navigate(activityPath, { 
+              replace: false,  // Explicitly force push instead of replace
+              state: { 
+                fromPath: location.pathname,
+                parentPath: childActivitiesPath 
+              } 
+            });
+            
+            // Log history after navigation (with slight delay)
+            setTimeout(() => {
+              console.log('📚 Browser history after navigation:', {
+                length: window.history.length,
+                state: window.history.state,
+                currentURL: window.location.href,
+                lengthChange: window.history.length - 50
+              });
+            }, 100);
+          }}
+          onNavigateBack={() => {
+            // Context-aware navigation based on current URL
+            const path = location.pathname;
+            const childUuid = params.childUuid;
+            const activityUuid = params.activityUuid;
+            
+            console.log('🔙 onNavigateBack called:', { path, childUuid, activityUuid });
+            
+            if (activityUuid && childUuid) {
+              // If we're in an activity detail page, go back to child activities
+              console.log('📍 Going back from activity detail to child activities');
+              navigate(`/children/${childUuid}/activities`, { replace: false });
+            } else if (childUuid && path.includes('/activities')) {
+              // If we're in child activities page, go back to main children page
+              console.log('📍 Going back from child activities to main children page');
+              navigate('/children', { replace: false });
+            } else {
+              // Default fallback
+              console.log('📍 Default fallback to main children page');
+              navigate('/children', { replace: false });
+            }
           }}
           initialSelectedChildId={selectedChildId}
-          onChildSelectionChange={setSelectedChildId}
+          initialActivityUuid={activityUuid}
+          onChildSelectionChange={(childId) => {
+            console.log('🔄 Child selection changed:', childId);
+            setSelectedChildId(childId);
+          }}
           onNavigateToConnections={handleNavigateToConnectionsFromActivity}
           shouldRestoreActivityCreation={shouldRestoreActivityCreation}
         />;
       case 'calendar':
-        return <CalendarScreen />;
+        return <CalendarScreen 
+          initialDate={calendarInitialDate}
+          onNavigateToActivity={(child, activity) => {
+            const childActivitiesPath = `/children/${child.uuid}/activities`;
+            const activityUuid = (activity as any).activity_uuid || (activity as any).uuid;
+            const activityPath = `${childActivitiesPath}/${activityUuid}`;
+            
+            console.log('🔄 Activity navigation from Calendar:', { 
+              currentPath: location.pathname, 
+              childActivitiesPath, 
+              activityPath,
+              historyLength: window.history.length 
+            });
+            
+            // CRITICAL: When navigating from calendar to activity, we need to create proper history stack
+            // First push the child activities page, then navigate to the activity detail
+            // This ensures browser back button has somewhere to go back to
+            
+            console.log('📝 Step 1: Navigate to child activities page to create history entry');
+            navigate(childActivitiesPath, { replace: false });
+            
+            // Use setTimeout to ensure the first navigation completes before the second
+            setTimeout(() => {
+              console.log('📝 Step 2: Navigate to activity detail page');
+              navigate(activityPath, { 
+                replace: false,
+                state: { 
+                  fromPath: childActivitiesPath,
+                  parentPath: childActivitiesPath 
+                } 
+              });
+              
+              setTimeout(() => {
+                console.log('📚 Final browser history after two-step navigation:', {
+                  length: window.history.length,
+                  state: window.history.state,
+                  currentURL: window.location.href
+                });
+              }, 50);
+            }, 50);
+          }}
+        />;
       case 'connections':
         return <ConnectionsScreen 
           cameFromActivity={cameFromActivity}
           onReturnToActivity={() => {
             setCameFromActivity(false);
-            setActiveTab('children');
+            setCalendarInitialDate(undefined);
+            navigate('/children');
             // Reset the restore flag after using it
             setTimeout(() => {
               setShouldRestoreActivityCreation(false);
@@ -80,7 +331,10 @@ const Dashboard = () => {
         return isAdmin ? <AdminScreen /> : <div>Access Denied</div>;
       default:
         return <ChildrenScreen 
-          onNavigateToCalendar={() => setActiveTab('calendar')} 
+          onNavigateToCalendar={() => {
+            setCalendarInitialDate(undefined);
+            setActiveTab('calendar');
+          }} 
           onNavigateToConnections={() => setActiveTab('connections')}
         />;
     }
@@ -113,14 +367,20 @@ const Dashboard = () => {
         <nav className="dashboard-nav desktop-nav">
           <button
             className={`nav-item ${activeTab === 'children' ? 'active' : ''}`}
-            onClick={() => setActiveTab('children')}
+            onClick={() => {
+              setCalendarInitialDate(undefined);
+              navigate('/children');
+            }}
           >
             <span className="nav-label">My Children</span>
           </button>
           
           <button
             className={`nav-item ${activeTab === 'calendar' ? 'active' : ''}`}
-            onClick={() => setActiveTab('calendar')}
+            onClick={() => {
+              setCalendarInitialDate(undefined);
+              navigate('/calendar');
+            }}
           >
             <span className="nav-label">Calendar</span>
           </button>
@@ -134,7 +394,10 @@ const Dashboard = () => {
           
           <button
             className={`nav-item ${activeTab === 'profile' ? 'active' : ''}`}
-            onClick={() => setActiveTab('profile')}
+            onClick={() => {
+              setCalendarInitialDate(undefined);
+              navigate('/profile');
+            }}
           >
             <span className="nav-label">Profile</span>
           </button>
@@ -142,7 +405,10 @@ const Dashboard = () => {
           {isAdmin && (
             <button
               className={`nav-item ${activeTab === 'admin' ? 'active' : ''}`}
-              onClick={() => setActiveTab('admin')}
+              onClick={() => {
+                setCalendarInitialDate(undefined);
+                navigate('/admin');
+              }}
             >
               <span className="nav-label">Admin</span>
               <span className="admin-badge">
