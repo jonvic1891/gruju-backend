@@ -1220,9 +1220,7 @@ app.get('/api/auth/verify', authenticateToken, async (req, res) => {
 
         res.json({
             success: true,
-            data: {
-                user: result.rows[0]
-            }
+            user: result.rows[0]
         });
     } catch (error) {
         console.error('Auth verify error:', error);
