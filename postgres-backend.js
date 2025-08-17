@@ -3597,4 +3597,76 @@ app.post('/api/admin/cleanup-pending-invitations', authenticateToken, async (req
     }
 });
 
+// Temporary cleanup endpoint for testing
+app.delete('/api/admin/cleanup-recent-requests', authenticateToken, async (req, res) => {
+    try {
+        console.log('🧹 ADMIN: Cleaning up recent accepted connection requests');
+        
+        const client = await pool.connect();
+        
+        // Find recent accepted connection requests
+        const acceptedRequests = await client.query(`
+            SELECT cr.id, cr.uuid, cr.status, cr.updated_at,
+                   u1.email as requester_email,
+                   u2.email as target_email
+            FROM connection_requests cr
+            LEFT JOIN users u1 ON cr.requester_id = u1.id
+            LEFT JOIN users u2 ON cr.target_parent_id = u2.id
+            WHERE cr.status = 'accepted' 
+            AND cr.updated_at > NOW() - INTERVAL '2 hours'
+            ORDER BY cr.updated_at DESC
+        `);
+        
+        console.log(`Found ${acceptedRequests.rows.length} recent accepted requests`);
+        
+        // Delete them
+        let deletedRequests = 0;
+        for (const req of acceptedRequests.rows) {
+            await client.query('DELETE FROM connection_requests WHERE id = $1', [req.id]);
+            deletedRequests++;
+            console.log(`Deleted request: ${req.requester_email} → ${req.target_email}`);
+        }
+        
+        // Also clean up recent connections
+        const recentConnections = await client.query(`
+            SELECT c.id, c.uuid, c.created_at,
+                   u1.email as parent1_email,
+                   u2.email as parent2_email
+            FROM connections c
+            LEFT JOIN children ch1 ON c.child1_id = ch1.id
+            LEFT JOIN children ch2 ON c.child2_id = ch2.id
+            LEFT JOIN users u1 ON ch1.parent_id = u1.id
+            LEFT JOIN users u2 ON ch2.parent_id = u2.id
+            WHERE c.created_at > NOW() - INTERVAL '2 hours'
+            AND c.status = 'active'
+        `);
+        
+        let deletedConnections = 0;
+        for (const conn of recentConnections.rows) {
+            await client.query('DELETE FROM connections WHERE id = $1', [conn.id]);
+            deletedConnections++;
+            console.log(`Deleted connection: ${conn.parent1_email} ↔ ${conn.parent2_email}`);
+        }
+        
+        client.release();
+        
+        res.json({
+            success: true,
+            message: 'Cleanup completed',
+            deleted: {
+                requests: deletedRequests,
+                connections: deletedConnections
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Cleanup error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to cleanup',
+            details: error.message 
+        });
+    }
+});
+
 startServer();
