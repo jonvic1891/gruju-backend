@@ -2143,10 +2143,28 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
             return res.status(404).json({ success: false, error: 'Child not found' });
         }
 
+        // ✅ SECURITY: Convert UUID to database ID for target parent
+        let targetParentDbId;
+        if (typeof target_parent_id === 'string' && target_parent_id.includes('-')) {
+            // It's a UUID, convert to database ID
+            const parentQuery = await client.query(
+                'SELECT id FROM users WHERE uuid = $1',
+                [target_parent_id]
+            );
+            if (parentQuery.rows.length === 0) {
+                client.release();
+                return res.status(404).json({ success: false, error: 'Target parent not found' });
+            }
+            targetParentDbId = parentQuery.rows[0].id;
+        } else {
+            // It's already a database ID
+            targetParentDbId = target_parent_id;
+        }
+
         // ✅ SECURITY: Only return necessary fields, not RETURNING *
         const result = await client.query(
             'INSERT INTO connection_requests (requester_id, target_parent_id, child_id, target_child_id, message, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING uuid, message, status, created_at',
-            [req.user.id, target_parent_id, child_id, target_child_id, message, 'pending']
+            [req.user.id, targetParentDbId, child_id, target_child_id, message, 'pending']
         );
         
         console.log('✅ Connection request created successfully:', result.rows[0]);
