@@ -2170,6 +2170,10 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
                 // we don't create a connection until a specific child is chosen
                 console.log('❌ Connection request accepted but no specific target child - connection will be created when activity invitation is sent');
                 console.log('❌ AUTO-NOTIFICATION SKIPPED - no target_child_id');
+                
+                // 🔔 PENDING INVITATIONS: Process pending invitations using request UUID
+                console.log('🔍 Checking for pending invitations with request UUID:', req_data.uuid);
+                await processPendingInvitations(client, req_data);
             }
         }
 
@@ -3384,6 +3388,10 @@ async function processAutoNotifications(client, requesterId, targetParentId, req
                     'pending'
                 ]);
                 console.log(`✅ Invitation sent for "${activity.name}"`);
+                
+                // Update the activity's invited_children field
+                await updateActivityInvitedChildren(client, activity.id);
+                
             } catch (inviteError) {
                 console.error(`❌ Failed to send invitation for "${activity.name}":`, inviteError);
             }
@@ -3417,6 +3425,10 @@ async function processAutoNotifications(client, requesterId, targetParentId, req
                     'pending'
                 ]);
                 console.log(`✅ Invitation sent for "${activity.name}"`);
+                
+                // Update the activity's invited_children field
+                await updateActivityInvitedChildren(client, activity.id);
+                
             } catch (inviteError) {
                 console.error(`❌ Failed to send invitation for "${activity.name}":`, inviteError);
             }
@@ -3539,6 +3551,124 @@ async function processAutoNotifications(client, requesterId, targetParentId, req
         console.log('🎉 Bidirectional auto-notifications and pending invitations complete');
     } catch (error) {
         console.error('❌ Auto-notification processing failed:', error);
+    }
+}
+
+// 🔔 PENDING INVITATIONS: Process pending invitations when connection request is accepted
+async function processPendingInvitations(client, connectionRequestData) {
+    console.log('🔍 Processing pending invitations for connection request:', connectionRequestData.uuid);
+    
+    try {
+        // Find all pending invitations that reference this connection request
+        const pendingKey = `pending-${connectionRequestData.uuid}`;
+        console.log('🔍 Looking for pending invitations with key:', pendingKey);
+        
+        const pendingInvitations = await client.query(`
+            SELECT pai.*, a.name as activity_name, a.child_id, a.start_date, a.end_date
+            FROM pending_activity_invitations pai
+            JOIN activities a ON pai.activity_id = a.id
+            WHERE pai.pending_connection_id = $1
+        `, [pendingKey]);
+        
+        console.log(`📋 Found ${pendingInvitations.rows.length} pending invitations to process`);
+        
+        if (pendingInvitations.rows.length === 0) {
+            console.log('❌ No pending invitations found for this connection request');
+            return;
+        }
+        
+        // Get the requester and target parent details
+        const { requester_id, target_parent_id, child_uuid, target_child_uuid } = connectionRequestData;
+        
+        // Get target child ID if not specified
+        let targetChildId = null;
+        if (target_child_uuid) {
+            const targetChildQuery = await client.query('SELECT id FROM children WHERE uuid = $1', [target_child_uuid]);
+            if (targetChildQuery.rows.length > 0) {
+                targetChildId = targetChildQuery.rows[0].id;
+            }
+        } else {
+            // Get the first child of the target parent (default behavior)
+            const targetChildrenQuery = await client.query('SELECT id FROM children WHERE parent_id = $1 ORDER BY id LIMIT 1', [target_parent_id]);
+            if (targetChildrenQuery.rows.length > 0) {
+                targetChildId = targetChildrenQuery.rows[0].id;
+                console.log('📝 Using default target child ID:', targetChildId);
+            }
+        }
+        
+        if (!targetChildId) {
+            console.log('❌ No target child found for pending invitations');
+            return;
+        }
+        
+        // Process each pending invitation
+        for (const pending of pendingInvitations.rows) {
+            try {
+                console.log(`📧 Converting pending invitation to actual invitation for activity: ${pending.activity_name}`);
+                
+                // Create the actual activity invitation
+                await client.query(`
+                    INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (activity_id, invited_parent_id) DO NOTHING
+                `, [
+                    pending.activity_id,
+                    requester_id,
+                    target_parent_id,
+                    targetChildId,
+                    `You're invited to join: ${pending.activity_name}`,
+                    'pending'
+                ]);
+                
+                console.log(`✅ Created invitation for "${pending.activity_name}"`);
+                
+                // Update the activity's invited_children field
+                await updateActivityInvitedChildren(client, pending.activity_id);
+                
+            } catch (error) {
+                console.error(`❌ Failed to process pending invitation for activity ${pending.activity_name}:`, error);
+            }
+        }
+        
+        // Remove the processed pending invitations
+        await client.query('DELETE FROM pending_activity_invitations WHERE pending_connection_id = $1', [pendingKey]);
+        console.log(`🗑️ Removed ${pendingInvitations.rows.length} processed pending invitations`);
+        
+    } catch (error) {
+        console.error('❌ Pending invitations processing failed:', error);
+    }
+}
+
+// 🔄 UPDATE ACTIVITY INVITED CHILDREN: Update activity's invited_children field when invitations are sent
+async function updateActivityInvitedChildren(client, activityId) {
+    try {
+        // Get all current invitations for this activity
+        const invitations = await client.query(`
+            SELECT ai.invited_child_id, c.name as child_name, c.uuid as child_uuid, ai.status
+            FROM activity_invitations ai
+            JOIN children c ON ai.invited_child_id = c.id
+            WHERE ai.activity_id = $1
+        `, [activityId]);
+        
+        // Build the invited_children array
+        const invitedChildren = invitations.rows.map(inv => ({
+            child_id: inv.invited_child_id,
+            child_name: inv.child_name,
+            child_uuid: inv.child_uuid,
+            status: inv.status
+        }));
+        
+        // Update the activity's invited_children field
+        await client.query(`
+            UPDATE activities 
+            SET invited_children = $1 
+            WHERE id = $2
+        `, [JSON.stringify(invitedChildren), activityId]);
+        
+        console.log(`✅ Updated invited_children for activity ${activityId} with ${invitedChildren.length} children`);
+        
+    } catch (error) {
+        console.error('❌ Failed to update activity invited_children:', error);
     }
 }
 
