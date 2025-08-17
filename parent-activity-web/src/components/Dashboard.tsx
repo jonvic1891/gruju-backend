@@ -25,7 +25,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [cameFromActivity, setCameFromActivity] = useState(false);
   const [shouldRestoreActivityCreation, setShouldRestoreActivityCreation] = useState(false);
-  const [navigationKey, setNavigationKey] = useState(0);
+  // Removed navigationKey - no longer needed since we removed popstate handler
   const [calendarInitialDate, setCalendarInitialDate] = useState<string | undefined>(undefined);
   const [children, setChildren] = useState<any[]>([]);
   const { user } = useAuth();
@@ -92,15 +92,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   }, [location.pathname, params.childUuid, params.activityUuid]);
 
   // Listen for browser navigation events and force component reset
-  useEffect(() => {
-    const handlePopState = () => {
-      console.log('🔙 Browser back/forward navigation detected, forcing component reset');
-      setNavigationKey(prev => prev + 1);
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  // Removed popstate handler - let React Router handle browser navigation naturally
 
   // Sync activeTab with URL
   useEffect(() => {
@@ -170,7 +162,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
     switch (activeTab) {
       case 'children':
         return <ChildrenScreen
-          key={`${location.pathname}-${navigationKey}`}
+          key={location.pathname}
           onNavigateToCalendar={() => {
             setCalendarInitialDate(undefined);
             navigate('/calendar');
