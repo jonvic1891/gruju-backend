@@ -1220,7 +1220,9 @@ app.get('/api/auth/verify', authenticateToken, async (req, res) => {
 
         res.json({
             success: true,
-            data: result.rows[0]
+            data: {
+                user: result.rows[0]
+            }
         });
     } catch (error) {
         console.error('Auth verify error:', error);
@@ -3008,7 +3010,7 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
         const status = action === 'accept' ? 'accepted' : 'rejected';
         
         await client.query(
-            'UPDATE activity_invitations SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE uuid = $2',
+            'UPDATE activity_invitations SET status = $1, updated_at = CURRENT_TIMESTAMP, status_viewed_at = NULL WHERE uuid = $2',
             [status, invitationUuid]
         );
 
@@ -3219,6 +3221,7 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
                    ai.created_at as invited_at,
                    ai.updated_at as responded_at,
                    ai.viewed_at,
+                   ai.status_viewed_at,
                    u.username as parent_name,
                    c_invited.name as child_name,
                    c_invited.uuid as child_uuid,
