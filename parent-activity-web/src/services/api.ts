@@ -242,7 +242,7 @@ class ApiService {
     return this.request('get', '/api/connections');
   }
 
-  async deleteConnection(connectionId: number): Promise<ApiResponse<any>> {
+  async deleteConnection(connectionId: string): Promise<ApiResponse<any>> {
     // Try different possible endpoint patterns
     try {
       // First try the standard delete pattern

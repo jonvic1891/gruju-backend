@@ -371,6 +371,55 @@ async function runMigrations() {
         } catch (error) {
             console.log('ℹ️ Migration 14: Parent UUID conversion issue:', error.message);
         }
+
+        // Migration 15: Convert connection_requests to use child UUIDs instead of IDs
+        try {
+            console.log('🔄 Migration 15: Converting connection_requests to use child UUIDs...');
+            
+            // Add UUID columns to connection_requests table
+            await client.query(`
+                ALTER TABLE connection_requests 
+                ADD COLUMN IF NOT EXISTS child_uuid UUID,
+                ADD COLUMN IF NOT EXISTS target_child_uuid UUID
+            `);
+            
+            // Migrate existing data from child_id to child_uuid
+            await client.query(`
+                UPDATE connection_requests cr
+                SET child_uuid = c.uuid
+                FROM children c
+                WHERE cr.child_id = c.id AND cr.child_uuid IS NULL
+            `);
+            
+            // Migrate existing data from target_child_id to target_child_uuid (only if target_child_id is not null)
+            await client.query(`
+                UPDATE connection_requests cr
+                SET target_child_uuid = c.uuid
+                FROM children c
+                WHERE cr.target_child_id = c.id AND cr.target_child_uuid IS NULL
+            `);
+            
+            // Verify migration
+            const migratedRequests = await client.query(`
+                SELECT COUNT(*) as total,
+                       COUNT(child_uuid) as with_child_uuid,
+                       COUNT(target_child_uuid) as with_target_child_uuid
+                FROM connection_requests
+            `);
+            
+            console.log('📋 Connection requests migration stats:', migratedRequests.rows[0]);
+            
+            // Now drop the old child_id and target_child_id columns
+            await client.query(`
+                ALTER TABLE connection_requests 
+                DROP COLUMN IF EXISTS child_id,
+                DROP COLUMN IF EXISTS target_child_id
+            `);
+            
+            console.log('✅ Migration 15: Converted connection_requests to use UUIDs and removed old ID columns');
+        } catch (error) {
+            console.log('ℹ️ Migration 15: Connection requests UUID conversion issue:', error.message);
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -748,25 +797,26 @@ async function insertDemoConnections(client) {
         }
     ];
 
-    for (const request of demoConnectionRequests) {
-        if (request.requester_id && request.target_parent_id && request.child_id && request.target_child_id) {
-            const requestExists = await client.query(`
-                SELECT id FROM connection_requests 
-                WHERE requester_id = $1 AND target_parent_id = $2 AND child_id = $3 AND target_child_id = $4
-            `, [request.requester_id, request.target_parent_id, request.child_id, request.target_child_id]);
-            
-            if (requestExists.rows.length === 0) {
-                try {
-                    await client.query(`
-                        INSERT INTO connection_requests (requester_id, target_parent_id, child_id, target_child_id, status, message)
-                        VALUES ($1, $2, $3, $4, $5, $6)
-                    `, [request.requester_id, request.target_parent_id, request.child_id, request.target_child_id, request.status, request.message]);
-                    console.log(`✅ Created original demo connection request`);
-                } catch (error) {
-                    console.error(`Error creating connection request:`, error.message);
-                }
-            }
-        }
+    // DISABLED: Demo connection requests use old child_id format
+    // for (const request of demoConnectionRequests) {
+    //     if (request.requester_id && request.target_parent_id && request.child_id && request.target_child_id) {
+    //         const requestExists = await client.query(`
+    //             SELECT id FROM connection_requests 
+    //             WHERE requester_id = $1 AND target_parent_id = $2 AND child_id = $3 AND target_child_id = $4
+    //         `, [request.requester_id, request.target_parent_id, request.child_id, request.target_child_id]);
+    //         
+    //         if (requestExists.rows.length === 0) {
+    //             try {
+    //                 await client.query(`
+    //                     INSERT INTO connection_requests (requester_id, target_parent_id, child_id, target_child_id, status, message)
+    //                     VALUES ($1, $2, $3, $4, $5, $6)
+    //                 `, [request.requester_id, request.target_parent_id, request.child_id, request.target_child_id, request.status, request.message]);
+    //                 console.log(`✅ Created original demo connection request`);
+    //             } catch (error) {
+    //                 console.error(`Error creating connection request:`, error.message);
+    //             }
+    //         }
+    //     }
     }
 
     // Add more connections so families can invite each other
@@ -1978,8 +2028,8 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
                     c2.grade as target_child_grade
              FROM connection_requests cr
              JOIN users u ON cr.requester_id = u.id
-             LEFT JOIN children c1 ON cr.child_id = c1.id
-             LEFT JOIN children c2 ON cr.target_child_id = c2.id
+             LEFT JOIN children c1 ON cr.child_uuid = c1.uuid
+             LEFT JOIN children c2 ON cr.target_child_uuid = c2.uuid
              WHERE cr.target_parent_id = $1 AND cr.status = 'pending'
              ORDER BY cr.created_at DESC`,
             [req.user.id]
@@ -2043,8 +2093,8 @@ app.get('/api/connections/sent-requests', authenticateToken, async (req, res) =>
                     c2.grade as target_child_grade
              FROM connection_requests cr
              JOIN users u ON cr.target_parent_id = u.id
-             JOIN children c1 ON cr.child_id = c1.id
-             LEFT JOIN children c2 ON cr.target_child_id = c2.id
+             JOIN children c1 ON cr.child_uuid = c1.uuid
+             LEFT JOIN children c2 ON cr.target_child_uuid = c2.uuid
              WHERE cr.requester_id = $1 AND cr.status = 'pending'
              ORDER BY cr.created_at DESC`,
             [req.user.id]
@@ -2124,9 +2174,9 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
             body: req.body
         });
         
-        const { target_parent_id, child_id, target_child_id, message } = req.body;
+        const { target_parent_id, child_uuid, target_child_uuid, message } = req.body;
 
-        if (!target_parent_id || !child_id) {
+        if (!target_parent_id || !child_uuid) {
             return res.status(400).json({ success: false, error: 'Target parent and child are required' });
         }
 
@@ -2134,8 +2184,8 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
         
         // Verify the child belongs to this user
         const child = await client.query(
-            'SELECT id FROM children WHERE id = $1 AND parent_id = $2',
-            [child_id, req.user.id]
+            'SELECT uuid FROM children WHERE uuid = $1 AND parent_id = $2',
+            [child_uuid, req.user.id]
         );
 
         if (child.rows.length === 0) {
@@ -2161,10 +2211,22 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
             targetParentDbId = target_parent_id;
         }
 
+        // Verify target child exists if provided
+        if (target_child_uuid) {
+            const targetChildQuery = await client.query(
+                'SELECT uuid FROM children WHERE uuid = $1 AND parent_id = $2',
+                [target_child_uuid, targetParentDbId]
+            );
+            if (targetChildQuery.rows.length === 0) {
+                client.release();
+                return res.status(404).json({ success: false, error: 'Target child not found' });
+            }
+        }
+
         // ✅ SECURITY: Only return necessary fields, not RETURNING *
         const result = await client.query(
-            'INSERT INTO connection_requests (requester_id, target_parent_id, child_id, target_child_id, message, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING uuid, message, status, created_at',
-            [req.user.id, targetParentDbId, child_id, target_child_id, message, 'pending']
+            'INSERT INTO connection_requests (requester_id, target_parent_id, child_uuid, target_child_uuid, message, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING uuid, message, status, created_at',
+            [req.user.id, targetParentDbId, child_uuid, target_child_uuid, message, 'pending']
         );
         
         console.log('✅ Connection request created successfully:', result.rows[0]);
@@ -2186,8 +2248,8 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
              FROM connection_requests cr
              JOIN users u_req ON cr.requester_id = u_req.id
              JOIN users u_target ON cr.target_parent_id = u_target.id
-             JOIN children c1 ON cr.child_id = c1.id
-             LEFT JOIN children c2 ON cr.target_child_id = c2.id
+             JOIN children c1 ON cr.child_uuid = c1.uuid
+             LEFT JOIN children c2 ON cr.target_child_uuid = c2.uuid
              WHERE cr.id = $1`,
             [result.rows[0].id]
         );
@@ -2261,19 +2323,27 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
         if (action === 'accept') {
             const req_data = request.rows[0];
             console.log('🤝 Creating connection for accepted request:', req_data);
-            console.log('🔍 DEBUGGING v2 - Auto-notification check - target_child_id:', req_data.target_child_id);
+            console.log('🔍 DEBUGGING v2 - Auto-notification check - target_child_uuid:', req_data.target_child_uuid);
             
-            if (req_data.target_child_id) {
-                const connectionResult = await client.query(
-                    'INSERT INTO connections (child1_id, child2_id, status) VALUES ($1, $2, $3)',
-                    [req_data.child_id, req_data.target_child_id, 'active']
-                );
-                console.log('🔗 Connection created:', connectionResult);
+            if (req_data.target_child_uuid) {
+                // Convert UUIDs to database IDs for the connections table
+                const child1Query = await client.query('SELECT id FROM children WHERE uuid = $1', [req_data.child_uuid]);
+                const child2Query = await client.query('SELECT id FROM children WHERE uuid = $1', [req_data.target_child_uuid]);
                 
-                // 🔔 AUTO-NOTIFICATION: Send auto-notify activities from both users to each other
-                console.log('🔔 STARTING auto-notification processing...');
-                await processAutoNotifications(client, req_data.requester_id, req_data.target_parent_id, req_data.child_id, req_data.target_child_id);
-                console.log('🔔 COMPLETED auto-notification processing');
+                if (child1Query.rows.length > 0 && child2Query.rows.length > 0) {
+                    const connectionResult = await client.query(
+                        'INSERT INTO connections (child1_id, child2_id, status) VALUES ($1, $2, $3)',
+                        [child1Query.rows[0].id, child2Query.rows[0].id, 'active']
+                    );
+                    console.log('🔗 Connection created:', connectionResult);
+                    
+                    // 🔔 AUTO-NOTIFICATION: Send auto-notify activities from both users to each other
+                    console.log('🔔 STARTING auto-notification processing...');
+                    await processAutoNotifications(client, req_data.requester_id, req_data.target_parent_id, child1Query.rows[0].id, child2Query.rows[0].id);
+                    console.log('🔔 COMPLETED auto-notification processing');
+                } else {
+                    console.error('❌ Could not find child IDs for UUIDs:', req_data.child_uuid, req_data.target_child_uuid);
+                }
             } else {
                 // For general connection requests without specific target child,
                 // we don't create a connection until a specific child is chosen

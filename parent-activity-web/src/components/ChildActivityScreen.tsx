@@ -10,7 +10,7 @@ interface ChildActivityScreenProps {
   child: Child;
   onBack: () => void;
   onDataChanged?: () => void;
-  onNavigateToConnections?: () => void;
+  onNavigateToConnections?: (isInActivityCreation?: boolean) => void;
   onNavigateToActivity?: (child: Child, activity: any) => void;
   initialActivityUuid?: string;
   shouldRestoreActivityCreation?: boolean;
@@ -126,7 +126,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const handleNavigateToConnections = () => {
     if (onNavigateToConnections) {
       saveActivityDraft();
-      onNavigateToConnections();
+      onNavigateToConnections(true); // Pass true to indicate this is from activity creation
     }
   };
 
@@ -1325,6 +1325,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       console.log('📄 Page set to:', page);
       // Push new state to history
       window.history.pushState({ page }, '', window.location.href);
+      
+      // Scroll to top when navigating between pages
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       console.log('⚠️ Page navigation skipped - already on:', page);
     }
@@ -1333,6 +1336,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const goBack = () => {
     // Always use logical navigation back to the page they came from
     // This goes back to the main child activities page, not browser history
+    
+    // Scroll to top before navigating back
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
     if (onBack) {
       onBack();
     } else {
@@ -1389,18 +1396,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             {/* Activity Details Form - Always Editable for Host */}
             <div className="activity-details-form">
               
-              {/* Activity Calendar Display - Always show the activity date */}
-              {selectedActivity.start_date && (
-                <div className="date-selection-section">
-                  <label className="section-label">Activity Date</label>
-                  <p className="section-description">This activity is scheduled for the highlighted date.</p>
-                  <CalendarDatePicker
-                    selectedDates={[selectedActivity.start_date.split('T')[0]]}
-                    onChange={() => {}} // Read-only for viewing
-                  />
-                </div>
-              )}
-              
               <div className="form-row">
                 <label><strong>Activity Name:</strong></label>
                 {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
@@ -1430,7 +1425,18 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   <span className="readonly-value">{selectedActivity.description || 'No description'}</span>
                 )}
               </div>
-
+              
+              {/* Activity Calendar Display - Always show the activity date */}
+              {selectedActivity.start_date && (
+                <div className="date-selection-section">
+                  <label className="section-label">Activity Date</label>
+                  <p className="section-description">This activity is scheduled for the highlighted date.</p>
+                  <CalendarDatePicker
+                    selectedDates={[selectedActivity.start_date.split('T')[0]]}
+                    onChange={() => {}} // Read-only for viewing
+                  />
+                </div>
+              )}
 
               <div className="form-row-group">
                 <div className="form-row">
@@ -1590,40 +1596,41 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             
             {/* Show uninvited connected children for host activities */}
             {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation && (
-              <div className="uninvited-children-section">
-                <div className="detail-item">
-                  <strong>Invite More Children:</strong>
-                  {loadingParticipants ? (
-                    <p>Loading connections...</p>
-                  ) : connectedChildren.length > 0 ? (
-                    <div className="uninvited-children-list">
-                      {connectedChildren
-                        .filter(child => !activityParticipants?.participants?.some((p: any) => p.child_uuid === child.id && p.child_name && p.child_uuid))
-                        .map((child: any, index: number) => (
-                          <div key={index} className="uninvited-child-item">
-                            <div className="participant-info">
-                              <span className="child-name">👤 {child.name}</span>
-                            </div>
-                            <button
-                              onClick={() => handleInviteSpecificChild(selectedActivity, child)}
-                              className="invite-child-btn"
-                            >
-                              📩 Invite
-                            </button>
-                          </div>
-                        ))}
-                      {connectedChildren.filter(child => !activityParticipants?.participants?.some((p: any) => p.child_uuid === child.id && p.child_name && p.child_uuid)).length === 0 && (
-                        <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
-                          All connected children have already been invited
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
-                      No connected children found. Connect with other families first to invite their children.
-                    </p>
-                  )}
+              <div className="connected-children-section">
+                <div className="children-selection-header">
+                  <label>Invite More Children:</label>
                 </div>
+                {loadingParticipants ? (
+                  <p>Loading connections...</p>
+                ) : connectedChildren.length > 0 ? (
+                  <div className="children-list">
+                    {connectedChildren
+                      .filter(child => !activityParticipants?.participants?.some((p: any) => p.child_uuid === child.id && p.child_name && p.child_uuid))
+                      .map((child: any, index: number) => (
+                        <div key={index} className="child-item">
+                          <div className="child-info">
+                            <span className="child-name">👤 {child.name}</span>
+                            <span className="child-details">{child.family_name} family</span>
+                          </div>
+                          <button
+                            onClick={() => handleInviteSpecificChild(selectedActivity, child)}
+                            className="invite-btn"
+                          >
+                            📩 Invite
+                          </button>
+                        </div>
+                      ))}
+                    {connectedChildren.filter(child => !activityParticipants?.participants?.some((p: any) => p.child_uuid === child.id && p.child_name && p.child_uuid)).length === 0 && (
+                      <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                        All connected children have already been invited
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                    No connected children found. Connect with other families first to invite their children.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -1975,7 +1982,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                               }
                             }}
                           />
-                          ⏳ {request.target_child_name} - <em style={{ fontSize: '12px' }}>pending connection</em>
+                          ⏳ {request.target_child_name || `${request.target_parent_name || request.target_family_name || 'Unknown Parent'} (Any Child)`} - <em style={{ fontSize: '12px' }}>pending connection</em>
                         </label>
                       ))}
                       

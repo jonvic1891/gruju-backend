@@ -25,6 +25,8 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [cameFromActivity, setCameFromActivity] = useState(false);
   const [shouldRestoreActivityCreation, setShouldRestoreActivityCreation] = useState(false);
+  const [activityCreationChildUuid, setActivityCreationChildUuid] = useState<string | null>(null);
+  const [activityCreationActivityUuid, setActivityCreationActivityUuid] = useState<string | null>(null);
   // Removed navigationKey - no longer needed since we removed popstate handler
   const [calendarInitialDate, setCalendarInitialDate] = useState<string | undefined>(undefined);
   const [children, setChildren] = useState<any[]>([]);
@@ -91,8 +93,8 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
     });
   }, [location.pathname, params.childUuid, params.activityUuid]);
 
-  // Listen for browser navigation events and force component reset
-  // Removed popstate handler - let React Router handle browser navigation naturally
+  // Removed all navigation detection and component reset logic
+  // Let React Router handle all navigation naturally
 
   // Sync activeTab with URL
   useEffect(() => {
@@ -138,10 +140,11 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
     const targetURL = `/children/${child.uuid}/activities`;
     console.log('🔄 Child selection navigation:', targetURL);
     
-    // Try direct window.location assignment to force browser navigation
-    console.log('🚀 Using window.location.href for child selection navigation');
-    const fullURL = `${window.location.origin}${targetURL}`;
-    window.location.href = fullURL;
+    // Use React Router navigate with replace: false to create history entry
+    navigate(targetURL, { 
+      replace: false,
+      state: { fromPath: '/children' }
+    });
     setCalendarInitialDate(undefined);
   };
 
@@ -149,7 +152,14 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
     setCameFromActivity(true);
     setShouldRestoreActivityCreation(isInActivityCreation);
     setCalendarInitialDate(undefined);
-    navigate('/connections');
+    // Store current child UUID and activity UUID when navigating to connections from activity creation
+    if (isInActivityCreation && childUuid) {
+      setActivityCreationChildUuid(childUuid);
+      if (activityUuid) {
+        setActivityCreationActivityUuid(activityUuid);
+      }
+    }
+    setActiveTab('connections'); // Use activeTab instead of navigate
   };
 
   const handleNavigateToConnections = () => {
@@ -162,7 +172,6 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
     switch (activeTab) {
       case 'children':
         return <ChildrenScreen
-          key={location.pathname}
           onNavigateToCalendar={() => {
             setCalendarInitialDate(undefined);
             navigate('/calendar');
@@ -174,10 +183,11 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
             const targetURL = `/children/${child.uuid}/activities`;
             console.log('🔄 Navigating to child calendar activities:', targetURL);
             
-            // Try direct window.location assignment to force browser navigation
-            console.log('🚀 Using window.location.href for child calendar navigation');
-            const fullURL = `${window.location.origin}${targetURL}`;
-            window.location.href = fullURL;
+            // Use React Router navigate with replace: false to create history entry
+            navigate(targetURL, { 
+              replace: false,
+              state: { fromPath: '/children' }
+            });
           }}
           onNavigateToChildActivities={(child) => {
             const targetURL = `/children/${child.uuid}/activities`;
@@ -187,10 +197,11 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
               currentURL: window.location.href
             });
             
-            // Try direct window.location assignment to force browser navigation
-            console.log('🚀 Using window.location.href for navigation');
-            const fullURL = `${window.location.origin}${targetURL}`;
-            window.location.href = fullURL;
+            // Use React Router navigate with replace: false to create history entry
+            navigate(targetURL, { 
+              replace: false,
+              state: { fromPath: '/children' }
+            });
           }}
           onNavigateToActivity={(child, activity) => {
             const childActivitiesPath = `/children/${child.uuid}/activities`;
@@ -310,11 +321,20 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
           onReturnToActivity={() => {
             setCameFromActivity(false);
             setCalendarInitialDate(undefined);
-            navigate('/children');
-            // Reset the restore flag after using it
-            setTimeout(() => {
-              setShouldRestoreActivityCreation(false);
-            }, 200);
+            // Navigate back to the specific activity being created
+            if (activityCreationChildUuid && activityCreationActivityUuid) {
+              navigate(`/children/${activityCreationChildUuid}/activities/${activityCreationActivityUuid}`, { replace: false });
+              setActivityCreationChildUuid(null); // Clear after use
+              setActivityCreationActivityUuid(null); // Clear after use
+            } else if (activityCreationChildUuid) {
+              // Fallback to child activities list if no specific activity UUID
+              navigate(`/children/${activityCreationChildUuid}/activities`, { replace: false });
+              setActivityCreationChildUuid(null); // Clear after use
+            } else {
+              setActiveTab('children'); // Fallback to main children page
+            }
+            // Keep shouldRestoreActivityCreation true so the draft is restored
+            // It will be reset automatically after restoration
           }}
         />;
       case 'profile':

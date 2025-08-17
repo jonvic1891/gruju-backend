@@ -276,7 +276,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
     setShowConnectModal(true);
   };
 
-  const handleRemoveConnection = async (connectionId: number, connectionDescription: string) => {
+  const handleRemoveConnection = async (connectionId: string, connectionDescription: string) => {
     if (window.confirm(`Are you sure you want to remove this connection? ${connectionDescription}\n\nNote: If this fails, you can also test auto-notifications by creating a new test user account.`)) {
       try {
         console.log('🔄 Attempting to remove connection:', connectionId);
@@ -284,7 +284,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
         console.log('📋 Delete connection response:', response);
         
         if (response.success) {
-          setActiveConnections(prev => prev.filter(conn => conn.id !== connectionId));
+          setActiveConnections(prev => prev.filter(conn => conn.connection_uuid !== connectionId));
           alert('Connection removed successfully');
         } else {
           alert(`Error: ${response.error || 'Failed to remove connection'}\n\nAlternative: You can test auto-notifications by:\n1. Creating a new test account\n2. Or having the other user send you a new connection request`);
@@ -302,13 +302,28 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
       return;
     }
 
+    console.log('🔍 Connection request debug:', {
+      selectedParent,
+      selectedMyChild,
+      selectedTargetChild,
+      connectionMessage: connectionMessage.trim()
+    });
+
+    // Find the child objects to get their UUIDs
+    const myChildObj = myChildren.find(child => child.id === selectedMyChild);
+    const targetChildObj = selectedTargetChild ? selectedParent.children.find(child => child.id === selectedTargetChild) : null;
+
+    const requestData = {
+      target_parent_id: selectedParent.user_uuid || selectedParent.id,
+      child_uuid: myChildObj?.uuid || myChildObj?.id,
+      target_child_uuid: targetChildObj?.uuid || targetChildObj?.id || undefined,
+      message: connectionMessage.trim() || undefined,
+    };
+
+    console.log('📤 Sending connection request with data:', requestData);
+
     try {
-      const response = await apiService.sendConnectionRequest({
-        target_parent_id: selectedParent.id,
-        child_id: selectedMyChild,
-        target_child_id: selectedTargetChild || undefined,
-        message: connectionMessage.trim() || undefined,
-      });
+      const response = await apiService.sendConnectionRequest(requestData);
 
       if (response.success) {
         setShowConnectModal(false);
@@ -470,7 +485,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
                         {request.target_child_name ? (
                           <strong>{request.target_child_name}</strong>
                         ) : (
-                          <span>Request sent to <strong>{request.target_parent_name}</strong></span>
+                          <span>Request sent to <strong>{request.target_parent_name || request.target_family_name}</strong> (Any Child)</span>
                         )}
                       </span>
                     </div>
@@ -516,6 +531,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
                   };
                 }
                 
+                console.log('🔍 Processing connection for deletion:', { connectionId: connection.connection_uuid, connection });
                 grouped[myChild.id].connections.push({
                   ...connection,
                   connectedToName: theirChild.name
@@ -531,10 +547,13 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
                     <div key={connection.id} className="connection-item">
                       <span className="connected-to"><strong>{connection.connectedToName}</strong></span>
                       <button
-                        onClick={() => handleRemoveConnection(
-                          connection.id,
-                          `${childGroup.childName} ↔ ${connection.connectedToName}`
-                        )}
+                        onClick={() => {
+                          console.log('🗑️ Delete button clicked:', { connectionId: connection.connection_uuid, connection });
+                          handleRemoveConnection(
+                            connection.connection_uuid,
+                            `${childGroup.childName} ↔ ${connection.connectedToName}`
+                          );
+                        }}
                         className="remove-connection-btn"
                         title="Remove this connection"
                       >

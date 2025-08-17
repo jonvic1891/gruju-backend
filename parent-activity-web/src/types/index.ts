@@ -165,9 +165,11 @@ export interface AuthResponse {
 }
 
 export interface SearchResult {
-  id: number;
+  id?: number;
+  user_uuid?: string;
   username: string;
-  email: string;
-  phone: string;
+  email?: string;
+  phone?: string;
+  family_name?: string;
   children: Child[];
 }
