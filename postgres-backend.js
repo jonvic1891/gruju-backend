@@ -2135,7 +2135,7 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
         
         const updateResult = await client.query(
             'UPDATE connection_requests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-            [status, requestId]
+            [status, request.rows[0].id]
         );
         
         console.log('✅ Update result:', updateResult);
