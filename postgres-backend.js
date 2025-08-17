@@ -1826,12 +1826,12 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
         );
         console.log(`📋 All connection requests for user ${req.user.id}:`, allRequestsResult.rows);
         
-        // Check for any requests with NULL child_id
+        // Check for any requests with NULL child_uuid
         const nullChildRequests = await client.query(
-            `SELECT * FROM connection_requests WHERE target_parent_id = $1 AND child_id IS NULL`,
+            `SELECT * FROM connection_requests WHERE target_parent_id = $1 AND child_uuid IS NULL`,
             [req.user.id]
         );
-        console.log(`⚠️ Requests with NULL child_id:`, nullChildRequests.rows);
+        console.log(`⚠️ Requests with NULL child_uuid:`, nullChildRequests.rows);
         
         // ✅ SECURITY: Only return necessary fields, NO email/phone/address exposure
         const result = await client.query(
