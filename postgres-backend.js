@@ -2485,7 +2485,7 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
                      VALUES ($1, $2) 
                      ON CONFLICT (activity_id, pending_connection_id) DO NOTHING
                      RETURNING uuid`,
-                    [activityId, pendingConnectionId]
+                    [activity.id, pendingConnectionId]
                 );
                 
                 if (result.rows.length > 0) {
