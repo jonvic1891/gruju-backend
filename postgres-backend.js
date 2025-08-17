@@ -632,7 +632,7 @@ async function createTables(client) {
         await insertDemoActivities(client);
         
         // Insert demo connections if they don't exist
-        await insertDemoConnections(client);
+        // TEMPORARILY DISABLED: await insertDemoConnections(client);
 
         console.log('✅ Database tables created successfully');
     } catch (error) {
