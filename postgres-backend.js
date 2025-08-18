@@ -3576,8 +3576,15 @@ async function processPendingInvitations(client, connectionRequestData) {
     console.log('🔍 Processing pending invitations for connection request:', connectionRequestData.uuid);
     
     try {
-        // Find all pending invitations that reference this connection request
-        const pendingKey = `pending-${connectionRequestData.uuid}`;
+        // Get the target parent UUID to build the correct pending key
+        const targetParentQuery = await client.query('SELECT uuid FROM users WHERE id = $1', [connectionRequestData.target_parent_id]);
+        if (targetParentQuery.rows.length === 0) {
+            console.log('❌ Target parent not found for ID:', connectionRequestData.target_parent_id);
+            return;
+        }
+        
+        const targetParentUuid = targetParentQuery.rows[0].uuid;
+        const pendingKey = `pending-${targetParentUuid}`;
         console.log('🔍 Looking for pending invitations with key:', pendingKey);
         
         const pendingInvitations = await client.query(`
