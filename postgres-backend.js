@@ -2516,9 +2516,9 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
         if (insertedRecords.length > 0) {
             await client.query(
                 'UPDATE activities SET is_shared = true WHERE id = $1',
-                [activityId]
+                [activity.id]
             );
-            console.log(`📝 Marked activity ${activityId} as shared (has pending invitations)`);
+            console.log(`📝 Marked activity ${activity.id} as shared (has pending invitations)`);
         }
 
         client.release();
