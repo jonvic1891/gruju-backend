@@ -2484,6 +2484,12 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
         const insertedRecords = [];
         for (const pendingConnectionId of pending_connections) {
             try {
+                console.log('🔍 Inserting pending invitation:', {
+                    activity_id: activity.id,
+                    pending_connection_id: pendingConnectionId,
+                    pending_connection_type: typeof pendingConnectionId
+                });
+                
                 const result = await client.query(
                     `INSERT INTO pending_activity_invitations (activity_id, pending_connection_id) 
                      VALUES ($1, $2) 
@@ -2491,6 +2497,12 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
                      RETURNING uuid`,
                     [activity.id, pendingConnectionId]
                 );
+                
+                console.log('📊 Insert result:', {
+                    rowCount: result.rowCount,
+                    rows: result.rows.length,
+                    returnedUuid: result.rows[0]?.uuid
+                });
                 
                 if (result.rows.length > 0) {
                     insertedRecords.push({ uuid: result.rows[0].uuid, pending_connection_id: pendingConnectionId });
