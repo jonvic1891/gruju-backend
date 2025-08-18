@@ -1457,13 +1457,28 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
             
             const result = await client.query(query, [childId, req.user.id]);
             
-            // Process activities to add proper invitation status
-            const activities = result.rows.map(activity => ({
-                ...activity,
-                invitation_status: activity.invitation_status || 'none',
-                is_shared: activity.is_shared, // Use the value from the query
-                is_host: activity.is_host, // Use the value from the query
-                is_cancelled: false
+            // Process activities to add proper invitation status and pending connections
+            const activities = await Promise.all(result.rows.map(async (activity) => {
+                // Get pending connections for this activity
+                const pendingQuery = `
+                    SELECT pending_connection_key
+                    FROM pending_activity_invitations 
+                    WHERE activity_id = (
+                        SELECT id FROM activities WHERE uuid = $1
+                    )
+                `;
+                
+                const pendingResult = await client.query(pendingQuery, [activity.activity_uuid]);
+                const pendingConnections = pendingResult.rows.map(row => row.pending_connection_key);
+                
+                return {
+                    ...activity,
+                    invitation_status: activity.invitation_status || 'none',
+                    is_shared: activity.is_shared, // Use the value from the query
+                    is_host: activity.is_host, // Use the value from the query
+                    is_cancelled: false,
+                    pending_connections: pendingConnections // Add pending connections
+                };
             }));
             
             console.log('🎯 Retrieved activities from database:', activities.length);
@@ -1707,6 +1722,103 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
     } catch (error) {
         console.error('Update activity error:', error);
         res.status(500).json({ success: false, error: 'Failed to update activity' });
+    }
+});
+
+// Get single activity by UUID with pending connections
+app.get('/api/activities/details/:activityUuid', authenticateToken, async (req, res) => {
+    try {
+        const { activityUuid } = req.params;
+        
+        console.log('🔍 GET /api/activities/details/:activityUuid Debug:', {
+            activityUuid,
+            userId: req.user.id,
+            userEmail: req.user.email,
+            timestamp: new Date().toISOString()
+        });
+        
+        const client = await pool.connect();
+        
+        try {
+            // Get activity details with authorization check
+            const activityQuery = `
+                SELECT 
+                    a.uuid as activity_uuid,
+                    a.name,
+                    a.description,
+                    a.start_date,
+                    a.end_date,
+                    a.start_time,
+                    a.end_time,
+                    a.location,
+                    a.website_url,
+                    a.cost,
+                    a.max_participants,
+                    a.auto_notify_new_connections,
+                    a.is_shared,
+                    a.created_at,
+                    a.updated_at,
+                    c.name as child_name,
+                    c.uuid as child_uuid
+                FROM activities a 
+                JOIN children c ON a.child_id = c.id 
+                JOIN users u ON c.parent_id = u.id 
+                WHERE a.uuid = $1 AND u.uuid = $2
+            `;
+            
+            const activityResult = await client.query(activityQuery, [activityUuid, req.user.uuid]);
+            
+            if (activityResult.rows.length === 0) {
+                client.release();
+                return res.status(404).json({ 
+                    success: false, 
+                    error: 'Activity not found or access denied' 
+                });
+            }
+            
+            const activity = activityResult.rows[0];
+            
+            // Get pending connections for this activity
+            const pendingQuery = `
+                SELECT pending_connection_key
+                FROM pending_activity_invitations 
+                WHERE activity_id = (
+                    SELECT id FROM activities WHERE uuid = $1
+                )
+            `;
+            
+            const pendingResult = await client.query(pendingQuery, [activityUuid]);
+            const pendingConnections = pendingResult.rows.map(row => row.pending_connection_key);
+            
+            console.log('✅ Activity details retrieved:', {
+                activityName: activity.name,
+                activityUuid: activity.activity_uuid,
+                pendingConnectionsCount: pendingConnections.length
+            });
+            
+            // Include pending connections in response
+            const response = {
+                ...activity,
+                pending_connections: pendingConnections
+            };
+            
+            client.release();
+            res.json({ 
+                success: true, 
+                data: response 
+            });
+            
+        } catch (dbError) {
+            client.release();
+            throw dbError;
+        }
+        
+    } catch (error) {
+        console.error('❌ Error fetching activity details:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to fetch activity details' 
+        });
     }
 });
 
@@ -3667,8 +3779,12 @@ async function processPendingInvitations(client, connectionRequestData) {
                 }
                 
                 // Update the activity's invited_children field
-                await updateActivityInvitedChildren(client, pending.activity_id);
-                console.log(`✅ Updated invited_children field for activity ${pending.activity_id}`);
+                try {
+                    await updateActivityInvitedChildren(client, pending.activity_id);
+                    console.log(`✅ Updated invited_children field for activity ${pending.activity_id}`);
+                } catch (error) {
+                    console.log(`⚠️ Could not update invited_children field (column may not exist): ${error.message}`);
+                }
                 
             } catch (error) {
                 console.error(`❌ Failed to process pending invitation for activity ${pending.activity_name}:`, error);
