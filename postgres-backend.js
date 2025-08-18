@@ -3650,7 +3650,6 @@ async function processPendingInvitations(client, connectionRequestData) {
                 const insertResult = await client.query(`
                     INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status)
                     VALUES ($1, $2, $3, $4, $5, $6)
-                    ON CONFLICT (activity_id, invited_parent_id) DO NOTHING
                     RETURNING id
                 `, [
                     pending.activity_id,
