@@ -3295,6 +3295,7 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
                    null as viewed_at,
                    u.username as parent_name,
                    c.name as child_name,
+                   c.uuid as child_uuid,
                    CASE 
                        WHEN conn.id IS NOT NULL THEN 'connected_pending_invite'
                        ELSE 'pending_connection'
