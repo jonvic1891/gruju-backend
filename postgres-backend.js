@@ -1461,7 +1461,7 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
             const activities = await Promise.all(result.rows.map(async (activity) => {
                 // Get pending connections for this activity
                 const pendingQuery = `
-                    SELECT pending_connection_key
+                    SELECT pending_connection_id
                     FROM pending_activity_invitations 
                     WHERE activity_id = (
                         SELECT id FROM activities WHERE uuid = $1
@@ -1469,7 +1469,7 @@ app.get('/api/activities/:childId', authenticateToken, async (req, res) => {
                 `;
                 
                 const pendingResult = await client.query(pendingQuery, [activity.activity_uuid]);
-                const pendingConnections = pendingResult.rows.map(row => row.pending_connection_key);
+                const pendingConnections = pendingResult.rows.map(row => row.pending_connection_id);
                 
                 return {
                     ...activity,
@@ -1780,7 +1780,7 @@ app.get('/api/activities/details/:activityUuid', authenticateToken, async (req, 
             
             // Get pending connections for this activity
             const pendingQuery = `
-                SELECT pending_connection_key
+                SELECT pending_connection_id
                 FROM pending_activity_invitations 
                 WHERE activity_id = (
                     SELECT id FROM activities WHERE uuid = $1
@@ -1788,7 +1788,7 @@ app.get('/api/activities/details/:activityUuid', authenticateToken, async (req, 
             `;
             
             const pendingResult = await client.query(pendingQuery, [activityUuid]);
-            const pendingConnections = pendingResult.rows.map(row => row.pending_connection_key);
+            const pendingConnections = pendingResult.rows.map(row => row.pending_connection_id);
             
             console.log('✅ Activity details retrieved:', {
                 activityName: activity.name,
