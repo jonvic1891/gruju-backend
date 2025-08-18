@@ -2162,6 +2162,11 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
                     console.log('🔔 STARTING auto-notification processing...');
                     await processAutoNotifications(client, req_data.requester_id, req_data.target_parent_id, child1Query.rows[0].id, child2Query.rows[0].id);
                     console.log('🔔 COMPLETED auto-notification processing');
+                    
+                    // 🔔 PENDING INVITATIONS: Process pending invitations for this connection
+                    console.log('🔍 Checking for pending invitations with request UUID:', req_data.uuid);
+                    await processPendingInvitations(client, req_data);
+                    console.log('🔔 COMPLETED pending invitations processing');
                 } else {
                     console.error('❌ Could not find child IDs for UUIDs:', req_data.child_uuid, req_data.target_child_uuid);
                 }
