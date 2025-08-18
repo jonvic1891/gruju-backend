@@ -2597,7 +2597,14 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
             return res.status(403).json({ success: false, error: 'Not authorized to create pending invitations for this activity' });
         }
 
-        // Insert pending invitations
+        // Clear existing pending invitations for this activity first
+        console.log('🧹 Clearing existing pending invitations for activity:', activity.id);
+        await client.query(
+            'DELETE FROM pending_activity_invitations WHERE activity_id = $1',
+            [activity.id]
+        );
+        
+        // Insert new pending invitations
         const insertedRecords = [];
         for (const pendingConnectionId of pending_connections) {
             try {
