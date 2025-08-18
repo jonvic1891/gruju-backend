@@ -3606,17 +3606,24 @@ async function processPendingInvitations(client, connectionRequestData) {
         
         // Get target child ID if not specified
         let targetChildId = null;
-        if (target_child_uuid) {
-            const targetChildQuery = await client.query('SELECT id FROM children WHERE uuid = $1', [target_child_uuid]);
+        console.log('🔍 Looking up target child ID with UUID:', connectionRequestData.target_child_uuid);
+        if (connectionRequestData.target_child_uuid) {
+            const targetChildQuery = await client.query('SELECT id FROM children WHERE uuid = $1', [connectionRequestData.target_child_uuid]);
             if (targetChildQuery.rows.length > 0) {
                 targetChildId = targetChildQuery.rows[0].id;
+                console.log('✅ Found target child ID:', targetChildId);
+            } else {
+                console.log('❌ Target child not found with UUID:', connectionRequestData.target_child_uuid);
             }
         } else {
+            console.log('🔍 No target child UUID provided, using default child for parent:', connectionRequestData.target_parent_id);
             // Get the first child of the target parent (default behavior)
-            const targetChildrenQuery = await client.query('SELECT id FROM children WHERE parent_id = $1 ORDER BY id LIMIT 1', [target_parent_id]);
+            const targetChildrenQuery = await client.query('SELECT id FROM children WHERE parent_id = $1 ORDER BY id LIMIT 1', [connectionRequestData.target_parent_id]);
             if (targetChildrenQuery.rows.length > 0) {
                 targetChildId = targetChildrenQuery.rows[0].id;
-                console.log('📝 Using default target child ID:', targetChildId);
+                console.log('✅ Using default target child ID:', targetChildId);
+            } else {
+                console.log('❌ No children found for target parent:', connectionRequestData.target_parent_id);
             }
         }
         
