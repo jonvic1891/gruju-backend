@@ -4,12 +4,12 @@ const fetch = require('node-fetch');
 
 const API_BASE = 'https://gruju-backend-5014424c95f2.herokuapp.com';
 
-async function testCompletePendingFlow() {
+async function testFixedPendingFlow() {
     try {
-        console.log('🧪 COMPLETE PENDING INVITATIONS FLOW TEST');
+        console.log('🧪 FIXED PENDING INVITATIONS FLOW TEST');
         console.log('='.repeat(50));
         
-        // Step 1: Login as the test3 user (Charlie/host)
+        // Step 1: Login as host user
         console.log('\n1. LOGIN AS HOST USER...');
         const hostLoginResponse = await fetch(`${API_BASE}/api/auth/login`, {
             method: 'POST',
@@ -23,13 +23,11 @@ async function testCompletePendingFlow() {
             return;
         }
         console.log('✅ Host login successful');
-        console.log('👤 Host user:', hostLoginData.user);
         const hostToken = hostLoginData.token;
-        const hostUserId = hostLoginData.user.id;
         const hostUuid = hostLoginData.user.uuid;
         
-        // Step 2: Login as Emilia (target user)
-        console.log('\n2. LOGIN AS TARGET USER (EMILIA)...');
+        // Step 2: Login as Emilia
+        console.log('\n2. LOGIN AS EMILIA...');
         const emiliaLoginResponse = await fetch(`${API_BASE}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -42,36 +40,29 @@ async function testCompletePendingFlow() {
             return;
         }
         console.log('✅ Emilia login successful');
-        console.log('👤 Emilia user:', emiliaLoginData.user);
         const emiliaToken = emiliaLoginData.token;
-        const emiliaUserId = emiliaLoginData.user.uuid; // Use UUID since ID is not in response
         const emiliaUuid = emiliaLoginData.user.uuid;
+        const emiliaId = emiliaLoginData.user.id;
         
-        // Step 3: Get children for both users
-        console.log('\n3. GET CHILDREN FOR BOTH USERS...');
-        
+        // Step 3: Get children
+        console.log('\n3. GET CHILDREN...');
         const hostChildrenResponse = await fetch(`${API_BASE}/api/children`, {
             headers: { 'Authorization': `Bearer ${hostToken}` }
         });
         const hostChildrenData = await hostChildrenResponse.json();
         const hostChild = hostChildrenData.data[0];
-        console.log('👶 Host child:', hostChild);
         
         const emiliaChildrenResponse = await fetch(`${API_BASE}/api/children`, {
             headers: { 'Authorization': `Bearer ${emiliaToken}` }
         });
         const emiliaChildrenData = await emiliaChildrenResponse.json();
         const emiliaChild = emiliaChildrenData.data[0];
-        console.log('👶 Emilia child:', emiliaChild);
         
-        if (!hostChild || !emiliaChild) {
-            console.log('❌ Missing children data');
-            return;
-        }
+        console.log('👶 Host child:', hostChild.name);
+        console.log('👶 Emilia child:', emiliaChild.name);
         
-        // Step 4: Create a test activity (scroll1) as the host
-        console.log('\n4. CREATE TEST ACTIVITY "SCROLL1"...');
-        
+        // Step 4: Create test activity
+        console.log('\n4. CREATE TEST ACTIVITY...');
         const testActivityData = {
             name: 'scroll1',
             description: 'Test activity for pending invitations',
@@ -94,20 +85,23 @@ async function testCompletePendingFlow() {
             body: JSON.stringify(testActivityData)
         });
         
-        if (!createActivityResponse.ok) {
-            const errorText = await createActivityResponse.text();
-            console.log('❌ Failed to create activity:', errorText);
+        const createActivityResult = await createActivityResponse.json();
+        console.log('✅ Created activity result:', createActivityResult);
+        
+        // Get the correct activity UUID/ID from the response
+        const activityUuid = createActivityResult.data?.uuid;
+        const activityId = createActivityResult.data?.id;
+        
+        if (!activityUuid) {
+            console.log('❌ No activity UUID found in response');
             return;
         }
         
-        const createActivityResult = await createActivityResponse.json();
-        console.log('✅ Created test activity:', createActivityResult);
-        const activityId = createActivityResult.data?.id || createActivityResult.id;
-        const activityUuid = createActivityResult.data?.uuid || createActivityResult.uuid;
+        console.log('🎯 Activity UUID:', activityUuid);
+        console.log('🎯 Activity ID:', activityId);
         
-        // Step 5: Create a pending invitation for Emilia
-        console.log('\n5. CREATE PENDING INVITATION FOR EMILIA...');
-        
+        // Step 5: Create pending invitation (using UUID as the endpoint expects)
+        console.log('\n5. CREATE PENDING INVITATION...');
         const pendingKey = `pending-${emiliaUuid}`;
         console.log('🔑 Pending key:', pendingKey);
         
@@ -122,23 +116,25 @@ async function testCompletePendingFlow() {
             })
         });
         
-        if (!createPendingResponse.ok) {
-            const errorText = await createPendingResponse.text();
-            console.log('❌ Failed to create pending invitation:', errorText);
-        } else {
+        if (createPendingResponse.ok) {
             const pendingResult = await createPendingResponse.json();
             console.log('✅ Created pending invitation:', pendingResult);
+        } else {
+            const errorText = await createPendingResponse.text();
+            console.log('❌ Failed to create pending invitation:', errorText);
+            // Continue anyway to test other parts
         }
         
-        // Step 6: Create a connection request from host to Emilia
-        console.log('\n6. CREATE CONNECTION REQUEST FROM HOST TO EMILIA...');
-        
+        // Step 6: Create connection request (using target_parent_id as ID, not email)
+        console.log('\n6. CREATE CONNECTION REQUEST...');
         const connectionRequestData = {
-            target_parent_id: emiliaUserId,
+            target_parent_id: emiliaId, // Use ID, not email
             child_uuid: hostChild.uuid,
             target_child_uuid: emiliaChild.uuid,
             message: 'Test connection request for pending invitations'
         };
+        
+        console.log('📤 Connection request data:', connectionRequestData);
         
         const createConnectionResponse = await fetch(`${API_BASE}/api/connections/request`, {
             method: 'POST',
@@ -149,17 +145,17 @@ async function testCompletePendingFlow() {
             body: JSON.stringify(connectionRequestData)
         });
         
-        if (!createConnectionResponse.ok) {
-            const errorText = await createConnectionResponse.text();
-            console.log('❌ Failed to create connection request:', errorText);
-        } else {
+        if (createConnectionResponse.ok) {
             const connectionResult = await createConnectionResponse.json();
             console.log('✅ Created connection request:', connectionResult);
+        } else {
+            const errorText = await createConnectionResponse.text();
+            console.log('❌ Failed to create connection request:', errorText);
+            return;
         }
         
-        // Step 7: Check Emilia's pending connection requests
+        // Step 7: Check Emilia's connection requests
         console.log('\n7. CHECK EMILIA\'S CONNECTION REQUESTS...');
-        
         const emiliaRequestsResponse = await fetch(`${API_BASE}/api/connections/requests`, {
             headers: { 'Authorization': `Bearer ${emiliaToken}` }
         });
@@ -167,18 +163,16 @@ async function testCompletePendingFlow() {
         console.log('📨 Emilia\'s connection requests:', emiliaRequestsData.data);
         
         const pendingRequest = emiliaRequestsData.data?.find(req => req.status === 'pending');
-        
         if (!pendingRequest) {
-            console.log('❌ No pending connection request found for Emilia');
+            console.log('❌ No pending connection request found');
             return;
         }
         
-        console.log('🔍 Found pending request:', pendingRequest);
+        console.log('🔍 Found pending request UUID:', pendingRequest.uuid);
         
-        // Step 8: Accept the connection request as Emilia
-        console.log('\n8. ACCEPT CONNECTION REQUEST AS EMILIA...');
-        
-        const acceptResponse = await fetch(`${API_BASE}/api/connections/respond/${pendingRequest.request_uuid}`, {
+        // Step 8: Accept connection request as Emilia
+        console.log('\n8. ACCEPT CONNECTION REQUEST...');
+        const acceptResponse = await fetch(`${API_BASE}/api/connections/respond/${pendingRequest.uuid}`, {
             method: 'POST',
             headers: { 
                 'Authorization': `Bearer ${emiliaToken}`,
@@ -189,20 +183,19 @@ async function testCompletePendingFlow() {
         
         if (!acceptResponse.ok) {
             const errorText = await acceptResponse.text();
-            console.log('❌ Failed to accept connection request:', errorText);
+            console.log('❌ Failed to accept connection:', errorText);
             return;
         }
         
         const acceptResult = await acceptResponse.json();
-        console.log('✅ Connection request accepted:', acceptResult);
+        console.log('✅ Connection accepted:', acceptResult);
         
-        // Step 9: Wait for pending invitations processing
-        console.log('\n9. WAITING FOR PENDING INVITATIONS PROCESSING...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Step 9: Wait for processing
+        console.log('\n9. WAITING FOR PROCESSING...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Step 10: Check if Emilia now has the invitation
+        // Step 10: Check Emilia's invitations
         console.log('\n10. CHECK EMILIA\'S INVITATIONS...');
-        
         const today = new Date();
         const oneYearLater = new Date();
         oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
@@ -213,56 +206,25 @@ async function testCompletePendingFlow() {
             headers: { 'Authorization': `Bearer ${emiliaToken}` }
         });
         const invitationsData = await invitationsResponse.json();
-        console.log('📬 Emilia\'s invitations after connection acceptance:', invitationsData.data);
+        
+        console.log('📬 Emilia\'s invitations:', invitationsData.data);
         
         const scroll1Invitation = invitationsData.data?.find(inv => 
             inv.activity_name && inv.activity_name.toLowerCase().includes('scroll1')
         );
         
-        // Step 11: Results and diagnosis
+        // Results
         console.log('\n' + '='.repeat(50));
-        console.log('🏥 DIAGNOSIS RESULTS');
+        console.log('🏥 RESULTS');
         console.log('='.repeat(50));
         
         if (scroll1Invitation) {
-            console.log('🎉 SUCCESS! Pending invitations system is working correctly');
-            console.log('✅ Emilia received the scroll1 invitation:', scroll1Invitation);
-            
-            console.log('\n📱 EMILIA SHOULD NOW SEE:');
-            console.log('1. Login as roberts@example.com');
-            console.log('2. Go to Children screen');
-            console.log('3. Check pending invitations for Emilia');
-            console.log('4. Should see invitation for "scroll1" activity');
-            
+            console.log('🎉 SUCCESS! Emilia has the scroll1 invitation:', scroll1Invitation);
         } else {
-            console.log('❌ FAILED! Pending invitations system is not working');
-            console.log('🔍 ROOT CAUSE ANALYSIS:');
+            console.log('❌ FAILED! Emilia does not have the scroll1 invitation');
             
-            console.log('\n📋 Check these backend components:');
-            console.log('1. processPendingInvitations() function in postgres-backend.js');
-            console.log('2. Connection acceptance endpoint calling processPendingInvitations');
-            console.log('3. pending_activity_invitations table structure');
-            console.log('4. Activity invitation creation logic');
-            
-            console.log('\n🔧 DEBUGGING STEPS:');
-            console.log('1. Check backend logs during connection acceptance');
-            console.log('2. Verify pending_activity_invitations table has the data');
-            console.log('3. Ensure processPendingInvitations is being called');
-            console.log('4. Check if invitations are being created but filtered out');
-        }
-        
-        console.log('\n📊 SUMMARY:');
-        console.log(`- Host User: ${hostLoginData.user.email} (UUID: ${hostUuid})`);
-        console.log(`- Target User: ${emiliaLoginData.user.email} (UUID: ${emiliaUuid})`);
-        console.log(`- Activity Created: ${activityId ? '✅' : '❌'}`);
-        console.log(`- Pending Invitation Created: ${createPendingResponse.ok ? '✅' : '❌'}`);
-        console.log(`- Connection Request Created: ${createConnectionResponse.ok ? '✅' : '❌'}`);
-        console.log(`- Connection Accepted: ${acceptResponse.ok ? '✅' : '❌'}`);
-        console.log(`- Final Invitation Exists: ${scroll1Invitation ? '✅' : '❌'}`);
-        
-        if (!scroll1Invitation) {
-            console.log('\n🔧 MANUAL FIX - CREATE INVITATION DIRECTLY:');
-            
+            // Try manual invitation as backup
+            console.log('\n🔧 CREATING MANUAL INVITATION...');
             const manualInviteResponse = await fetch(`${API_BASE}/api/activities/${activityUuid}/invite`, {
                 method: 'POST',
                 headers: { 
@@ -277,18 +239,23 @@ async function testCompletePendingFlow() {
             
             if (manualInviteResponse.ok) {
                 const manualResult = await manualInviteResponse.json();
-                console.log('✅ Manual invitation created successfully:', manualResult);
-                console.log('📱 Emilia should now see the invitation in her app');
+                console.log('✅ Manual invitation created:', manualResult);
             } else {
                 const errorText = await manualInviteResponse.text();
                 console.log('❌ Manual invitation failed:', errorText);
             }
         }
         
+        console.log('\n📋 DEBUGGING INFO:');
+        console.log(`- Host UUID: ${hostUuid}`);
+        console.log(`- Emilia UUID: ${emiliaUuid}`);
+        console.log(`- Emilia ID: ${emiliaId}`);
+        console.log(`- Activity UUID: ${activityUuid}`);
+        console.log(`- Pending key used: pending-${emiliaUuid}`);
+        
     } catch (error) {
         console.error('❌ Test error:', error.message);
-        console.error('Stack trace:', error.stack);
     }
 }
 
-testCompletePendingFlow();
+testFixedPendingFlow();

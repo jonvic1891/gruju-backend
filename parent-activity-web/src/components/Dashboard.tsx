@@ -21,6 +21,8 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   const location = useLocation();
   const params = useParams();
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  
+  console.log('🔥 Dashboard RENDER called with activeTab:', activeTab, 'pathname:', location.pathname);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
   const [cameFromActivity, setCameFromActivity] = useState(false);
@@ -99,7 +101,10 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   // Sync activeTab with URL
   useEffect(() => {
     const path = location.pathname;
+    console.log('🔄 Dashboard URL sync effect triggered:', { path, currentActiveTab: activeTab });
+    
     if (path.startsWith('/children')) {
+      console.log('📍 Setting activeTab to children for path:', path);
       setActiveTab('children');
       // Extract child UUID from URL if present (from /children/:childUuid/activities)
       const childUuid = params.childUuid;
@@ -160,6 +165,8 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
       }
     }
     setActiveTab('connections'); // Use activeTab instead of navigate
+    // Scroll to top when navigating to connections
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateToConnections = () => {
@@ -169,6 +176,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   };
 
   const renderContent = () => {
+    console.log('🎯 Dashboard renderContent called with activeTab:', activeTab, 'pathname:', location.pathname);
     switch (activeTab) {
       case 'children':
         return <ChildrenScreen
@@ -318,23 +326,29 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
       case 'connections':
         return <ConnectionsScreen 
           cameFromActivity={cameFromActivity}
+          returnToActivityUrl={shouldRestoreActivityCreation ? `/children/${childUuid}/activities/new` : undefined}
+          onForceTabUpdate={(tab) => {
+            console.log('🎯 Dashboard force tab update called:', tab);
+            setActiveTab(tab as any);
+          }}
           onReturnToActivity={() => {
             setCameFromActivity(false);
             setCalendarInitialDate(undefined);
-            // Navigate back to the specific activity being created
-            if (activityCreationChildUuid && activityCreationActivityUuid) {
-              navigate(`/children/${activityCreationChildUuid}/activities/${activityCreationActivityUuid}`, { replace: false });
-              setActivityCreationChildUuid(null); // Clear after use
-              setActivityCreationActivityUuid(null); // Clear after use
-            } else if (activityCreationChildUuid) {
-              // Fallback to child activities list if no specific activity UUID
-              navigate(`/children/${activityCreationChildUuid}/activities`, { replace: false });
-              setActivityCreationChildUuid(null); // Clear after use
+            
+            if (shouldRestoreActivityCreation) {
+              // Coming from activity creation - return to activity creation form with UUID-based URL
+              console.log('📝 Returning to activity creation form with saved draft');
+              const newActivityUrl = `/children/${childUuid}/activities/new`;
+              console.log('🔄 Navigating to new activity URL:', newActivityUrl);
+              
+              // Navigate immediately - the URL sync effect will handle setting activeTab
+              navigate(newActivityUrl, { replace: false });
             } else {
-              setActiveTab('children'); // Fallback to main children page
+              // Coming from existing activity editing - return to specific activity
+              console.log('📝 Returning to existing activity');
+              setActiveTab('children'); // Navigate back to children screen
+              // shouldRestoreActivityCreation is false, so it will show the activity list or specific activity
             }
-            // Keep shouldRestoreActivityCreation true so the draft is restored
-            // It will be reset automatically after restoration
           }}
         />;
       case 'profile':

@@ -13,10 +13,58 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <meta name="build-timestamp" content="BUILD_TIMESTAMP_PLACEHOLDER" />
+    <meta name="app-version" content="APP_VERSION_PLACEHOLDER" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>Parent Activity App</title>
+    <script>
+      // Version-based cache clearing - only clear when version changes
+      try {
+        const appVersion = document.querySelector('meta[name="app-version"]').content;
+        const lastVersion = localStorage.getItem('lastAppVersion');
+        
+        if (lastVersion !== appVersion) {
+          console.log(`🔥 App version changed from ${lastVersion || 'unknown'} to ${appVersion}, clearing storage`);
+          localStorage.clear();
+          sessionStorage.clear();
+          localStorage.setItem('lastAppVersion', appVersion);
+        } else {
+          console.log(`✅ App version ${appVersion} unchanged, keeping storage`);
+        }
+      } catch (e) {
+        console.log('Version check error:', e);
+      }
+      
+      // Simplified service worker registration
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registered: ', registration);
+              // Check for updates periodically
+              setInterval(() => {
+                registration.update();
+              }, 60000); // Check every minute instead of 30 seconds
+            })
+            .catch((registrationError) => {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+        
+        // Listen for storage clear messages
+        navigator.serviceWorker.addEventListener('message', (event) => {
+          if (event.data && event.data.type === 'CLEAR_STORAGE') {
+            try {
+              localStorage.clear();
+              sessionStorage.clear();
+              console.log('Cleared localStorage and sessionStorage');
+            } catch (e) {
+              console.log('Error clearing storage:', e);
+            }
+          }
+        });
+      }
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

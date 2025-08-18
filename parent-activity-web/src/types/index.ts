@@ -87,6 +87,7 @@ export interface Connection {
 
 export interface ConnectionRequest {
   id: number;
+  request_uuid: string;
   requester_id: number;
   target_parent_id: number;
   child_id: number;

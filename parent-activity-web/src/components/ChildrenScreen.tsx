@@ -28,6 +28,7 @@ interface ActivityInvitation {
 
 interface ConnectionRequest {
   id: number;
+  request_uuid: string;
   requester_name: string;
   requester_email: string;
   requester_family_name?: string;
@@ -63,7 +64,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
   const [childConnections, setChildConnections] = useState<Record<number, ConnectionRequest[]>>({});
   const [hostedActivityNotifications, setHostedActivityNotifications] = useState<any[]>([]);
   const [processingInvitation, setProcessingInvitation] = useState<number | null>(null);
-  const [processingConnection, setProcessingConnection] = useState<number | null>(null);
+  const [processingConnection, setProcessingConnection] = useState<string | null>(null);
   const [activityDraft, setActivityDraft] = useState<any>(null);
   const apiService = ApiService.getInstance();
 
@@ -296,6 +297,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
           if (targetChild) {
             connectionsByChild[targetChild.id].push({
               id: request.id,
+              request_uuid: request.request_uuid,
               requester_name: request.requester_name,
               requester_email: request.requester_email,
               requester_family_name: request.requester_family_name,
@@ -426,17 +428,17 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     }
   };
 
-  const handleConnectionResponse = async (connectionId: number, action: 'accept' | 'reject') => {
+  const handleConnectionResponse = async (connectionUuid: string, action: 'accept' | 'reject') => {
     try {
-      setProcessingConnection(connectionId);
-      const response = await apiService.respondToConnectionRequest(connectionId, action);
+      setProcessingConnection(connectionUuid);
+      const response = await apiService.respondToConnectionRequest(connectionUuid, action);
       
       if (response.success) {
         // Remove the connection request from the child's list
         setChildConnections(prev => {
           const updated = { ...prev };
           Object.keys(updated).forEach(childId => {
-            updated[parseInt(childId)] = updated[parseInt(childId)].filter(req => req.id !== connectionId);
+            updated[parseInt(childId)] = updated[parseInt(childId)].filter(req => req.request_uuid !== connectionUuid);
           });
           return updated;
         });
@@ -535,23 +537,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     }
   };
 
-  // Handle browser back button for child selection
-  useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
-      if (event.state && event.state.selectedChildId) {
-        const child = children.find(c => c.id === event.state.selectedChildId);
-        setSelectedChild(child || null);
-      } else {
-        setSelectedChild(null);
-      }
-    };
-
-    window.addEventListener('popstate', handlePopState);
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, [children]);
+  // Removed popstate handler - let React Router handle all navigation naturally
 
   // Handle initial selected child ID from parent
   useEffect(() => {
@@ -559,9 +545,11 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       const child = children.find(c => c.id === initialSelectedChildId);
       if (child) {
         setSelectedChild(child);
-        // Push state for child selection
-        window.history.pushState({ selectedChildId: child.id }, '', window.location.href);
+        // Removed manual history.pushState - let React Router handle all navigation
       }
+    } else if (initialSelectedChildId === null) {
+      // Clear selected child when parent clears the selection
+      setSelectedChild(null);
     }
   }, [initialSelectedChildId, children]);
 
@@ -586,6 +574,9 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     
     setSelectedChild(null);
     onChildSelectionChange?.(null);
+    
+    // Scroll to top before navigating back
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     
     // Use proper navigation if available, otherwise fallback to browser back
     if (onNavigateBack) {
@@ -738,21 +729,21 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                             className="invitation-accept-btn"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleConnectionResponse(request.id, 'accept');
+                              handleConnectionResponse(request.request_uuid, 'accept');
                             }}
-                            disabled={processingConnection === request.id}
+                            disabled={processingConnection === request.request_uuid}
                           >
-                            {processingConnection === request.id ? '...' : 'Accept'}
+                            {processingConnection === request.request_uuid ? '...' : 'Accept'}
                           </button>
                           <button
                             className="invitation-reject-btn"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleConnectionResponse(request.id, 'reject');
+                              handleConnectionResponse(request.request_uuid, 'reject');
                             }}
-                            disabled={processingConnection === request.id}
+                            disabled={processingConnection === request.request_uuid}
                           >
-                            {processingConnection === request.id ? '...' : 'Decline'}
+                            {processingConnection === request.request_uuid ? '...' : 'Decline'}
                           </button>
                           </div>
                         </div>

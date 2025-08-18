@@ -174,13 +174,13 @@ const NotificationBell: React.FC = () => {
     );
   };
 
-  const handleAcceptConnection = async (requestId: number) => {
+  const handleAcceptConnection = async (requestUuid: string) => {
     try {
       setLoading(true);
-      const response = await apiService.respondToConnectionRequest(requestId, 'accept');
+      const response = await apiService.respondToConnectionRequest(requestUuid, 'accept');
       if (response.success) {
         // Remove from notifications
-        setNotifications(prev => prev.filter(n => n.id !== `connection_${requestId}`));
+        setNotifications(prev => prev.filter(n => n.id !== `connection_${requestUuid}`));
         alert('Connection request accepted!');
       } else {
         alert(`Error: ${response.error}`);
@@ -192,13 +192,13 @@ const NotificationBell: React.FC = () => {
     }
   };
 
-  const handleRejectConnection = async (requestId: number) => {
+  const handleRejectConnection = async (requestUuid: string) => {
     try {
       setLoading(true);
-      const response = await apiService.respondToConnectionRequest(requestId, 'reject');
+      const response = await apiService.respondToConnectionRequest(requestUuid, 'reject');
       if (response.success) {
         // Remove from notifications
-        setNotifications(prev => prev.filter(n => n.id !== `connection_${requestId}`));
+        setNotifications(prev => prev.filter(n => n.id !== `connection_${requestUuid}`));
         alert('Connection request declined');
       } else {
         alert(`Error: ${response.error}`);

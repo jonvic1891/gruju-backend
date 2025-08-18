@@ -189,9 +189,39 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   }, [isSharedActivity]);
 
+  // Page navigation function
+  const navigateToPage = (page: typeof currentPage) => {
+    console.log('🧭 navigateToPage called:', { from: currentPage, to: page });
+    if (page !== currentPage) {
+      // If returning to main and an invitation was viewed, refresh both local and parent data
+      if (page === 'main' && sessionStorage.getItem('invitationViewed') === 'true') {
+        sessionStorage.removeItem('invitationViewed');
+        loadActivities(); // Refresh local activity data to update envelope icons
+        onDataChanged?.(); // Refresh parent data
+      }
+      
+      setCurrentPage(page);
+      console.log('📄 Page set to:', page);
+      // Push new state to history
+      window.history.pushState({ page }, '', window.location.href);
+      
+      // Scroll to top when navigating between pages
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      console.log('⚠️ Page navigation skipped - already on:', page);
+    }
+  };
+
   // Handle initial activity UUID for direct navigation to specific activities
   useEffect(() => {
     console.log('🔄 URL Activity UUID effect triggered:', { initialActivityUuid, activitiesLength: activities.length, currentPage });
+    
+    // Handle special "new" UUID for activity creation
+    if (initialActivityUuid === 'new') {
+      console.log('🆕 Detected new activity creation UUID, navigating to add-activity page');
+      navigateToPage('add-activity');
+      return;
+    }
     
     if (initialActivityUuid && activities.length > 0) {
       console.log('🔍 Looking for activity with UUID:', initialActivityUuid);
@@ -269,11 +299,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setLoading(true);
       
       console.log('🚀 ChildActivityScreen v2.0 - NEW VERSION WITH UNIFIED ACTIVITIES ENDPOINT');
-      console.log(`🔍 DEBUG: Child object:`, {
-        id: child.id,
-        uuid: child.uuid,
-        name: child.name
-      });
       
       // Load child's own activities using calendar endpoint to get status change notifications
       // Get date range for current month to load all relevant activities
@@ -539,7 +564,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setAutoNotifyNewConnections(false);
       setSelectedConnectedChildren([]);
     }
-    navigateToPage('add-activity');
+    
+    // Create a UUID-based URL for activity creation using special "new" identifier
+    if (onNavigateToActivity) {
+      const newActivityPlaceholder = {
+        uuid: 'new',
+        activity_uuid: 'new', 
+        name: 'New Activity',
+        id: null
+      };
+      console.log('🔄 Navigating to new activity creation with UUID-based routing');
+      onNavigateToActivity(child, newActivityPlaceholder);
+    } else {
+      // Fallback to old behavior
+      navigateToPage('add-activity');
+    }
   };
 
   const loadActivityParticipants = async (activityId: string) => {
@@ -874,9 +913,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           is_shared: isSharedActivity // Explicitly set is_shared when user creates shared activity
         };
 
-        console.log(`🔍 DEBUG: Creating activity for child UUID: ${child.uuid}, child ID: ${child.id}`);
         const response = await apiService.createActivity(child.uuid, activityData);
-        console.log(`🔍 DEBUG: Create activity response:`, response);
         
         if (response.success) {
           createdActivities.push(response.data);
@@ -895,7 +932,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           for (const activity of createdActivities) {
             try {
               // Store pending invitations for this activity
-              await apiService.createPendingInvitations(activity.id, pendingConnections);
+              const activityUuid = activity.uuid || activity.activity_uuid;
+              await apiService.createPendingInvitations(activityUuid, pendingConnections);
               console.log(`📝 Stored ${pendingConnections.length} pending invitations for activity "${activity.name}"`);
             } catch (error) {
               console.error('Failed to store pending invitations:', error);
@@ -961,13 +999,27 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setAutoNotifyNewConnections(false);
       setSelectedConnectedChildren([]);
       clearActivityDraft(); // Clear the saved draft after successful creation
-      goBack();
-      loadActivities();
+      
+      // Reload activities to include the newly created activity
+      await loadActivities();
       
       const message = createdActivities.length === 1 
         ? 'Activity created successfully!' 
         : `${createdActivities.length} activities created successfully!`;
       alert(message);
+      
+      // After creating activity, go back to activities list (not to the activity detail)
+      // Stay on current child's activities page instead of going back to main children page
+      console.log('🏠 Activity created successfully, navigating back to main activities list');
+      
+      // Navigate back to the main activities URL (without the /new)
+      if (onBack) {
+        console.log('🔙 Using onBack to return to main activities URL');
+        onBack();
+      } else {
+        console.log('📝 Using navigateToPage as fallback');
+        navigateToPage('main');
+      }
       
     } catch (error) {
       alert('Failed to create activity');
@@ -1308,30 +1360,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       </div>
     );
   }
-
-  // Page navigation function
-
-  const navigateToPage = (page: typeof currentPage) => {
-    console.log('🧭 navigateToPage called:', { from: currentPage, to: page });
-    if (page !== currentPage) {
-      // If returning to main and an invitation was viewed, refresh both local and parent data
-      if (page === 'main' && sessionStorage.getItem('invitationViewed') === 'true') {
-        sessionStorage.removeItem('invitationViewed');
-        loadActivities(); // Refresh local activity data to update envelope icons
-        onDataChanged?.(); // Refresh parent data
-      }
-      
-      setCurrentPage(page);
-      console.log('📄 Page set to:', page);
-      // Push new state to history
-      window.history.pushState({ page }, '', window.location.href);
-      
-      // Scroll to top when navigating between pages
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      console.log('⚠️ Page navigation skipped - already on:', page);
-    }
-  };
 
   const goBack = () => {
     // Always use logical navigation back to the page they came from
@@ -1883,7 +1911,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                           type="button"
                           onClick={() => {
                             const allConnectedIds = connectedChildren.map(child => child.id);
-                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.id}`);
+                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.request_uuid}`);
                             const allIds = [...allConnectedIds, ...allPendingIds];
                             
                             const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
@@ -1897,7 +1925,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                         >
                           {(() => {
                             const allConnectedIds = connectedChildren.map(child => child.id);
-                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.id}`);
+                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.request_uuid}`);
                             const allIds = [...allConnectedIds, ...allPendingIds];
                             const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
                             const totalCount = connectedChildren.length + pendingConnectionRequests.length;
@@ -1971,13 +1999,13 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                         <label key={`pending-${request.id}`} className="child-checkbox" style={{ opacity: 0.7 }}>
                           <input
                             type="checkbox"
-                            checked={selectedConnectedChildren.includes(`pending-${request.id}`)}
+                            checked={selectedConnectedChildren.includes(`pending-${request.request_uuid}`)}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedConnectedChildren([...selectedConnectedChildren, `pending-${request.id}`]);
+                                setSelectedConnectedChildren([...selectedConnectedChildren, `pending-${request.request_uuid}`]);
                               } else {
                                 setSelectedConnectedChildren(
-                                  selectedConnectedChildren.filter(id => id !== `pending-${request.id}`)
+                                  selectedConnectedChildren.filter(id => id !== `pending-${request.request_uuid}`)
                                 );
                               }
                             }}

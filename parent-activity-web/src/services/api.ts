@@ -234,8 +234,8 @@ class ApiService {
     return this.request('post', '/api/connections/request', requestData);
   }
 
-  async respondToConnectionRequest(requestId: number, action: 'accept' | 'reject'): Promise<ApiResponse<any>> {
-    return this.request('post', `/api/connections/respond/${requestId}`, { action });
+  async respondToConnectionRequest(requestUuid: string, action: 'accept' | 'reject'): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/connections/respond/${requestUuid}`, { action });
   }
 
   async getConnections(): Promise<ApiResponse<any[]>> {
@@ -319,7 +319,7 @@ class ApiService {
     return this.request('get', `/api/activities/${activityId}/participants`);
   }
 
-  async createPendingInvitations(activityId: number, pendingConnections: string[]): Promise<ApiResponse<any>> {
+  async createPendingInvitations(activityId: string, pendingConnections: string[]): Promise<ApiResponse<any>> {
     return this.request('post', `/api/activities/${activityId}/pending-invitations`, { 
       pending_connections: pendingConnections 
     });

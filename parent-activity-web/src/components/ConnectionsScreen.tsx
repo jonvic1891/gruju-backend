@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ApiService from '../services/api';
 import { ConnectionRequest, Child, SearchResult } from '../types';
 import './ConnectionsScreen.css';
@@ -6,9 +7,12 @@ import './ConnectionsScreen.css';
 interface ConnectionsScreenProps {
   cameFromActivity?: boolean;
   onReturnToActivity?: () => void;
+  returnToActivityUrl?: string;
+  onForceTabUpdate?: (tab: string) => void;
 }
 
-const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity = false, onReturnToActivity }) => {
+const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity = false, onReturnToActivity, returnToActivityUrl, onForceTabUpdate }) => {
+  const navigate = useNavigate();
   const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
   const [sentRequests, setSentRequests] = useState<any[]>([]);
   const [activeConnections, setActiveConnections] = useState<any[]>([]);
@@ -20,7 +24,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
   const [selectedParent, setSelectedParent] = useState<SearchResult | null>(null);
   const [myChildren, setMyChildren] = useState<Child[]>([]);
   const [selectedMyChild, setSelectedMyChild] = useState<number | null>(null);
-  const [selectedTargetChild, setSelectedTargetChild] = useState<number | null>(null);
+  const [selectedTargetChildren, setSelectedTargetChildren] = useState<number[]>([]);
   const [connectionMessage, setConnectionMessage] = useState('');
   const [showReturnToActivityPopup, setShowReturnToActivityPopup] = useState(false);
   const apiService = ApiService.getInstance();
@@ -130,15 +134,15 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
     }
   };
 
-  const handleAcceptRequest = async (requestId: number) => {
+  const handleAcceptRequest = async (requestUuid: string) => {
     if (window.confirm('Are you sure you want to accept this connection request?')) {
       try {
-        const response = await apiService.respondToConnectionRequest(requestId, 'accept');
+        const response = await apiService.respondToConnectionRequest(requestUuid, 'accept');
         if (response.success) {
           // Find the connection request details before removing it from state
-          const acceptedRequest = connectionRequests.find(req => req.id === requestId);
+          const acceptedRequest = connectionRequests.find(req => req.request_uuid === requestUuid);
           
-          setConnectionRequests(prev => prev.filter(req => req.id !== requestId));
+          setConnectionRequests(prev => prev.filter(req => req.request_uuid !== requestUuid));
           // Reload active connections to show the new connection immediately
           loadActiveConnections();
           
@@ -251,12 +255,12 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
   };
 
 
-  const handleRejectRequest = async (requestId: number) => {
+  const handleRejectRequest = async (requestUuid: string) => {
     if (window.confirm('Are you sure you want to reject this connection request?')) {
       try {
-        const response = await apiService.respondToConnectionRequest(requestId, 'reject');
+        const response = await apiService.respondToConnectionRequest(requestUuid, 'reject');
         if (response.success) {
-          setConnectionRequests(prev => prev.filter(req => req.id !== requestId));
+          setConnectionRequests(prev => prev.filter(req => req.request_uuid !== requestUuid));
           alert('Connection request rejected');
         } else {
           alert(`Error: ${response.error || 'Failed to reject request'}`);
@@ -271,13 +275,14 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
   const handleConnectRequest = (parent: SearchResult) => {
     setSelectedParent(parent);
     setSelectedMyChild(myChildren.length > 0 ? myChildren[0].id : null);
-    setSelectedTargetChild(parent.children.length > 0 ? parent.children[0].id : null);
+    // Start with first child selected, or empty array if no children
+    setSelectedTargetChildren(parent.children.length > 0 ? [parent.children[0].id] : []);
     setConnectionMessage('');
     setShowConnectModal(true);
   };
 
   const handleRemoveConnection = async (connectionId: string, connectionDescription: string) => {
-    if (window.confirm(`Are you sure you want to remove this connection? ${connectionDescription}\n\nNote: If this fails, you can also test auto-notifications by creating a new test user account.`)) {
+    if (window.confirm(`Are you sure you want to remove this connection? ${connectionDescription}`)) {
       try {
         console.log('🔄 Attempting to remove connection:', connectionId);
         const response = await apiService.deleteConnection(connectionId);
@@ -305,27 +310,46 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
     console.log('🔍 Connection request debug:', {
       selectedParent,
       selectedMyChild,
-      selectedTargetChild,
+      selectedTargetChildren,
       connectionMessage: connectionMessage.trim()
     });
 
+    if (selectedTargetChildren.length === 0) {
+      alert('Please select at least one target child');
+      return;
+    }
+
     // Find the child objects to get their UUIDs
     const myChildObj = myChildren.find(child => child.id === selectedMyChild);
-    const targetChildObj = selectedTargetChild ? selectedParent.children.find(child => child.id === selectedTargetChild) : null;
-
-    const requestData = {
-      target_parent_id: selectedParent.user_uuid || selectedParent.id,
-      child_uuid: myChildObj?.uuid || myChildObj?.id,
-      target_child_uuid: targetChildObj?.uuid || targetChildObj?.id || undefined,
-      message: connectionMessage.trim() || undefined,
-    };
-
-    console.log('📤 Sending connection request with data:', requestData);
-
+    
     try {
-      const response = await apiService.sendConnectionRequest(requestData);
+      let successCount = 0;
+      let errorCount = 0;
+      
+      // Send separate connection request for each selected target child
+      for (const targetChildId of selectedTargetChildren) {
+        const targetChildObj = selectedParent.children.find(child => child.id === targetChildId);
+        
+        const requestData = {
+          target_parent_id: selectedParent.user_uuid || selectedParent.id,
+          child_uuid: myChildObj?.uuid || myChildObj?.id,
+          target_child_uuid: targetChildObj?.uuid || targetChildObj?.id,
+          message: connectionMessage.trim() || undefined,
+        };
 
-      if (response.success) {
+        console.log(`📤 Sending connection request ${successCount + 1} to ${targetChildObj?.name}:`, requestData);
+
+        const response = await apiService.sendConnectionRequest(requestData);
+
+        if (response.success) {
+          successCount++;
+        } else {
+          errorCount++;
+          console.error(`Failed to send request to ${targetChildObj?.name}:`, response.error);
+        }
+      }
+
+      if (successCount > 0) {
         setShowConnectModal(false);
         setSearchResults([]);
         setSearchText('');
@@ -333,17 +357,21 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
         loadConnectionRequests();
         loadSentRequests();
         
+        const message = successCount === 1 
+          ? 'Connection request sent successfully'
+          : `${successCount} connection requests sent successfully${errorCount > 0 ? ` (${errorCount} failed)` : ''}`;
+        
         // Show popup if user came from activity creation flow
         if (cameFromActivity) {
           setShowReturnToActivityPopup(true);
         } else {
-          alert('Connection request sent successfully');
+          alert(message);
         }
       } else {
-        alert(`Error: ${response.error || 'Failed to send connection request'}`);
+        alert('Failed to send all connection requests. Please try again.');
       }
     } catch (error) {
-      alert('Failed to send connection request');
+      alert('Error sending connection requests');
       console.error('Send request error:', error);
     }
   };
@@ -428,17 +456,17 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
                 <h4 className="child-group-header">{childName}</h4>
                 <div className="child-connections-list">
                   {requests.map((request: any) => (
-                    <div key={request.id} className="connection-item">
+                    <div key={request.request_uuid} className="connection-item">
                       <span className="connected-to"><strong>{request.child_name}</strong> wants to connect</span>
                       <div className="request-actions">
                         <button
-                          onClick={() => handleRejectRequest(request.id)}
+                          onClick={() => handleRejectRequest(request.request_uuid)}
                           className="reject-btn"
                         >
                           Reject
                         </button>
                         <button
-                          onClick={() => handleAcceptRequest(request.id)}
+                          onClick={() => handleAcceptRequest(request.request_uuid)}
                           className="accept-btn"
                         >
                           Accept
@@ -480,7 +508,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
                 <h4 className="child-group-header">{childName}</h4>
                 <div className="child-connections-list">
                   {requests.map((request: any) => (
-                    <div key={request.id} className="connection-item">
+                    <div key={request.request_uuid} className="connection-item">
                       <span className="connected-to">
                         {request.target_child_name ? (
                           <strong>{request.target_child_name}</strong>
@@ -590,19 +618,53 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
             </div>
 
             <div className="form-section">
-              <label>Their Child (Optional):</label>
+              <label>Their Child:</label>
               <div className="child-selector">
-                <button
-                  className={`child-option ${selectedTargetChild === null ? 'selected' : ''}`}
-                  onClick={() => setSelectedTargetChild(null)}
-                >
-                  Any Child
-                </button>
+                {selectedParent.children.length > 1 && (
+                  <button
+                    className={`child-option ${selectedTargetChildren.length === selectedParent.children.length ? 'selected' : ''}`}
+                    onClick={() => {
+                      if (selectedTargetChildren.length === selectedParent.children.length) {
+                        // Deselect all if all are selected
+                        setSelectedTargetChildren([]);
+                      } else {
+                        // Select all children
+                        setSelectedTargetChildren(selectedParent.children.map(child => child.id));
+                      }
+                    }}
+                    style={{
+                      background: selectedTargetChildren.length === selectedParent.children.length 
+                        ? 'linear-gradient(135deg, #667eea, #764ba2)' 
+                        : '#e9ecef',
+                      color: selectedTargetChildren.length === selectedParent.children.length 
+                        ? 'white' 
+                        : '#6c757d'
+                    }}
+                  >
+                    All Children ({selectedParent.children.length})
+                  </button>
+                )}
                 {selectedParent.children.map((child) => (
                   <button
                     key={child.id}
-                    className={`child-option ${selectedTargetChild === child.id ? 'selected' : ''}`}
-                    onClick={() => setSelectedTargetChild(child.id)}
+                    className={`child-option ${selectedTargetChildren.includes(child.id) ? 'selected' : ''}`}
+                    onClick={() => {
+                      if (selectedTargetChildren.includes(child.id)) {
+                        // Remove this child from selection
+                        setSelectedTargetChildren(selectedTargetChildren.filter(id => id !== child.id));
+                      } else {
+                        // Add this child to selection
+                        setSelectedTargetChildren([...selectedTargetChildren, child.id]);
+                      }
+                    }}
+                    style={{
+                      background: selectedTargetChildren.includes(child.id)
+                        ? 'linear-gradient(135deg, #667eea, #764ba2)'
+                        : '#e9ecef',
+                      color: selectedTargetChildren.includes(child.id)
+                        ? 'white'
+                        : '#6c757d'
+                    }}
                   >
                     {child.name}
                   </button>
@@ -680,7 +742,16 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
               <button
                 onClick={() => {
                   setShowReturnToActivityPopup(false);
-                  if (onReturnToActivity) {
+                  if (returnToActivityUrl) {
+                    console.log('🔄 Direct navigation to:', returnToActivityUrl);
+                    // Force the Dashboard to update its active tab first
+                    if (onForceTabUpdate) {
+                      console.log('🎯 Forcing Dashboard tab update to children');
+                      onForceTabUpdate('children');
+                    }
+                    // Then navigate
+                    navigate(returnToActivityUrl, { replace: false });
+                  } else if (onReturnToActivity) {
                     onReturnToActivity();
                   }
                 }}
