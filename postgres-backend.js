@@ -3232,7 +3232,7 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
             UNION
             SELECT 1 FROM pending_activity_invitations pai
             WHERE pai.activity_id = $1 AND pai.pending_connection_id LIKE 'pending-%' 
-            AND pai.pending_connection_id = CONCAT('pending-', (SELECT id FROM users WHERE uuid = $2))
+            AND pai.pending_connection_id = CONCAT('pending-', $2)
         `, [activityId, req.user.uuid]);
         
         if (permissionCheck.rows.length === 0) {
