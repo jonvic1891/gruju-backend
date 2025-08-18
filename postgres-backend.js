@@ -1998,6 +1998,7 @@ app.get('/api/connections/sent-requests', authenticateToken, async (req, res) =>
                     cr.status,
                     cr.created_at,
                     u.username as target_parent_name,
+                    u.uuid as target_parent_uuid,
                     u.family_name as target_family_name,
                     COALESCE(
                         CASE 

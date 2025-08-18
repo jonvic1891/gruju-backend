@@ -1911,7 +1911,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                           type="button"
                           onClick={() => {
                             const allConnectedIds = connectedChildren.map(child => child.id);
-                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.request_uuid}`);
+                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.target_parent_uuid}`);
                             const allIds = [...allConnectedIds, ...allPendingIds];
                             
                             const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
@@ -1925,7 +1925,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                         >
                           {(() => {
                             const allConnectedIds = connectedChildren.map(child => child.id);
-                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.request_uuid}`);
+                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.target_parent_uuid}`);
                             const allIds = [...allConnectedIds, ...allPendingIds];
                             const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
                             const totalCount = connectedChildren.length + pendingConnectionRequests.length;
@@ -1999,13 +1999,13 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                         <label key={`pending-${request.id}`} className="child-checkbox" style={{ opacity: 0.7 }}>
                           <input
                             type="checkbox"
-                            checked={selectedConnectedChildren.includes(`pending-${request.request_uuid}`)}
+                            checked={selectedConnectedChildren.includes(`pending-${request.target_parent_uuid}`)}
                             onChange={(e) => {
                               if (e.target.checked) {
-                                setSelectedConnectedChildren([...selectedConnectedChildren, `pending-${request.request_uuid}`]);
+                                setSelectedConnectedChildren([...selectedConnectedChildren, `pending-${request.target_parent_uuid}`]);
                               } else {
                                 setSelectedConnectedChildren(
-                                  selectedConnectedChildren.filter(id => id !== `pending-${request.request_uuid}`)
+                                  selectedConnectedChildren.filter(id => id !== `pending-${request.target_parent_uuid}`)
                                 );
                               }
                             }}
