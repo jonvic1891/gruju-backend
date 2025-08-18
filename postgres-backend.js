@@ -3633,15 +3633,25 @@ async function processPendingInvitations(client, connectionRequestData) {
         }
         
         // Process each pending invitation
+        console.log(`🔄 Processing ${pendingInvitations.rows.length} pending invitations...`);
         for (const pending of pendingInvitations.rows) {
             try {
-                console.log(`📧 Converting pending invitation to actual invitation for activity: ${pending.activity_name}`);
+                console.log(`📧 Converting pending invitation to actual invitation for activity: ${pending.activity_name} (ID: ${pending.activity_id})`);
+                console.log(`📋 Invitation parameters:`, {
+                    activity_id: pending.activity_id,
+                    inviter_parent_id: requester_id,
+                    invited_parent_id: target_parent_id,
+                    invited_child_id: targetChildId,
+                    message: `You're invited to join: ${pending.activity_name}`,
+                    status: 'pending'
+                });
                 
                 // Create the actual activity invitation
-                await client.query(`
+                const insertResult = await client.query(`
                     INSERT INTO activity_invitations (activity_id, inviter_parent_id, invited_parent_id, invited_child_id, message, status)
                     VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT (activity_id, invited_parent_id) DO NOTHING
+                    RETURNING id
                 `, [
                     pending.activity_id,
                     requester_id,
@@ -3651,10 +3661,15 @@ async function processPendingInvitations(client, connectionRequestData) {
                     'pending'
                 ]);
                 
-                console.log(`✅ Created invitation for "${pending.activity_name}"`);
+                if (insertResult.rows.length > 0) {
+                    console.log(`✅ Created invitation for "${pending.activity_name}" (invitation ID: ${insertResult.rows[0].id})`);
+                } else {
+                    console.log(`⚠️ Invitation for "${pending.activity_name}" already exists (skipped due to conflict)`);
+                }
                 
                 // Update the activity's invited_children field
                 await updateActivityInvitedChildren(client, pending.activity_id);
+                console.log(`✅ Updated invited_children field for activity ${pending.activity_id}`);
                 
             } catch (error) {
                 console.error(`❌ Failed to process pending invitation for activity ${pending.activity_name}:`, error);
