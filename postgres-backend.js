@@ -1282,9 +1282,9 @@ app.put('/api/users/change-password', authenticateToken, async (req, res) => {
 app.get('/api/children', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
-        // ✅ SECURITY: Return both UUID and ID for backward compatibility during transition
+        // ✅ SECURITY: Return only UUID, no sequential IDs
         const result = await client.query(
-            `SELECT c.id, c.uuid, c.name, c.first_name, c.last_name, c.age, c.grade, c.school, c.interests, c.created_at, c.updated_at,
+            `SELECT c.uuid, c.name, c.first_name, c.last_name, c.age, c.grade, c.school, c.interests, c.created_at, c.updated_at,
              CASE 
                 WHEN c.first_name IS NOT NULL AND c.last_name IS NOT NULL AND c.last_name != '' 
                 THEN CONCAT(c.first_name, ' ', c.last_name)
@@ -1605,8 +1605,8 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         
         // ✅ SECURITY: Verify the child belongs to this user using UUIDs
         const child = await client.query(
-            'SELECT c.id FROM children c JOIN users u ON c.parent_id = u.id WHERE c.uuid = $1 AND u.uuid = $2',
-            [childUuid, req.user.uuid]
+            'SELECT c.id FROM children c WHERE c.uuid = $1 AND c.parent_id = $2',
+            [childUuid, req.user.id]
         );
 
         if (child.rows.length === 0) {
