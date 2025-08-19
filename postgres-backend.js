@@ -3760,7 +3760,7 @@ async function processPendingInvitations(client, connectionRequestData) {
     console.log('🔍 Processing pending invitations for connection request:', connectionRequestData.uuid);
     
     try {
-        // Get the target parent UUID to build the correct pending key
+        // Get the target parent UUID and child UUID to build possible pending keys
         const targetParentQuery = await client.query('SELECT uuid FROM users WHERE id = $1', [connectionRequestData.target_parent_id]);
         if (targetParentQuery.rows.length === 0) {
             console.log('❌ Target parent not found for ID:', connectionRequestData.target_parent_id);
@@ -3768,15 +3768,23 @@ async function processPendingInvitations(client, connectionRequestData) {
         }
         
         const targetParentUuid = targetParentQuery.rows[0].uuid;
-        const pendingKey = `pending-${targetParentUuid}`;
-        console.log('🔍 Looking for pending invitations with key:', pendingKey);
+        
+        // Build possible pending keys (old and new formats)
+        const pendingKeys = [`pending-${targetParentUuid}`]; // Old format
+        
+        // Add new format if target child UUID is available
+        if (connectionRequestData.target_child_uuid) {
+            pendingKeys.push(`pending-child-${connectionRequestData.target_child_uuid}`);
+        }
+        
+        console.log('🔍 Looking for pending invitations with keys:', pendingKeys);
         
         const pendingInvitations = await client.query(`
             SELECT pai.*, a.name as activity_name, a.child_id, a.start_date, a.end_date
             FROM pending_activity_invitations pai
             JOIN activities a ON pai.activity_id = a.id
-            WHERE pai.pending_connection_id = $1
-        `, [pendingKey]);
+            WHERE pai.pending_connection_id = ANY($1)
+        `, [pendingKeys]);
         
         console.log(`📋 Found ${pendingInvitations.rows.length} pending invitations to process`);
         
