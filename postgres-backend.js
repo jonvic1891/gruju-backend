@@ -2068,6 +2068,7 @@ app.get('/api/connections/search', authenticateToken, async (req, res) => {
                     json_agg(
                         CASE WHEN c.id IS NOT NULL 
                         THEN json_build_object(
+                            'id', c.id,
                             'uuid', c.uuid, 
                             'name', c.name, 
                             'age', c.age,
