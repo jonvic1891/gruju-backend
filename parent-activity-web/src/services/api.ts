@@ -141,7 +141,9 @@ class ApiService {
 
   // Children
   async getChildren(): Promise<ApiResponse<any[]>> {
-    return this.request('get', '/api/children');
+    // Add cache-busting parameter to force fresh request
+    const timestamp = Date.now();
+    return this.request('get', `/api/children?_t=${timestamp}`);
   }
 
   async createChild(childData: { first_name: string; last_name?: string; name?: string }): Promise<ApiResponse<any>> {

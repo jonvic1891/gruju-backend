@@ -505,9 +505,16 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       });
       
       if (response.success) {
+        // Immediately add the new child to the state for better UX
+        if (response.data) {
+          setChildren(prev => [response.data, ...prev]);
+        }
+        
         setNewChildFirstName('');
         setNewChildLastName('');
         setShowAddModal(false);
+        
+        // Also reload to ensure everything is in sync
         loadChildren();
       } else {
         alert(`Error: ${response.error || 'Failed to add child'}`);
