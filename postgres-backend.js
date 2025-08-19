@@ -2026,6 +2026,7 @@ app.get('/api/connections/sent-requests', authenticateToken, async (req, res) =>
                         END, 
                         c2.name
                     ) as target_child_name,
+                    c2.uuid as target_child_uuid,
                     c2.age as target_child_age,
                     c2.grade as target_child_grade
              FROM connection_requests cr
