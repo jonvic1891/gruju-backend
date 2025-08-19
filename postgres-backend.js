@@ -1292,8 +1292,8 @@ app.get('/api/children', authenticateToken, async (req, res) => {
                 THEN c.first_name
                 ELSE c.name 
              END as display_name
-             FROM children c JOIN users u ON c.parent_id = u.id WHERE u.uuid = $1 ORDER BY c.created_at DESC`,
-            [req.user.uuid]
+             FROM children c WHERE c.parent_id = $1 ORDER BY c.created_at DESC`,
+            [req.user.id]
         );
         client.release();
 
@@ -2245,13 +2245,23 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
 
         const status = action === 'accept' ? 'accepted' : 'rejected';
         console.log('🔄 Updating request status to:', status);
+        console.log('🔍 Request row data:', request.rows[0]);
+        
+        const requestId = request.rows[0].id;
+        if (!requestId) {
+            throw new Error('Request ID is missing from database record');
+        }
         
         const updateResult = await client.query(
             'UPDATE connection_requests SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-            [status, request.rows[0].id]
+            [status, requestId]
         );
         
         console.log('✅ Update result:', updateResult);
+        
+        if (action === 'reject') {
+            console.log('🚫 REJECT action completed - skipping connection creation and notifications');
+        }
 
         // If accepted, create the connection
         if (action === 'accept') {
@@ -2300,10 +2310,19 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
         res.json({ success: true, action, status });
     } catch (error) {
         console.error('❌ Respond to connection request error:', error);
+        // Make sure client is released even if error occurred
+        try {
+            if (client) {
+                client.release();
+            }
+        } catch (releaseError) {
+            console.error('❌ Error releasing client:', releaseError);
+        }
         res.status(500).json({ 
             success: false, 
             error: 'Failed to respond to connection request',
-            debug: error.message 
+            debug: error.message,
+            stack: error.stack
         });
     }
 });
