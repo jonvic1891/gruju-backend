@@ -24,7 +24,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
   const [selectedParent, setSelectedParent] = useState<SearchResult | null>(null);
   const [myChildren, setMyChildren] = useState<Child[]>([]);
   const [selectedMyChild, setSelectedMyChild] = useState<number | null>(null);
-  const [selectedTargetChildren, setSelectedTargetChildren] = useState<number[]>([]);
+  const [selectedTargetChildren, setSelectedTargetChildren] = useState<string[]>([]);
   const [connectionMessage, setConnectionMessage] = useState('');
   const [showReturnToActivityPopup, setShowReturnToActivityPopup] = useState(false);
   const apiService = ApiService.getInstance();
@@ -276,7 +276,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
     setSelectedParent(parent);
     setSelectedMyChild(myChildren.length > 0 ? myChildren[0].id : null);
     // Start with first child selected, or empty array if no children
-    setSelectedTargetChildren(parent.children.length > 0 ? [parent.children[0].id] : []);
+    setSelectedTargetChildren(parent.children.length > 0 ? [parent.children[0].uuid] : []);
     setConnectionMessage('');
     setShowConnectModal(true);
   };
@@ -327,8 +327,8 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
       let errorCount = 0;
       
       // Send separate connection request for each selected target child
-      for (const targetChildId of selectedTargetChildren) {
-        const targetChildObj = selectedParent.children.find(child => child.id === targetChildId);
+      for (const targetChildUuid of selectedTargetChildren) {
+        const targetChildObj = selectedParent.children.find(child => child.uuid === targetChildUuid);
         
         const requestData = {
           target_parent_id: selectedParent.user_uuid || selectedParent.id,
@@ -629,7 +629,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
                         setSelectedTargetChildren([]);
                       } else {
                         // Select all children
-                        setSelectedTargetChildren(selectedParent.children.map(child => child.id));
+                        setSelectedTargetChildren(selectedParent.children.map(child => child.uuid));
                       }
                     }}
                     style={{
@@ -646,22 +646,22 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
                 )}
                 {selectedParent.children.map((child) => (
                   <button
-                    key={child.id}
-                    className={`child-option ${selectedTargetChildren.includes(child.id) ? 'selected' : ''}`}
+                    key={child.uuid}
+                    className={`child-option ${selectedTargetChildren.includes(child.uuid) ? 'selected' : ''}`}
                     onClick={() => {
-                      if (selectedTargetChildren.includes(child.id)) {
+                      if (selectedTargetChildren.includes(child.uuid)) {
                         // Remove this child from selection
-                        setSelectedTargetChildren(selectedTargetChildren.filter(id => id !== child.id));
+                        setSelectedTargetChildren(selectedTargetChildren.filter(uuid => uuid !== child.uuid));
                       } else {
                         // Add this child to selection
-                        setSelectedTargetChildren([...selectedTargetChildren, child.id]);
+                        setSelectedTargetChildren([...selectedTargetChildren, child.uuid]);
                       }
                     }}
                     style={{
-                      background: selectedTargetChildren.includes(child.id)
+                      background: selectedTargetChildren.includes(child.uuid)
                         ? 'linear-gradient(135deg, #667eea, #764ba2)'
                         : '#e9ecef',
-                      color: selectedTargetChildren.includes(child.id)
+                      color: selectedTargetChildren.includes(child.uuid)
                         ? 'white'
                         : '#6c757d'
                     }}
