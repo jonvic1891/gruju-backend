@@ -1957,10 +1957,13 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
                     c1.age as child_age,
                     c1.grade as child_grade,
                     c2.name as target_child_name,
+                    c2.uuid as target_child_uuid,
                     c2.age as target_child_age,
-                    c2.grade as target_child_grade
+                    c2.grade as target_child_grade,
+                    u_target.uuid as target_parent_uuid
              FROM connection_requests cr
              JOIN users u ON cr.requester_id = u.id
+             JOIN users u_target ON cr.target_parent_id = u_target.id
              LEFT JOIN children c1 ON cr.child_uuid = c1.uuid
              LEFT JOIN children c2 ON cr.target_child_uuid = c2.uuid
              WHERE cr.target_parent_id = $1 AND cr.status = 'pending'
