@@ -2630,12 +2630,42 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
                     pending_connection_type: typeof pendingConnectionId
                 });
                 
+                // Extract parent and child UUIDs from pending connection ID
+                let invited_parent_uuid = null;
+                let invited_child_uuid = null;
+                
+                if (pendingConnectionId.startsWith('pending-child-')) {
+                    const uuid = pendingConnectionId.replace('pending-child-', '');
+                    // Check if this UUID is a child UUID or parent UUID
+                    const childCheck = await client.query('SELECT uuid, parent_id FROM children WHERE uuid = $1', [uuid]);
+                    if (childCheck.rows.length > 0) {
+                        invited_child_uuid = uuid;
+                        // Get parent UUID from child's parent_id
+                        const parentCheck = await client.query('SELECT uuid FROM users WHERE id = $1', [childCheck.rows[0].parent_id]);
+                        if (parentCheck.rows.length > 0) {
+                            invited_parent_uuid = parentCheck.rows[0].uuid;
+                        }
+                    } else {
+                        // It's a parent UUID
+                        invited_parent_uuid = uuid;
+                    }
+                } else if (pendingConnectionId.startsWith('pending-')) {
+                    // Old format - parent UUID only
+                    invited_parent_uuid = pendingConnectionId.replace('pending-', '');
+                }
+                
+                console.log('🔍 Resolved pending invitation UUIDs:', {
+                    pendingConnectionId,
+                    invited_parent_uuid,
+                    invited_child_uuid
+                });
+                
                 const result = await client.query(
-                    `INSERT INTO pending_activity_invitations (activity_id, pending_connection_id) 
-                     VALUES ($1, $2) 
+                    `INSERT INTO pending_activity_invitations (activity_id, pending_connection_id, invited_parent_uuid, invited_child_uuid) 
+                     VALUES ($1, $2, $3, $4) 
                      ON CONFLICT (activity_id, pending_connection_id) DO NOTHING
                      RETURNING uuid`,
-                    [activity.id, pendingConnectionId]
+                    [activity.id, pendingConnectionId, invited_parent_uuid, invited_child_uuid]
                 );
                 
                 console.log('📊 Insert result:', {
@@ -3316,30 +3346,37 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
                    pai.created_at as invited_at,
                    null as responded_at,
                    null as viewed_at,
-                   u.username as parent_name,
-                   c.name as child_name,
-                   c.uuid as child_uuid,
+                   COALESCE(u_direct.username, u_legacy.username) as parent_name,
+                   COALESCE(c_direct.name, c_legacy.name) as child_name,
+                   COALESCE(c_direct.uuid, c_legacy.uuid) as child_uuid,
                    CASE 
                        WHEN conn.id IS NOT NULL THEN 'connected_pending_invite'
                        ELSE 'pending_connection'
                    END as invitation_type,
                    conn.status as connection_status
             FROM pending_activity_invitations pai
-            LEFT JOIN children c ON (
-                CASE 
-                    -- New format: pending-child-{childUuid} - show specific child only
-                    WHEN pai.pending_connection_id LIKE 'pending-child-%' 
-                    THEN c.uuid = REPLACE(pai.pending_connection_id, 'pending-child-', '')::uuid
-                    -- Old format: pending-{parentUuid} - show all children from that parent  
-                    WHEN pai.pending_connection_id LIKE 'pending-%' AND pai.pending_connection_id NOT LIKE 'pending-child-%'
-                    THEN c.parent_id = (SELECT id FROM users WHERE uuid = REPLACE(pai.pending_connection_id, 'pending-', '')::uuid)
-                    ELSE FALSE
-                END
+            -- Direct joins using new columns (preferred)
+            LEFT JOIN users u_direct ON pai.invited_parent_uuid = u_direct.uuid
+            LEFT JOIN children c_direct ON pai.invited_child_uuid = c_direct.uuid
+            -- Legacy joins using pending_connection_id (fallback)
+            LEFT JOIN children c_legacy ON (
+                pai.invited_parent_uuid IS NULL AND (
+                    CASE 
+                        -- New format: pending-child-{childUuid} - show specific child only
+                        WHEN pai.pending_connection_id LIKE 'pending-child-%' 
+                        THEN c_legacy.uuid = REPLACE(pai.pending_connection_id, 'pending-child-', '')::uuid
+                        -- Old format: pending-{parentUuid} - show all children from that parent  
+                        WHEN pai.pending_connection_id LIKE 'pending-%' AND pai.pending_connection_id NOT LIKE 'pending-child-%'
+                        THEN c_legacy.parent_id = (SELECT id FROM users WHERE uuid = REPLACE(pai.pending_connection_id, 'pending-', '')::uuid)
+                        ELSE FALSE
+                    END
+                )
             )
-            LEFT JOIN users u ON c.parent_id = u.id
+            LEFT JOIN users u_legacy ON c_legacy.parent_id = u_legacy.id
+            -- Connection status check
             LEFT JOIN connections conn ON (
-                (conn.child1_id = $2 AND conn.child2_id = c.id) OR 
-                (conn.child2_id = $2 AND conn.child1_id = c.id)
+                (conn.child1_id = $2 AND conn.child2_id = COALESCE(c_direct.id, c_legacy.id)) OR 
+                (conn.child2_id = $2 AND conn.child1_id = COALESCE(c_direct.id, c_legacy.id))
             ) AND conn.status = 'active'
             WHERE pai.activity_id = $1
             ORDER BY pai.created_at DESC
