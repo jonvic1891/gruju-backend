@@ -1725,6 +1725,53 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
     }
 });
 
+// Additional update endpoint that frontend expects - PUT /api/activities/:uuid
+app.put('/api/activities/:activityId', authenticateToken, async (req, res) => {
+    try {
+        const { activityId } = req.params;
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared } = req.body;
+        
+        const client = await pool.connect();
+        
+        // ✅ SECURITY: Verify the activity belongs to this user using UUID
+        const activityCheck = await client.query(
+            'SELECT a.id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.uuid = $1 AND c.parent_id = $2',
+            [activityId, req.user.id]
+        );
+        
+        if (activityCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Activity not found' });
+        }
+        
+        // Convert empty strings to null for time fields  
+        const processedStartTime = start_time && start_time.trim() ? start_time.trim() : null;
+        const processedEndTime = end_time && end_time.trim() ? end_time.trim() : null;
+        const processedEndDate = end_date && end_date.trim() ? end_date.trim() : null;
+        const processedCost = cost && cost.trim() ? parseFloat(cost.trim()) : null;
+        const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
+        const processedAutoNotify = auto_notify_new_connections !== undefined ? auto_notify_new_connections : false;
+        const processedIsShared = is_shared !== undefined ? is_shared : true;
+        
+        // ✅ SECURITY: Update using UUID and return minimal data
+        const result = await client.query(
+            `UPDATE activities SET 
+                name = $1, description = $2, start_date = $3, end_date = $4, 
+                start_time = $5, end_time = $6, location = $7, website_url = $8, 
+                cost = $9, max_participants = $10, auto_notify_new_connections = $11, 
+                is_shared = $12, updated_at = NOW()
+             WHERE uuid = $13 RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, updated_at`,
+            [name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, processedAutoNotify, processedIsShared, activityId]
+        );
+        
+        client.release();
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        console.error('Update activity error:', error);
+        res.status(500).json({ success: false, error: 'Failed to update activity' });
+    }
+});
+
 // Get single activity by UUID with pending connections
 app.get('/api/activities/details/:activityUuid', authenticateToken, async (req, res) => {
     try {
