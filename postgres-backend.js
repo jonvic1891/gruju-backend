@@ -2637,7 +2637,9 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
                 
                 if (pendingConnectionId.startsWith('pending-child-')) {
                     const uuid = pendingConnectionId.replace('pending-child-', '');
-                    // Check if this UUID is a child UUID or parent UUID
+                    console.log('🔍 Processing pending-child UUID:', uuid);
+                    
+                    // Check if this UUID is a child UUID
                     const childCheck = await client.query('SELECT uuid, parent_id FROM children WHERE uuid = $1', [uuid]);
                     if (childCheck.rows.length > 0) {
                         invited_child_uuid = uuid;
@@ -2645,14 +2647,39 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
                         const parentCheck = await client.query('SELECT uuid FROM users WHERE id = $1', [childCheck.rows[0].parent_id]);
                         if (parentCheck.rows.length > 0) {
                             invited_parent_uuid = parentCheck.rows[0].uuid;
+                        } else {
+                            console.error('❌ Parent not found for child UUID:', uuid);
+                            throw new Error('Parent not found for child');
                         }
                     } else {
-                        // It's a parent UUID
-                        invited_parent_uuid = uuid;
+                        // It might be a parent UUID - let's check but don't fail if not found
+                        // This maintains backward compatibility with the old behavior
+                        const parentCheck = await client.query('SELECT uuid FROM users WHERE uuid = $1', [uuid]);
+                        if (parentCheck.rows.length > 0) {
+                            invited_parent_uuid = uuid;
+                            console.log('✅ Resolved as parent UUID:', uuid);
+                        } else {
+                            // UUID not found in either table - this might be from old data
+                            // Instead of failing, just use the UUID as-is for backward compatibility
+                            console.warn('⚠️ UUID not found in children or users table, using as-is:', uuid);
+                            invited_parent_uuid = uuid;
+                        }
                     }
                 } else if (pendingConnectionId.startsWith('pending-')) {
                     // Old format - parent UUID only
-                    invited_parent_uuid = pendingConnectionId.replace('pending-', '');
+                    const uuid = pendingConnectionId.replace('pending-', '');
+                    console.log('🔍 Processing old format parent UUID:', uuid);
+                    
+                    // Try to validate that the parent UUID exists, but don't fail for backward compatibility
+                    const parentCheck = await client.query('SELECT uuid FROM users WHERE uuid = $1', [uuid]);
+                    if (parentCheck.rows.length > 0) {
+                        invited_parent_uuid = uuid;
+                        console.log('✅ Resolved old format parent UUID:', uuid);
+                    } else {
+                        // Use UUID as-is for backward compatibility with old data
+                        console.warn('⚠️ Old format parent UUID not found in users table, using as-is:', uuid);
+                        invited_parent_uuid = uuid;
+                    }
                 }
                 
                 console.log('🔍 Resolved pending invitation UUIDs:', {
@@ -2679,7 +2706,20 @@ app.post('/api/activities/:activityId/pending-invitations', authenticateToken, a
                     insertedRecords.push({ uuid: result.rows[0].uuid, pending_connection_id: pendingConnectionId });
                 }
             } catch (error) {
-                console.error(`Failed to insert pending invitation for ${pendingConnectionId}:`, error);
+                console.error(`❌ Failed to insert pending invitation for ${pendingConnectionId}:`, error);
+                
+                // Only fail on critical database errors, not validation errors
+                if (error.message.includes('Parent not found for child')) {
+                    client.release();
+                    return res.status(404).json({ 
+                        success: false, 
+                        error: 'Parent not found for child',
+                        details: `The parent for child UUID "${pendingConnectionId.replace('pending-child-', '')}" was not found.`
+                    });
+                }
+                
+                // For other errors, just log and continue to the next pending connection
+                console.error(`⚠️ Skipping pending connection ${pendingConnectionId} due to error:`, error.message);
             }
         }
 
