@@ -1395,8 +1395,38 @@ app.put('/api/activities/:activityId', authenticateToken, async (req, res) => {
         );
         
         if (activityCheck.rows.length === 0) {
-            client.release();
-            return res.status(404).json({ success: false, error: 'Activity not found' });
+            // Check if this is a child UUID - if so, create new activity
+            const childCheck = await client.query(
+                'SELECT c.id FROM children c WHERE c.uuid = $1 AND c.parent_id = $2',
+                [activityId, req.user.id]
+            );
+            
+            if (childCheck.rows.length > 0) {
+                // Create new activity for this child
+                console.log('🔍 Creating new activity for child UUID:', activityId);
+                
+                // Convert empty strings to null for time fields  
+                const processedStartTime = start_time && start_time.trim() ? start_time.trim() : null;
+                const processedEndTime = end_time && end_time.trim() ? end_time.trim() : null;
+                const processedEndDate = end_date && end_date.trim() ? end_date.trim() : null;
+                const processedCost = cost && cost.trim() ? parseFloat(cost.trim()) : null;
+                const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
+                const processedAutoNotify = auto_notify_new_connections !== undefined ? auto_notify_new_connections : false;
+                const processedIsShared = is_shared !== undefined ? is_shared : true;
+                
+                const createResult = await client.query(
+                    `INSERT INTO activities (uuid, child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at)
+                     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+                     RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at`,
+                    [childCheck.rows[0].id, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, processedAutoNotify, processedIsShared]
+                );
+                
+                client.release();
+                return res.json({ success: true, data: createResult.rows[0] });
+            } else {
+                client.release();
+                return res.status(404).json({ success: false, error: 'Activity not found' });
+            }
         }
         
         // Convert empty strings to null for time fields  
