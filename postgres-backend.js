@@ -3606,7 +3606,7 @@ async function startServer() {
         
         app.listen(PORT, () => {
             console.log('🚀 SMS & Email Backend Server with PostgreSQL Started!');
-            console.log('📡 Server running on http://localhost:' + PORT);
+            console.log('📡 Server running on http://localhost:' + PORT + ' - v2.1');
             console.log('🔗 Health check: http://localhost:' + PORT + '/health');
             console.log('📱📧 Ready to handle SMS and Email requests');
             console.log('🗄️ Connected to PostgreSQL Database');
