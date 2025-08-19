@@ -3322,11 +3322,15 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
                    END as invitation_type,
                    conn.status as connection_status
             FROM pending_activity_invitations pai
-            LEFT JOIN children c ON c.uuid = (
+            LEFT JOIN children c ON (
                 CASE 
+                    -- New format: pending-child-{childUuid} - show specific child only
                     WHEN pai.pending_connection_id LIKE 'pending-child-%' 
-                    THEN REPLACE(pai.pending_connection_id, 'pending-child-', '')::uuid
-                    ELSE NULL
+                    THEN c.uuid = REPLACE(pai.pending_connection_id, 'pending-child-', '')::uuid
+                    -- Old format: pending-{parentUuid} - show all children from that parent  
+                    WHEN pai.pending_connection_id LIKE 'pending-%' AND pai.pending_connection_id NOT LIKE 'pending-child-%'
+                    THEN c.parent_id = (SELECT id FROM users WHERE uuid = REPLACE(pai.pending_connection_id, 'pending-', '')::uuid)
+                    ELSE FALSE
                 END
             )
             LEFT JOIN users u ON c.parent_id = u.id
