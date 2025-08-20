@@ -4018,8 +4018,8 @@ async function processPendingInvitations(client, connectionRequestData) {
         }
         
         // Remove the processed pending invitations
-        await client.query('DELETE FROM pending_activity_invitations WHERE pending_connection_id = $1', [pendingKey]);
-        console.log(`🗑️ Removed ${pendingInvitations.rows.length} processed pending invitations`);
+        await client.query('DELETE FROM pending_activity_invitations WHERE pending_connection_id = ANY($1)', [pendingKeys]);
+        console.log(`🗑️ Removed ${pendingInvitations.rows.length} processed pending invitations with keys:`, pendingKeys);
         
     } catch (error) {
         console.error('❌ Pending invitations processing failed:', error);
