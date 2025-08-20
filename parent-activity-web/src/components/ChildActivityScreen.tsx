@@ -53,6 +53,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [addingActivity, setAddingActivity] = useState(false);
   const [activityParticipants, setActivityParticipants] = useState<any>(null);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
+  const [invitationData, setInvitationData] = useState<any>(null);
   const apiService = ApiService.getInstance();
 
   // Get user-specific draft key to prevent cross-user data leakage
@@ -69,7 +70,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       isSharedActivity,
       autoNotifyNewConnections,
       selectedConnectedChildren,
-      childId: child.id
+      childUuid: child.uuid
     };
     localStorage.setItem(getDraftKey(), JSON.stringify(draft));
     return draft;
@@ -82,7 +83,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       if (draftStr) {
         const draft = JSON.parse(draftStr);
         // Only restore if it's for the same child
-        if (draft.childId === child.id) {
+        if (draft.childUuid === child.uuid) {
           setNewActivity(draft.newActivity || {
             name: '',
             description: '',
@@ -178,7 +179,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     
     // Check if there's a saved draft to restore
     restoreActivityDraft();
-  }, [child.id]);
+  }, [child.uuid]);
 
   // Load connections when shared activity is enabled
   useEffect(() => {
@@ -467,7 +468,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   const loadConnectedChildren = async () => {
     try {
-      console.log(`🔄 Loading connected children for host child: ${child.name} (ID: ${child.id}, UUID: ${child.uuid})...`);
+      console.log(`🔄 Loading connected children for host child: ${child.name} (UUID: ${child.uuid})...`);
       const response = await apiService.getConnections();
       console.log('📡 Connections API response:', response);
       if (response.success && response.data) {
@@ -590,7 +591,30 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       if (response.success && response.data) {
         console.log('✅ Participants loaded successfully:', response.data);
         console.log('🏠 Host data:', response.data.host);
+        console.log('🎟️ Raw user_invitation data:', response.data.user_invitation);
+        console.log('🎯 Current selectedActivity:', selectedActivity);
         setActivityParticipants(response.data);
+        
+        // Store invitation data separately if present
+        if (response.data.user_invitation) {
+          console.log('🎟️ Found user invitation - storing separately:', response.data.user_invitation);
+          const invitation = response.data.user_invitation;
+          
+          const invitationInfo = {
+            isPendingInvitation: invitation.status === 'pending',
+            isAcceptedInvitation: invitation.status === 'accepted',
+            isDeclinedInvitation: invitation.status === 'declined',
+            invitationUuid: invitation.invitation_uuid,
+            invitation_message: invitation.invitation_message
+          };
+          
+          setInvitationData(invitationInfo);
+          
+          console.log('💾 Stored invitation data separately:', invitationInfo);
+        } else {
+          setInvitationData(null);
+        }
+        
       } else {
         console.error('❌ Failed to load activity participants:', response.error);
         setActivityParticipants(null);
@@ -925,7 +949,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       // Track pending connections for each created activity
       if (isSharedActivity && createdActivities.length > 0) {
         const pendingConnections = selectedConnectedChildren.filter(id => 
-          typeof id === 'string' && id.startsWith('pending-')
+          typeof id === 'string' && id.startsWith('pending-child-')
         ) as string[];
         
         if (pendingConnections.length > 0) {
@@ -950,14 +974,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           for (const childId of selectedConnectedChildren) {
             try {
               // Skip pending connections for now - they'll be invited when connections are accepted
-              if (typeof childId === 'string' && childId.startsWith('pending-')) {
+              if (typeof childId === 'string' && childId.startsWith('pending-child-')) {
                 console.log('Skipping pending connection invitation:', childId);
                 continue;
               }
               
               // Find the connected child data to get the parent ID
               // childId is now a UUID since we use UUIDs for connected children
-              const connectedChild = connectedChildren.find(cc => cc.id === childId);
+              const connectedChild = connectedChildren.find(cc => cc.uuid === childId);
               console.log(`🔍 Looking for connected child with UUID: ${childId}`, connectedChild);
               
               if (connectedChild) {
@@ -1077,7 +1101,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       const response = await apiService.sendActivityInvitation(
         activity.uuid || String(activity.id),
         child.parentUuid,
-        typeof child.id === 'string' ? child.id : undefined,
+        typeof child.uuid === 'string' ? child.uuid : undefined,
         `Hi! I'd like to invite ${child.name} to join us for "${activity.name}" on ${formatDate(activity.start_date)}. Let me know if you're interested!`
       );
       
@@ -1264,7 +1288,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       // Since activities now come with is_shared property from backend, just use them directly
       // and add any invitation-only activities that don't have corresponding activities
       const invitationOnlyActivities = [
-        ...dayInvitedActivities.filter(inv => !dayActivities.some(act => act.id === inv.id)).map(invitation => ({
+        ...dayInvitedActivities.filter(inv => !dayActivities.some(act => act.uuid === inv.uuid || act.id === inv.id)).map(invitation => ({
           ...invitation,
           id: `accepted-${invitation.id}`,
           activity_id: invitation.id,
@@ -1277,7 +1301,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           host_parent_name: invitation.host_parent_username,
           is_shared: true
         })),
-        ...dayPendingInvitations.filter(inv => !dayActivities.some(act => act.id === inv.id)).map(invitation => ({
+        ...dayPendingInvitations.filter(inv => !dayActivities.some(act => act.uuid === inv.uuid || act.id === inv.id)).map(invitation => ({
           ...invitation,
           id: `invitation-${invitation.id}`,
           activity_id: invitation.id,
@@ -1289,7 +1313,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           host_child_name: invitation.host_child_name,
           host_parent_name: invitation.host_parent_username
         })),
-        ...dayDeclinedInvitations.filter(inv => !dayActivities.some(act => act.id === inv.id)).map(invitation => ({
+        ...dayDeclinedInvitations.filter(inv => !dayActivities.some(act => act.uuid === inv.uuid || act.id === inv.id)).map(invitation => ({
           ...invitation,
           id: `declined-${invitation.id}`,
           activity_id: invitation.id,
@@ -1633,7 +1657,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 ) : connectedChildren.length > 0 ? (
                   <div className="children-list">
                     {connectedChildren
-                      .filter(child => !activityParticipants?.participants?.some((p: any) => p.child_uuid === child.id && p.child_name && p.child_uuid))
+                      .filter(child => !activityParticipants?.participants?.some((p: any) => p.child_uuid === child.uuid && p.child_name && p.child_uuid))
                       .map((child: any, index: number) => (
                         <div key={index} className="child-item">
                           <div className="child-info">
@@ -1648,7 +1672,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                           </button>
                         </div>
                       ))}
-                    {connectedChildren.filter(child => !activityParticipants?.participants?.some((p: any) => p.child_uuid === child.id && p.child_name && p.child_uuid)).length === 0 && (
+                    {connectedChildren.filter(child => !activityParticipants?.participants?.some((p: any) => p.child_uuid === child.uuid && p.child_name && p.child_uuid)).length === 0 && (
                       <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
                         All connected children have already been invited
                       </p>
@@ -1671,17 +1695,26 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             </button>
             
             {/* Show accept/decline buttons for pending invitations */}
-            {(selectedActivity as any).isPendingInvitation && (selectedActivity as any).invitationUuid && (
+            {(((selectedActivity as any).isPendingInvitation && (selectedActivity as any).invitationUuid) || 
+              (invitationData?.isPendingInvitation && invitationData?.invitationUuid)) && (
               <>
                 <button
-                  onClick={() => handleInvitationResponse((selectedActivity as any).invitationUuid!, 'accept')}
+                  onClick={() => {
+                    const invitationUuid = (selectedActivity as any).invitationUuid || invitationData?.invitationUuid;
+                    console.log('🎯 Accepting invitation with UUID:', invitationUuid);
+                    handleInvitationResponse(invitationUuid, 'accept');
+                  }}
                   className="confirm-btn"
                   style={{ background: 'linear-gradient(135deg, #48bb78, #68d391)', marginRight: '8px' }}
                 >
                   ✅ Accept Invitation
                 </button>
                 <button
-                  onClick={() => handleInvitationResponse((selectedActivity as any).invitationUuid!, 'reject')}
+                  onClick={() => {
+                    const invitationUuid = (selectedActivity as any).invitationUuid || invitationData?.invitationUuid;
+                    console.log('🎯 Declining invitation with UUID:', invitationUuid);
+                    handleInvitationResponse(invitationUuid, 'reject');
+                  }}
                   className="delete-btn"
                 >
                   ❌ Decline Invitation
@@ -1731,8 +1764,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               </>
             )}
             
-            {/* For non-host activities, show informational text */}
-            {!selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation && (
+            {/* For non-host activities, show informational text (only when no invitation buttons are shown) */}
+            {!selectedActivity.is_host && 
+             !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation &&
+             !invitationData?.isPendingInvitation && !invitationData?.isAcceptedInvitation && (
               <div className="host-info">
                 <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
                   Only the activity host can edit this activity
@@ -1910,9 +1945,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                         <button
                           type="button"
                           onClick={() => {
-                            const allConnectedIds = connectedChildren.map(child => child.id);
-                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.target_parent_uuid}`);
-                            const allIds = [...allConnectedIds, ...allPendingIds];
+                            const allConnectedUuids = connectedChildren.map(child => child.uuid);
+                            const allPendingIds = pendingConnectionRequests.map(request => `pending-child-${request.target_child_uuid || request.target_parent_uuid}`);
+                            const allIds = [...allConnectedUuids, ...allPendingIds];
                             
                             const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
                             if (allSelected) {
@@ -1924,9 +1959,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                           className="select-all-btn"
                         >
                           {(() => {
-                            const allConnectedIds = connectedChildren.map(child => child.id);
-                            const allPendingIds = pendingConnectionRequests.map(request => `pending-${request.target_parent_uuid}`);
-                            const allIds = [...allConnectedIds, ...allPendingIds];
+                            const allConnectedUuids = connectedChildren.map(child => child.uuid);
+                            const allPendingIds = pendingConnectionRequests.map(request => `pending-child-${request.target_child_uuid || request.target_parent_uuid}`);
+                            const allIds = [...allConnectedUuids, ...allPendingIds];
                             const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
                             const totalCount = connectedChildren.length + pendingConnectionRequests.length;
                             return allSelected ? 'Deselect All' : 'Select All';
@@ -1999,13 +2034,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                         <label key={`pending-${request.id}`} className="child-checkbox" style={{ opacity: 0.7 }}>
                           <input
                             type="checkbox"
-                            checked={selectedConnectedChildren.includes(`pending-${request.target_parent_uuid}`)}
+                            checked={selectedConnectedChildren.includes(`pending-child-${request.target_child_uuid || request.target_parent_uuid}`)}
                             onChange={(e) => {
+                              const pendingId = `pending-child-${request.target_child_uuid || request.target_parent_uuid}`;
                               if (e.target.checked) {
-                                setSelectedConnectedChildren([...selectedConnectedChildren, `pending-${request.target_parent_uuid}`]);
+                                setSelectedConnectedChildren([...selectedConnectedChildren, pendingId]);
                               } else {
                                 setSelectedConnectedChildren(
-                                  selectedConnectedChildren.filter(id => id !== `pending-${request.target_parent_uuid}`)
+                                  selectedConnectedChildren.filter(id => id !== pendingId)
                                 );
                               }
                             }}
@@ -2241,7 +2277,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                         <strong>{connection.parent_name}</strong>
                         <span className="family-email">{connection.parent_email}</span>
                         {connection.children?.map((child: any) => (
-                          <div key={child.id} className="child-item">
+                          <div key={child.uuid} className="child-item">
                             👶 {child.name}
                           </div>
                         ))}

@@ -23,10 +23,14 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [selectedParent, setSelectedParent] = useState<SearchResult | null>(null);
   const [myChildren, setMyChildren] = useState<Child[]>([]);
-  const [selectedMyChild, setSelectedMyChild] = useState<number | null>(null);
+  const [selectedMyChild, setSelectedMyChild] = useState<string | null>(null);
   const [selectedTargetChildren, setSelectedTargetChildren] = useState<string[]>([]);
   const [connectionMessage, setConnectionMessage] = useState('');
   const [showReturnToActivityPopup, setShowReturnToActivityPopup] = useState(false);
+  const [showSkeletonModal, setShowSkeletonModal] = useState(false);
+  const [noResultsContact, setNoResultsContact] = useState('');
+  const [skeletonChildName, setSkeletonChildName] = useState('');
+  const [skeletonChildBirthYear, setSkeletonChildBirthYear] = useState('');
   const apiService = ApiService.getInstance();
 
   useEffect(() => {
@@ -121,7 +125,9 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
       if (response.success && response.data) {
         setSearchResults(response.data);
         if (response.data.length === 0) {
-          alert('No parents found with that email or phone number');
+          // No results found - offer to create skeleton account
+          setNoResultsContact(searchText.trim());
+          setShowSkeletonModal(true);
         }
       } else {
         alert(`Error: ${response.error || 'Search failed'}`);
@@ -274,9 +280,9 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
 
   const handleConnectRequest = (parent: SearchResult) => {
     setSelectedParent(parent);
-    setSelectedMyChild(myChildren.length > 0 ? myChildren[0].id : null);
-    // Start with first child selected, or empty array if no children
-    setSelectedTargetChildren(parent.children.length > 0 ? [parent.children[0].uuid] : []);
+    setSelectedMyChild(null); // User must explicitly select their child
+    // Start with no children selected - user must explicitly choose
+    setSelectedTargetChildren([]);
     setConnectionMessage('');
     setShowConnectModal(true);
   };
@@ -320,7 +326,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
     }
 
     // Find the child objects to get their UUIDs
-    const myChildObj = myChildren.find(child => child.id === selectedMyChild);
+    const myChildObj = myChildren.find(child => child.uuid === selectedMyChild);
     
     try {
       let successCount = 0;
@@ -332,8 +338,8 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
         
         const requestData = {
           target_parent_id: selectedParent.user_uuid || selectedParent.id,
-          child_uuid: myChildObj?.uuid || myChildObj?.id,
-          target_child_uuid: targetChildObj?.uuid || targetChildObj?.id,
+          child_uuid: myChildObj?.uuid,
+          target_child_uuid: targetChildObj?.uuid,
           message: connectionMessage.trim() || undefined,
         };
 
@@ -376,6 +382,51 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
     }
   };
 
+  const handleCreateSkeletonAccount = async () => {
+    if (!selectedMyChild || !skeletonChildName.trim()) {
+      alert('Please select your child and enter the target child\'s name');
+      return;
+    }
+
+    try {
+      const myChildObj = myChildren.find(child => child.uuid === selectedMyChild);
+      
+      // Determine contact type (email or phone)
+      const contactType = noResultsContact.includes('@') ? 'email' : 'phone';
+      
+      const requestData = {
+        contact_method: noResultsContact,
+        contact_type: contactType,
+        my_child_uuid: selectedMyChild,
+        target_child_name: skeletonChildName.trim(),
+        target_child_birth_year: skeletonChildBirthYear ? parseInt(skeletonChildBirthYear) : null,
+        message: connectionMessage.trim() || `${myChildObj?.name} would like to connect with ${skeletonChildName.trim()}`
+      };
+
+      console.log('📝 Creating skeleton account:', requestData);
+
+      const response = await apiService.createSkeletonAccount(requestData);
+
+      if (response.success) {
+        alert(`Skeleton account created! When someone creates an account with ${noResultsContact}, they will receive your connection request.`);
+        setShowSkeletonModal(false);
+        // Reset form
+        setNoResultsContact('');
+        setSkeletonChildName('');
+        setSkeletonChildBirthYear('');
+        setConnectionMessage('');
+        setSelectedMyChild(null);
+        setSearchText('');
+        setSearchResults([]);
+      } else {
+        alert(`Error: ${response.error || 'Failed to create skeleton account'}`);
+      }
+    } catch (error) {
+      alert('Failed to create skeleton account');
+      console.error('Create skeleton account error:', error);
+    }
+  };
+
   return (
     <div className="connections-screen">
       <div className="connections-header">
@@ -408,7 +459,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
         <div className="search-results">
           <h4>Search Results</h4>
           {searchResults.map((parent) => (
-            <div key={parent.id} className="parent-card">
+            <div key={parent.user_uuid || parent.id} className="parent-card">
               <div className="parent-info">
                 <h5>{parent.username}</h5>
                 <div className="parent-contact">{parent.email}</div>
@@ -544,23 +595,23 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
                 // Determine which child belongs to the current user
                 let myChild, theirChild;
                 if (connection.child1_parent_name === currentUsername) {
-                  myChild = { name: connection.child1_name, id: connection.child1_id };
-                  theirChild = { name: connection.child2_name, id: connection.child2_id };
+                  myChild = { name: connection.child1_name, uuid: connection.child1_uuid };
+                  theirChild = { name: connection.child2_name, uuid: connection.child2_uuid };
                 } else {
-                  myChild = { name: connection.child2_name, id: connection.child2_id };
-                  theirChild = { name: connection.child1_name, id: connection.child1_id };
+                  myChild = { name: connection.child2_name, uuid: connection.child2_uuid };
+                  theirChild = { name: connection.child1_name, uuid: connection.child1_uuid };
                 }
                 
                 // Group by our child
-                if (!grouped[myChild.id]) {
-                  grouped[myChild.id] = {
+                if (!grouped[myChild.uuid]) {
+                  grouped[myChild.uuid] = {
                     childName: myChild.name,
                     connections: []
                   };
                 }
                 
                 console.log('🔍 Processing connection for deletion:', { connectionId: connection.connection_uuid, connection });
-                grouped[myChild.id].connections.push({
+                grouped[myChild.uuid].connections.push({
                   ...connection,
                   connectedToName: theirChild.name
                 });
@@ -572,7 +623,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
                 <h4 className="child-group-header">{childGroup.childName}</h4>
                 <div className="child-connections-list">
                   {childGroup.connections.map((connection: any) => (
-                    <div key={connection.id} className="connection-item">
+                    <div key={connection.connection_uuid} className="connection-item">
                       <span className="connected-to"><strong>{connection.connectedToName}</strong></span>
                       <button
                         onClick={() => {
@@ -607,9 +658,9 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
               <div className="child-selector">
                 {myChildren.map((child) => (
                   <button
-                    key={child.id}
-                    className={`child-option ${selectedMyChild === child.id ? 'selected' : ''}`}
-                    onClick={() => setSelectedMyChild(child.id)}
+                    key={child.uuid}
+                    className={`child-option ${selectedMyChild === child.uuid ? 'selected' : ''}`}
+                    onClick={() => setSelectedMyChild(child.uuid)}
                   >
                     {child.name}
                   </button>
@@ -619,6 +670,16 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
 
             <div className="form-section">
               <label>Their Child:</label>
+              <div className="selection-help" style={{ 
+                fontSize: '12px', 
+                color: '#6c757d', 
+                marginBottom: '8px',
+                background: '#ffffcc',
+                padding: '4px',
+                borderRadius: '4px'
+              }}>
+                Click to select/deselect children. Multiple selections allowed.
+              </div>
               <div className="child-selector">
                 {selectedParent.children.length > 1 && (
                   <button
@@ -649,6 +710,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
                     key={child.uuid}
                     className={`child-option ${selectedTargetChildren.includes(child.uuid) ? 'selected' : ''}`}
                     onClick={() => {
+                      // Multi-select mode (mobile-friendly)
                       if (selectedTargetChildren.includes(child.uuid)) {
                         // Remove this child from selection
                         setSelectedTargetChildren(selectedTargetChildren.filter(uuid => uuid !== child.uuid));
@@ -763,6 +825,157 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
                 }}
               >
                 Return to Activity
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Skeleton Account Creation Modal */}
+      {showSkeletonModal && (
+        <div className="modal-overlay" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '24px',
+            borderRadius: '12px',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)'
+          }}>
+            <h3>No Account Found</h3>
+            <p>No parent found with <strong>{noResultsContact}</strong>.</p>
+            <p>Would you like to create a connection request for when they sign up?</p>
+            
+            <div className="form-section">
+              <label>Select Your Child:</label>
+              <select
+                value={selectedMyChild || ''}
+                onChange={(e) => setSelectedMyChild(e.target.value)}
+                className="child-select"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '2px solid #e9ecef',
+                  fontSize: '16px'
+                }}
+              >
+                <option value="">Choose your child...</option>
+                {myChildren.map((child) => (
+                  <option key={child.uuid} value={child.uuid}>
+                    {child.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-section">
+              <label>Target Child's Name:</label>
+              <input
+                type="text"
+                placeholder="Enter the child's first and last name"
+                value={skeletonChildName}
+                onChange={(e) => setSkeletonChildName(e.target.value)}
+                className="name-input"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '2px solid #e9ecef',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            <div className="form-section">
+              <label>Target Child's Birth Year (Optional):</label>
+              <input
+                type="number"
+                placeholder="e.g., 2015"
+                value={skeletonChildBirthYear}
+                onChange={(e) => setSkeletonChildBirthYear(e.target.value)}
+                className="year-input"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '2px solid #e9ecef',
+                  fontSize: '16px'
+                }}
+                min="2000"
+                max="2025"
+              />
+            </div>
+
+            <div className="form-section">
+              <label>Message (Optional):</label>
+              <textarea
+                placeholder="Hi! Would love to connect our kids..."
+                value={connectionMessage}
+                onChange={(e) => setConnectionMessage(e.target.value)}
+                className="message-input"
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '2px solid #e9ecef',
+                  fontSize: '16px',
+                  minHeight: '80px',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: '20px' }}>
+              <button
+                onClick={() => {
+                  setShowSkeletonModal(false);
+                  setNoResultsContact('');
+                  setSkeletonChildName('');
+                  setSkeletonChildBirthYear('');
+                  setConnectionMessage('');
+                  setSelectedMyChild(null);
+                }}
+                className="cancel-btn"
+                style={{
+                  padding: '12px 20px',
+                  marginRight: '10px',
+                  borderRadius: '8px',
+                  border: '2px solid #dc3545',
+                  backgroundColor: 'white',
+                  color: '#dc3545',
+                  fontSize: '16px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateSkeletonAccount}
+                className="send-btn"
+                style={{
+                  padding: '12px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                  color: 'white',
+                  fontSize: '16px',
+                  cursor: 'pointer'
+                }}
+                disabled={!selectedMyChild || !skeletonChildName.trim()}
+              >
+                Create Connection Request
               </button>
             </div>
           </div>

@@ -24,7 +24,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   
   console.log('🔥 Dashboard RENDER called with activeTab:', activeTab, 'pathname:', location.pathname);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [selectedChildId, setSelectedChildId] = useState<number | null>(null);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [cameFromActivity, setCameFromActivity] = useState(false);
   const [shouldRestoreActivityCreation, setShouldRestoreActivityCreation] = useState(false);
   const [activityCreationChildUuid, setActivityCreationChildUuid] = useState<string | null>(null);
@@ -32,6 +32,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   // Removed navigationKey - no longer needed since we removed popstate handler
   const [calendarInitialDate, setCalendarInitialDate] = useState<string | undefined>(undefined);
   const [children, setChildren] = useState<any[]>([]);
+  const [childrenRefreshTrigger, setChildrenRefreshTrigger] = useState<number>(0);
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const apiService = ApiService.getInstance();
@@ -40,11 +41,13 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   useEffect(() => {
     const loadChildren = async () => {
       try {
+        console.log('🔄 Dashboard loading children...');
         const response = await apiService.getChildren();
         if (response.success && response.data) {
           const childrenData = Array.isArray(response.data) 
             ? response.data 
             : (response.data as any)?.data || [];
+          console.log('🔍 Dashboard children loaded:', childrenData.length);
           setChildren(childrenData);
         }
       } catch (error) {
@@ -53,6 +56,18 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
     };
     
     loadChildren();
+    
+    // Listen for children data changes from ChildrenScreen
+    const handleChildrenDataChanged = () => {
+      console.log('📡 Dashboard received childrenDataChanged event, reloading...');
+      loadChildren();
+    };
+    
+    window.addEventListener('childrenDataChanged', handleChildrenDataChanged);
+    
+    return () => {
+      window.removeEventListener('childrenDataChanged', handleChildrenDataChanged);
+    };
   }, []);
 
   // Get UUIDs from URL params - React Router handles this automatically
@@ -69,8 +84,8 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
     if (childUuid && children.length > 0 && path.includes('/activities')) {
       const child = children.find(c => c.uuid === childUuid);
       if (child) {
-        console.log('✅ Setting selectedChildId:', child.id, 'for UUID:', childUuid);
-        setSelectedChildId(child.id);
+        console.log('✅ Setting selectedChildId:', child.uuid, 'for UUID:', childUuid);
+        setSelectedChildId(child.uuid);
       } else {
         console.log('❌ Child not found for UUID:', childUuid);
         setSelectedChildId(null);
@@ -132,6 +147,10 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
     if (tab === 'connections') {
       handleNavigateToConnections();
     } else {
+      // Trigger refresh for ChildrenScreen if switching to children tab
+      if (tab === 'children') {
+        setChildrenRefreshTrigger(Date.now());
+      }
       navigate(`/${tab}`);
       if (tab !== 'calendar') {
         setCalendarInitialDate(undefined);
@@ -279,6 +298,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
           }}
           onNavigateToConnections={handleNavigateToConnectionsFromActivity}
           shouldRestoreActivityCreation={shouldRestoreActivityCreation}
+          refreshTrigger={childrenRefreshTrigger}
         />;
       case 'calendar':
         return <CalendarScreen 
@@ -362,6 +382,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
             setActiveTab('calendar');
           }} 
           onNavigateToConnections={() => setActiveTab('connections')}
+          refreshTrigger={childrenRefreshTrigger}
         />;
     }
   };
@@ -395,6 +416,8 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
             className={`nav-item ${activeTab === 'children' ? 'active' : ''}`}
             onClick={() => {
               setCalendarInitialDate(undefined);
+              // Trigger refresh for ChildrenScreen
+              setChildrenRefreshTrigger(Date.now());
               navigate('/children');
             }}
           >

@@ -20,7 +20,7 @@ interface ActivityInvitation {
   host_family_name?: string;
   host_parent_name?: string;
   host_parent_email?: string;
-  invited_child_id?: number;
+  invited_child_uuid?: string;
   invited_child_name?: string;
   message?: string;
   created_at: string;
@@ -44,24 +44,35 @@ interface ChildrenScreenProps {
   onNavigateToChildActivities?: (child: Child) => void;
   onNavigateToActivity?: (child: Child, activity: any) => void;
   onNavigateBack?: () => void;
-  initialSelectedChildId?: number | null;
+  initialSelectedChildId?: string | null;
   initialActivityUuid?: string;
-  onChildSelectionChange?: (childId: number | null) => void;
+  onChildSelectionChange?: (childId: string | null) => void;
   onNavigateToConnections?: (isInActivityCreation?: boolean) => void;
   shouldRestoreActivityCreation?: boolean;
+  refreshTrigger?: number; // Add trigger to force refresh when prop changes
 }
 
-const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, onNavigateToChildCalendar, onNavigateToChildActivities, onNavigateToActivity, onNavigateBack, initialSelectedChildId, initialActivityUuid, onChildSelectionChange, onNavigateToConnections, shouldRestoreActivityCreation }) => {
+const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, onNavigateToChildCalendar, onNavigateToChildActivities, onNavigateToActivity, onNavigateBack, initialSelectedChildId, initialActivityUuid, onChildSelectionChange, onNavigateToConnections, shouldRestoreActivityCreation, refreshTrigger }) => {
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newChildFirstName, setNewChildFirstName] = useState('');
   const [newChildLastName, setNewChildLastName] = useState('');
+  const [newChildBirthDate, setNewChildBirthDate] = useState('');
   const [addingChild, setAddingChild] = useState(false);
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
-  const [childActivityCounts, setChildActivityCounts] = useState<Record<number, number>>({});
-  const [childInvitations, setChildInvitations] = useState<Record<number, ActivityInvitation[]>>({});
-  const [childConnections, setChildConnections] = useState<Record<number, ConnectionRequest[]>>({});
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingChild, setEditingChild] = useState<Child | null>(null);
+  const [editChildFirstName, setEditChildFirstName] = useState('');
+  const [editChildLastName, setEditChildLastName] = useState('');
+  const [editChildBirthDate, setEditChildBirthDate] = useState('');
+  const [editChildGrade, setEditChildGrade] = useState('');
+  const [editChildSchool, setEditChildSchool] = useState('');
+  const [editChildInterests, setEditChildInterests] = useState('');
+  const [updatingChild, setUpdatingChild] = useState(false);
+  const [childActivityCounts, setChildActivityCounts] = useState<Record<string, number>>({});
+  const [childInvitations, setChildInvitations] = useState<Record<string, ActivityInvitation[]>>({});
+  const [childConnections, setChildConnections] = useState<Record<string, ConnectionRequest[]>>({});
   const [hostedActivityNotifications, setHostedActivityNotifications] = useState<any[]>([]);
   const [processingInvitation, setProcessingInvitation] = useState<number | null>(null);
   const [processingConnection, setProcessingConnection] = useState<string | null>(null);
@@ -76,6 +87,14 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     loadChildren();
     checkForActivityDraft();
   }, []);
+
+  // Refresh children data when refreshTrigger prop changes
+  useEffect(() => {
+    if (refreshTrigger !== undefined) {
+      console.log('🔄 ChildrenScreen refresh triggered by prop change:', refreshTrigger);
+      loadChildren();
+    }
+  }, [refreshTrigger]);
 
   // Check for activity draft when component becomes visible (user returns from connections tab)
   useEffect(() => {
@@ -109,8 +128,8 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
   };
 
   const resumeActivityCreation = () => {
-    if (activityDraft && activityDraft.childId) {
-      const child = children.find(c => c.id === activityDraft.childId);
+    if (activityDraft && activityDraft.childUuid) {
+      const child = children.find(c => c.uuid === activityDraft.childUuid);
       if (child) {
         // Clear the draft from ChildrenScreen since it will be handled by ChildActivityScreen
         setActivityDraft(null);
@@ -130,14 +149,20 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
 
   const loadChildren = async () => {
     try {
+      console.log('🔄 loadChildren called');
       setLoading(true);
       const response = await apiService.getChildren();
+      
+      console.log('🔍 loadChildren response:', response);
       
       if (response.success && response.data) {
         // Handle different response formats - API might return { data: [...] }
         const childrenData = Array.isArray(response.data) 
           ? response.data 
           : (response.data as any)?.data || [];
+        
+        console.log('🔍 Setting children data:', childrenData);
+        console.log('🔍 Children count:', childrenData.length);
         setChildren(childrenData);
         
         // Load activity counts, invitations, connection requests, and hosted activity notifications
@@ -161,7 +186,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
 
   const loadActivityCounts = async (childrenData: Child[]) => {
     try {
-      const counts: Record<number, number> = {};
+      const counts: Record<string, number> = {};
       
       // Get date range for accepted invitations
       const today = new Date();
@@ -186,18 +211,18 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
               return ownsActivity || isInvited;
             });
             
-            counts[child.id] = childActivities.length;
+            counts[child.uuid] = childActivities.length;
             console.log(`📊 Child ${child.name} (UUID: ${child.uuid}): ${childActivities.length} activities`);
           } catch (error) {
-            console.error(`Failed to load activity count for child ${child.id}:`, error);
-            counts[child.id] = 0;
+            console.error(`Failed to load activity count for child ${child.uuid}:`, error);
+            counts[child.uuid] = 0;
           }
         }
       } else {
         console.error('Failed to load calendar activities for counts:', calendarActivitiesResponse.error);
         // Set all counts to 0 if API fails
         for (const child of childrenData) {
-          counts[child.id] = 0;
+          counts[child.uuid] = 0;
         }
       }
       
@@ -221,11 +246,11 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       if (response.success && response.data) {
         
         // Group invitations by child
-        const invitationsByChild: Record<number, ActivityInvitation[]> = {};
+        const invitationsByChild: Record<string, ActivityInvitation[]> = {};
         
         // Initialize empty arrays for each child
         childrenData.forEach(child => {
-          invitationsByChild[child.id] = [];
+          invitationsByChild[child.uuid] = [];
         });
         
         // Filter for pending invitations only and group by child
@@ -238,7 +263,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
             
             if (targetChild) {
               // Convert the calendar invitation format to match ActivityInvitation interface
-              invitationsByChild[targetChild.id].push({
+              invitationsByChild[targetChild.uuid].push({
                 id: invitation.invitation_id,
                 invitation_uuid: invitation.invitation_uuid,
                 activity_id: invitation.id,
@@ -254,7 +279,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 host_family_name: invitation.host_family_name,
                 host_parent_name: invitation.host_parent_username,
                 host_parent_email: invitation.host_parent_email,
-                invited_child_id: targetChild.id,
+                invited_child_uuid: targetChild.uuid,
                 invited_child_name: invitation.invited_child_name,
                 message: invitation.invitation_message,
                 created_at: invitation.created_at || new Date().toISOString()
@@ -280,11 +305,11 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       const response = await apiService.getConnectionRequests();
       if (response.success && response.data) {
         // Group connection requests by child
-        const connectionsByChild: Record<number, ConnectionRequest[]> = {};
+        const connectionsByChild: Record<string, ConnectionRequest[]> = {};
         
         // Initialize empty arrays for each child
         childrenData.forEach(child => {
-          connectionsByChild[child.id] = [];
+          connectionsByChild[child.uuid] = [];
         });
         
         // Group connection requests by the target child
@@ -295,7 +320,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
           );
           
           if (targetChild) {
-            connectionsByChild[targetChild.id].push({
+            connectionsByChild[targetChild.uuid].push({
               id: request.id,
               request_uuid: request.request_uuid,
               requester_name: request.requester_name,
@@ -358,7 +383,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                     start_date: activity.start_date,
                     start_time: activity.start_time,
                     end_time: activity.end_time,
-                    host_child_id: hostChild.id,
+                    host_child_uuid: hostChild.uuid,
                     host_child_name: hostChild.name,
                     unviewed_responses: responseParticipants,
                     total_unviewed: parseInt(activity.unviewed_status_changes),
@@ -405,7 +430,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
         setChildInvitations(prev => {
           const updated = { ...prev };
           Object.keys(updated).forEach(childId => {
-            updated[parseInt(childId)] = updated[parseInt(childId)].filter(inv => inv.invitation_uuid !== invitationUuid);
+            updated[childId] = updated[childId].filter(inv => inv.invitation_uuid !== invitationUuid);
           });
           return updated;
         });
@@ -438,7 +463,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
         setChildConnections(prev => {
           const updated = { ...prev };
           Object.keys(updated).forEach(childId => {
-            updated[parseInt(childId)] = updated[parseInt(childId)].filter(req => req.request_uuid !== connectionUuid);
+            updated[childId] = updated[childId].filter(req => req.request_uuid !== connectionUuid);
           });
           return updated;
         });
@@ -499,24 +524,53 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
 
     setAddingChild(true);
     try {
-      const response = await apiService.createChild({ 
+      // Calculate age from birth date if provided
+      let age = undefined;
+      if (newChildBirthDate) {
+        const birthDate = new Date(newChildBirthDate);
+        const today = new Date();
+        age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+      }
+
+      const childData = { 
         first_name: newChildFirstName.trim(),
-        last_name: newChildLastName.trim()
-      });
+        last_name: newChildLastName.trim(),
+        age: age
+      };
+
+      console.log('🔍 Creating child with data:', childData);
+      
+      const response = await apiService.createChild(childData);
+      
+      console.log('🔍 Create child response:', response);
       
       if (response.success) {
-        // Immediately add the new child to the state for better UX
-        if (response.data) {
-          setChildren(prev => [response.data, ...prev]);
-        }
+        console.log('✅ Child created successfully, response.data:', response.data);
         
+        // Clear the form and close modal
         setNewChildFirstName('');
         setNewChildLastName('');
+        setNewChildBirthDate('');
         setShowAddModal(false);
         
-        // Also reload to ensure everything is in sync
-        loadChildren();
+        console.log('🔄 Refreshing children data from API...');
+        // Refresh data from API to get the latest state
+        await loadChildren();
+        
+        // Notify parent component (Dashboard) to refresh its children state too
+        console.log('📡 Triggering data changed callback');
+        if (typeof window !== 'undefined') {
+          // Dispatch a custom event to notify Dashboard
+          window.dispatchEvent(new CustomEvent('childrenDataChanged'));
+        }
+        
+        console.log('✅ Child creation process completed successfully');
       } else {
+        console.log('❌ Child creation failed:', response.error);
         alert(`Error: ${response.error || 'Failed to add child'}`);
       }
     } catch (error) {
@@ -530,7 +584,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
   const handleDeleteChild = async (child: Child) => {
     if (window.confirm(`Are you sure you want to delete ${child.display_name || child.name}? This will also delete all their activities.`)) {
       try {
-        const response = await apiService.deleteChild(child.id);
+        const response = await apiService.deleteChild(child.uuid);
         if (response.success) {
           loadChildren();
           alert('Child deleted successfully');
@@ -544,12 +598,104 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     }
   };
 
+  const handleEditChild = (child: Child) => {
+    setEditingChild(child);
+    setEditChildFirstName(child.first_name || child.name?.split(' ')[0] || '');
+    setEditChildLastName(child.last_name || child.name?.split(' ').slice(1).join(' ') || '');
+    
+    // Calculate birth date from age if available
+    let birthDate = '';
+    if (child.age) {
+      const currentYear = new Date().getFullYear();
+      const birthYear = currentYear - child.age;
+      birthDate = `${birthYear}-01-01`; // Default to January 1st
+    }
+    setEditChildBirthDate(birthDate);
+    
+    setEditChildGrade(child.grade || '');
+    setEditChildSchool(child.school || '');
+    setEditChildInterests(child.interests || '');
+    setShowEditModal(true);
+  };
+
+  const handleUpdateChild = async () => {
+    if (!editingChild) return;
+    
+    if (!editChildFirstName.trim()) {
+      alert('Please enter the child\'s first name');
+      return;
+    }
+
+    setUpdatingChild(true);
+    try {
+      // Calculate age from birth date
+      let age = undefined;
+      if (editChildBirthDate) {
+        const birthDate = new Date(editChildBirthDate);
+        const today = new Date();
+        age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+      }
+
+      const updateData = {
+        first_name: editChildFirstName.trim(),
+        last_name: editChildLastName.trim(),
+        age: age,
+        grade: editChildGrade.trim() || undefined,
+        school: editChildSchool.trim() || undefined,
+        interests: editChildInterests.trim() || undefined
+      };
+
+      console.log('🔄 Updating child with data:', updateData);
+      
+      const response = await apiService.updateChild(editingChild.uuid, updateData);
+      
+      if (response.success) {
+        console.log('✅ Child updated successfully');
+        
+        // Close modal and refresh data
+        setShowEditModal(false);
+        setEditingChild(null);
+        await loadChildren();
+        
+        // Notify parent component
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('childrenDataChanged'));
+        }
+        
+        alert('Child updated successfully');
+      } else {
+        console.log('❌ Child update failed:', response.error);
+        alert(`Error: ${response.error || 'Failed to update child'}`);
+      }
+    } catch (error) {
+      alert('Failed to update child');
+      console.error('Update child error:', error);
+    } finally {
+      setUpdatingChild(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setShowEditModal(false);
+    setEditingChild(null);
+    setEditChildFirstName('');
+    setEditChildLastName('');
+    setEditChildBirthDate('');
+    setEditChildGrade('');
+    setEditChildSchool('');
+    setEditChildInterests('');
+  };
+
   // Removed popstate handler - let React Router handle all navigation naturally
 
   // Handle initial selected child ID from parent
   useEffect(() => {
     if (initialSelectedChildId && children.length > 0) {
-      const child = children.find(c => c.id === initialSelectedChildId);
+      const child = children.find(c => c.uuid === initialSelectedChildId);
       if (child) {
         setSelectedChild(child);
         // Removed manual history.pushState - let React Router handle all navigation
@@ -567,7 +713,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     } else {
       // Fallback to old behavior if navigation prop not provided
       setSelectedChild(child);
-      onChildSelectionChange?.(child.id);
+      onChildSelectionChange?.(child.uuid);
     }
   };
 
@@ -642,8 +788,8 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
             </h4>
             <p style={{ margin: '0', fontSize: '14px', opacity: 0.9 }}>
               You have an unfinished activity "{activityDraft.newActivity?.name || 'Untitled'}" 
-              {activityDraft.childId && children.find(c => c.id === activityDraft.childId) && 
-                ` for ${children.find(c => c.id === activityDraft.childId)?.name}`}
+              {activityDraft.childUuid && children.find(c => c.uuid === activityDraft.childUuid) && 
+                ` for ${children.find(c => c.uuid === activityDraft.childUuid)?.name}`}
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -692,7 +838,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
         <div className="children-grid">
           {children.map((child) => (
             <div
-              key={child.id}
+              key={child.uuid}
               className="child-card"
               onClick={() => handleChildClick(child)}
             >
@@ -712,20 +858,20 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 
                 {/* Activity Count Badge */}
                 <div className="child-activity-count">
-                  {childActivityCounts[child.id] || 0} {childActivityCounts[child.id] === 1 ? 'Activity' : 'Activities'}
+                  {childActivityCounts[child.uuid] || 0} {childActivityCounts[child.uuid] === 1 ? 'Activity' : 'Activities'}
                 </div>
 
                 {/* Notifications - Activity Invitations, Connection Requests, and Hosted Activity Responses */}
-                {((childInvitations[child.id] && childInvitations[child.id].length > 0) || 
-                  (childConnections[child.id] && childConnections[child.id].length > 0) ||
-                  (hostedActivityNotifications.filter(n => n.host_child_id === child.id).length > 0)) && (
+                {((childInvitations[child.uuid] && childInvitations[child.uuid].length > 0) || 
+                  (childConnections[child.uuid] && childConnections[child.uuid].length > 0) ||
+                  (hostedActivityNotifications.filter(n => n.host_child_uuid === child.uuid).length > 0)) && (
                   <div className="child-invitations">
                     <div className="invitations-header">
-                      📩 {(childInvitations[child.id]?.length || 0) + (childConnections[child.id]?.length || 0) + hostedActivityNotifications.filter(n => n.host_child_id === child.id).length} Notification{((childInvitations[child.id]?.length || 0) + (childConnections[child.id]?.length || 0) + hostedActivityNotifications.filter(n => n.host_child_id === child.id).length) !== 1 ? 's' : ''}
+                      📩 {(childInvitations[child.uuid]?.length || 0) + (childConnections[child.uuid]?.length || 0) + hostedActivityNotifications.filter(n => n.host_child_uuid === child.uuid).length} Notification{((childInvitations[child.uuid]?.length || 0) + (childConnections[child.uuid]?.length || 0) + hostedActivityNotifications.filter(n => n.host_child_uuid === child.uuid).length) !== 1 ? 's' : ''}
                     </div>
                     
                     {/* Connection Requests */}
-                    {childConnections[child.id] && childConnections[child.id].map((request) => {
+                    {childConnections[child.uuid] && childConnections[child.uuid].map((request) => {
                       return (
                         <div key={`connection_${request.id}`} className="invitation-item" onClick={(e) => e.stopPropagation()}>
                           <div className="invitation-message">
@@ -758,7 +904,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                     })}
                     
                     {/* Activity Invitations */}
-                    {childInvitations[child.id] && childInvitations[child.id].map((invitation) => {
+                    {childInvitations[child.uuid] && childInvitations[child.uuid].map((invitation) => {
                       // Use just the host child's name (which should be their full name from the database)
                       const childFullName = invitation.host_child_name || 'Someone';
                       
@@ -817,7 +963,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                     })}
 
                     {/* Hosted Activity Notifications */}
-                    {hostedActivityNotifications.filter(n => n.host_child_id === child.id).map((notification) => {
+                    {hostedActivityNotifications.filter(n => n.host_child_uuid === child.uuid).map((notification) => {
                       const formatDate = (dateString: string) => {
                         const date = new Date(dateString);
                         const day = String(date.getDate()).padStart(2, '0');
@@ -865,7 +1011,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                               onClick={(e) => {
                                 e.stopPropagation();
                                 // Navigate to the host child's activity screen
-                                const hostChild = children.find(c => c.id === notification.host_child_id);
+                                const hostChild = children.find(c => c.uuid === notification.host_child_uuid);
                                 if (hostChild) {
                                   // This will navigate to the child's individual activity screen
                                   handleChildClick(hostChild);
@@ -886,6 +1032,16 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 </div>
               </div>
               <div className="child-actions">
+                <button
+                  className="edit-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEditChild(child);
+                  }}
+                  title="Edit child details"
+                >
+                  Edit
+                </button>
                 <button
                   className="delete-btn"
                   onClick={(e) => {
@@ -924,12 +1080,23 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 className="modal-input"
               />
             </div>
+            <div className="form-group">
+              <label>Date of Birth (Optional)</label>
+              <input
+                type="date"
+                value={newChildBirthDate}
+                onChange={(e) => setNewChildBirthDate(e.target.value)}
+                className="modal-input"
+                max={new Date().toISOString().split('T')[0]}
+              />
+            </div>
             <div className="modal-actions">
               <button
                 onClick={() => {
                   setShowAddModal(false);
                   setNewChildFirstName('');
                   setNewChildLastName('');
+                  setNewChildBirthDate('');
                 }}
                 className="cancel-btn"
               >
@@ -941,6 +1108,90 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 className={`confirm-btn ${addingChild ? 'disabled' : ''}`}
               >
                 {addingChild ? 'Adding...' : 'Add Child'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Child Modal */}
+      {showEditModal && (
+        <div className="modal-overlay" onClick={handleCancelEdit}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Edit Child Details</h2>
+            <div className="form-group">
+              <label>First Name *</label>
+              <input
+                type="text"
+                value={editChildFirstName}
+                onChange={(e) => setEditChildFirstName(e.target.value)}
+                placeholder="Enter first name"
+                className="modal-input"
+              />
+            </div>
+            <div className="form-group">
+              <label>Last Name</label>
+              <input
+                type="text"
+                value={editChildLastName}
+                onChange={(e) => setEditChildLastName(e.target.value)}
+                placeholder="Enter last name"
+                className="modal-input"
+              />
+            </div>
+            <div className="form-group">
+              <label>Date of Birth</label>
+              <input
+                type="date"
+                value={editChildBirthDate}
+                onChange={(e) => setEditChildBirthDate(e.target.value)}
+                className="modal-input"
+                max={new Date().toISOString().split('T')[0]} // Can't be future date
+              />
+            </div>
+            <div className="form-group">
+              <label>Grade</label>
+              <input
+                type="text"
+                value={editChildGrade}
+                onChange={(e) => setEditChildGrade(e.target.value)}
+                placeholder="e.g., Grade 5, Year 3, Kindergarten"
+                className="modal-input"
+              />
+            </div>
+            <div className="form-group">
+              <label>School</label>
+              <input
+                type="text"
+                value={editChildSchool}
+                onChange={(e) => setEditChildSchool(e.target.value)}
+                placeholder="Enter school name"
+                className="modal-input"
+              />
+            </div>
+            <div className="form-group">
+              <label>Interests</label>
+              <textarea
+                value={editChildInterests}
+                onChange={(e) => setEditChildInterests(e.target.value)}
+                placeholder="e.g., Soccer, Art, Reading, Music"
+                className="modal-input"
+                rows={3}
+              />
+            </div>
+            <div className="modal-actions">
+              <button
+                onClick={handleCancelEdit}
+                className="cancel-btn"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateChild}
+                disabled={updatingChild}
+                className={`confirm-btn ${updatingChild ? 'disabled' : ''}`}
+              >
+                {updatingChild ? 'Updating...' : 'Update Child'}
               </button>
             </div>
           </div>

@@ -150,13 +150,17 @@ class ApiService {
     return this.request('post', '/api/children', childData);
   }
 
-  async deleteChild(childId: number): Promise<ApiResponse<any>> {
-    return this.request('delete', `/api/children/${childId}`);
+  async deleteChild(childUuid: string): Promise<ApiResponse<any>> {
+    return this.request('delete', `/api/children/${childUuid}`);
+  }
+
+  async updateChild(childUuid: string, childData: any): Promise<ApiResponse<any>> {
+    return this.request('put', `/api/children/${childUuid}`, childData);
   }
 
   // Activities
-  async getActivities(childId: number): Promise<ApiResponse<any[]>> {
-    return this.request<any[]>('get', `/api/activities/${childId}`);
+  async getActivities(childUuid: string): Promise<ApiResponse<any[]>> {
+    return this.request<any[]>('get', `/api/activities/${childUuid}`);
   }
 
   async getCalendarActivities(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
@@ -234,6 +238,10 @@ class ApiService {
 
   async sendConnectionRequest(requestData: any): Promise<ApiResponse<any>> {
     return this.request('post', '/api/connections/request', requestData);
+  }
+
+  async createSkeletonAccount(requestData: any): Promise<ApiResponse<any>> {
+    return this.request('post', '/api/connections/create-skeleton', requestData);
   }
 
   async respondToConnectionRequest(requestUuid: string, action: 'accept' | 'reject'): Promise<ApiResponse<any>> {

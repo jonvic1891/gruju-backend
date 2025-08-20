@@ -1,4 +1,4 @@
 {
-  "version": "1.0.0",
-  "description": "Initial version with working navigation system"
+  "version": "1.0.7",
+  "description": "Fix UX issues: remove redundant host text and fix duplicate participants"
 }

@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginScreen from './components/LoginScreen';
 import Dashboard from './components/Dashboard';
 import './App.css';
+import versionInfo from './version.json';
 
 const AppContent = () => {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -17,6 +18,15 @@ const AppContent = () => {
     user,
     timestamp: new Date().toISOString()
   });
+
+  // Version checking DISABLED to prevent loops
+  React.useEffect(() => {
+    const currentVersion = versionInfo.version;
+    console.log(`📱 App version: ${currentVersion} - version checking disabled`);
+    
+    // Just set the version without any reloading
+    localStorage.setItem('appVersion', currentVersion);
+  }, []);
 
   React.useEffect(() => {
     console.log('AppContent mounted/updated - Auth state changed:', {

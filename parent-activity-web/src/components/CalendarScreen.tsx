@@ -422,7 +422,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, onNavigate
   };
 
   const isPendingInvitation = (activity: Activity) => {
-    return pendingInvitations.some(a => a.id === activity.id);
+    return pendingInvitations.some(a => a.uuid === activity.uuid || a.id === activity.id);
   };
 
   const isDeclinedInvitation = (activity: Activity) => {
@@ -579,10 +579,10 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, onNavigate
             <div className="activities-list">
               {selectedActivities.map((activity, index) => {
                 // Determine activity type
-                const isOwn = activities.some(a => a.id === activity.id);
-                const isConnected = connectedActivities.some(a => a.id === activity.id);
-                const isInvited = invitedActivities.some(a => a.id === activity.id);
-                const isPending = pendingInvitations.some(a => a.id === activity.id);
+                const isOwn = activities.some(a => a.uuid === activity.uuid || a.id === activity.id);
+                const isConnected = connectedActivities.some(a => a.uuid === activity.uuid || a.id === activity.id);
+                const isInvited = invitedActivities.some(a => a.uuid === activity.uuid || a.id === activity.id);
+                const isPending = pendingInvitations.some(a => a.uuid === activity.uuid || a.id === activity.id);
                 
                 let activityType = '';
                 let activityIcon = '';

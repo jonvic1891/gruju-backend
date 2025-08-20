@@ -161,14 +161,34 @@
   right: 16px;
 }
 
+.edit-btn {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  color: #007bff;
+  margin-right: 8px;
+  min-width: 60px;
+}
+
+.edit-btn:hover {
+  background: #e7f3ff;
+  color: #0056b3;
+}
+
 .delete-btn {
   background: none;
   border: none;
   font-size: 16px;
   cursor: pointer;
-  padding: 4px;
+  padding: 8px 12px;
   border-radius: 4px;
   transition: background-color 0.2s;
+  color: #dc3545;
+  min-width: 60px;
 }
 
 .delete-btn:hover {
