@@ -4245,7 +4245,7 @@ async function mergeSkeletonAccounts(client, newUser, email, phone) {
         // Find skeleton accounts matching email or phone
         const skeletonAccountsQuery = await client.query(`
             SELECT * FROM skeleton_accounts 
-            WHERE (contact_method = $1 OR ($2 IS NOT NULL AND contact_method = $2)) 
+            WHERE (contact_method = $1 OR contact_method = $2) 
             AND is_merged = false
         `, [email, phone]);
         
