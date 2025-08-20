@@ -3413,17 +3413,15 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
         const permissionCheck = await client.query(`
             SELECT 1 FROM activities a
             INNER JOIN children c ON a.child_id = c.id
-            INNER JOIN users u ON c.parent_id = u.id
-            WHERE a.id = $1 AND u.uuid = $2
+            WHERE a.id = $1 AND c.parent_id = $2
             UNION
             SELECT 1 FROM activity_invitations ai
-            INNER JOIN users u ON ai.invited_parent_id = u.id
-            WHERE ai.activity_id = $1 AND u.uuid = $2
+            WHERE ai.activity_id = $1 AND ai.invited_parent_id = $2
             UNION
             SELECT 1 FROM pending_activity_invitations pai
             WHERE pai.activity_id = $1 AND pai.pending_connection_id LIKE 'pending-%' 
-            AND pai.pending_connection_id = CONCAT('pending-', $2)
-        `, [activityId, req.user.uuid]);
+            AND pai.invited_parent_uuid = (SELECT uuid FROM users WHERE id = $2)
+        `, [activityId, req.user.id]);
         
         if (permissionCheck.rows.length === 0) {
             client.release();
@@ -3519,6 +3517,17 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
             ORDER BY pai.created_at DESC
         `, [activityId, hostChildId]);
         
+        // Get current user's invitation status for this activity
+        const userInvitationQuery = await client.query(`
+            SELECT ai.status, ai.uuid as invitation_uuid,
+                   c.name as invited_child_name, c.uuid as invited_child_uuid
+            FROM activity_invitations ai
+            LEFT JOIN children c ON ai.invited_child_id = c.id
+            WHERE ai.activity_id = $1 AND ai.invited_parent_id = $2
+        `, [activityId, req.user.id]);
+        
+        const userInvitation = userInvitationQuery.rows.length > 0 ? userInvitationQuery.rows[0] : null;
+        
         client.release();
         
         // Combine actual participants and pending invitations
@@ -3529,7 +3538,8 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
         
         const result = {
             host: hostQuery.rows[0] || null,
-            participants: allParticipants
+            participants: allParticipants,
+            user_invitation: userInvitation
         };
         
         console.log(`📊 Found ${participantsQuery.rows.length} sent invitations + ${pendingInvitationsQuery.rows.length} pending invitations = ${allParticipants.length} total for activity ${activityId}`);
