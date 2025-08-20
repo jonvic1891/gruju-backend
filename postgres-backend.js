@@ -3970,8 +3970,10 @@ async function processPendingInvitations(client, connectionRequestData) {
             return;
         }
         
-        // Process each pending invitation
+        // Process each pending invitation and track successful ones
         console.log(`🔄 Processing ${pendingInvitations.rows.length} pending invitations...`);
+        const successfullyProcessedIds = [];
+        
         for (const pending of pendingInvitations.rows) {
             try {
                 console.log(`📧 Converting pending invitation to actual invitation for activity: ${pending.activity_name} (ID: ${pending.activity_id})`);
@@ -4000,8 +4002,12 @@ async function processPendingInvitations(client, connectionRequestData) {
                 
                 if (insertResult.rows.length > 0) {
                     console.log(`✅ Created invitation for "${pending.activity_name}" (invitation ID: ${insertResult.rows[0].id})`);
+                    // Track this pending invitation as successfully processed
+                    successfullyProcessedIds.push(pending.id);
                 } else {
                     console.log(`⚠️ Invitation for "${pending.activity_name}" already exists (skipped due to conflict)`);
+                    // Still mark as processed if it already exists
+                    successfullyProcessedIds.push(pending.id);
                 }
                 
                 // Update the activity's invited_children field
@@ -4014,12 +4020,17 @@ async function processPendingInvitations(client, connectionRequestData) {
                 
             } catch (error) {
                 console.error(`❌ Failed to process pending invitation for activity ${pending.activity_name}:`, error);
+                // Don't add to successfullyProcessedIds if there was an error
             }
         }
         
-        // Remove the processed pending invitations
-        await client.query('DELETE FROM pending_activity_invitations WHERE pending_connection_id = ANY($1)', [pendingKeys]);
-        console.log(`🗑️ Removed ${pendingInvitations.rows.length} processed pending invitations with keys:`, pendingKeys);
+        // Remove only the successfully processed pending invitations
+        if (successfullyProcessedIds.length > 0) {
+            await client.query('DELETE FROM pending_activity_invitations WHERE id = ANY($1)', [successfullyProcessedIds]);
+            console.log(`🗑️ Removed ${successfullyProcessedIds.length} successfully processed pending invitations (IDs: ${successfullyProcessedIds.join(', ')})`);
+        } else {
+            console.log('⚠️ No pending invitations were successfully processed, nothing to delete');
+        }
         
     } catch (error) {
         console.error('❌ Pending invitations processing failed:', error);
