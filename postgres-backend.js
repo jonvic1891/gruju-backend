@@ -1044,6 +1044,10 @@ app.post('/api/auth/register', async (req, res) => {
 
         const newUser = result.rows[0];
         
+        // ===== SKELETON ACCOUNT MERGING =====
+        // Check for skeleton accounts matching this email or phone and merge them
+        await mergeSkeletonAccounts(client, newUser, email, phone);
+        
         const token = jwt.sign(
             { 
                 id: newUser.id, // Keep for backward compatibility during migration
@@ -2513,6 +2517,168 @@ app.delete('/api/connections/:connectionId', authenticateToken, async (req, res)
             error: 'Failed to delete connection',
             debug: error.message 
         });
+    }
+});
+
+// ===== SKELETON ACCOUNTS ===== 
+// These handle cases where users search for non-existent accounts
+
+// Create skeleton account when no match found in search
+app.post('/api/connections/create-skeleton', authenticateToken, async (req, res) => {
+    try {
+        const { contact_method, contact_type, my_child_uuid, target_child_name, target_child_birth_year, message } = req.body;
+        
+        console.log('📝 Creating skeleton account:', {
+            contact_method,
+            contact_type,
+            my_child_uuid,
+            target_child_name,
+            requester_id: req.user.id
+        });
+
+        if (!contact_method || !contact_type || !my_child_uuid || !target_child_name) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Contact method, type, your child, and target child name are required' 
+            });
+        }
+
+        if (!['email', 'phone'].includes(contact_type)) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Contact type must be email or phone' 
+            });
+        }
+
+        const client = await pool.connect();
+        
+        // Verify the requester's child exists
+        const myChild = await client.query(
+            'SELECT id FROM children WHERE uuid = $1 AND parent_id = $2',
+            [my_child_uuid, req.user.id]
+        );
+
+        if (myChild.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Your child not found' });
+        }
+
+        // Check if skeleton account already exists
+        let skeletonAccount = await client.query(
+            'SELECT * FROM skeleton_accounts WHERE contact_method = $1 AND contact_type = $2 AND is_merged = false',
+            [contact_method, contact_type]
+        );
+
+        if (skeletonAccount.rows.length === 0) {
+            // Create new skeleton account
+            const skeletonAccountResult = await client.query(
+                'INSERT INTO skeleton_accounts (contact_method, contact_type) VALUES ($1, $2) RETURNING *',
+                [contact_method, contact_type]
+            );
+            skeletonAccount = skeletonAccountResult;
+        }
+
+        const skeletonAccountId = skeletonAccount.rows[0].id;
+
+        // Check if skeleton child already exists with this name
+        let skeletonChild = await client.query(
+            'SELECT * FROM skeleton_children WHERE skeleton_account_id = $1 AND name = $2 AND is_merged = false',
+            [skeletonAccountId, target_child_name]
+        );
+
+        if (skeletonChild.rows.length === 0) {
+            // Create skeleton child
+            const skeletonChildResult = await client.query(
+                'INSERT INTO skeleton_children (skeleton_account_id, name, birth_year) VALUES ($1, $2, $3) RETURNING *',
+                [skeletonAccountId, target_child_name, target_child_birth_year || null]
+            );
+            skeletonChild = skeletonChildResult;
+        }
+
+        const skeletonChildId = skeletonChild.rows[0].id;
+
+        // Check if connection request already exists
+        const existingRequest = await client.query(
+            'SELECT * FROM skeleton_connection_requests WHERE requester_parent_id = $1 AND requester_child_id = $2 AND skeleton_child_id = $3 AND is_converted = false',
+            [req.user.id, myChild.rows[0].id, skeletonChildId]
+        );
+
+        if (existingRequest.rows.length > 0) {
+            client.release();
+            return res.status(409).json({ 
+                success: false, 
+                error: 'Connection request to this skeleton account already exists' 
+            });
+        }
+
+        // Create skeleton connection request
+        const skeletonRequestResult = await client.query(
+            'INSERT INTO skeleton_connection_requests (requester_parent_id, requester_child_id, skeleton_account_id, skeleton_child_id, message) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [req.user.id, myChild.rows[0].id, skeletonAccountId, skeletonChildId, message || '']
+        );
+
+        client.release();
+
+        res.json({
+            success: true,
+            data: {
+                skeleton_account: skeletonAccount.rows[0],
+                skeleton_child: skeletonChild.rows[0],
+                skeleton_request: skeletonRequestResult.rows[0]
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Create skeleton account error:', error);
+        res.status(500).json({ success: false, error: 'Failed to create skeleton account' });
+    }
+});
+
+// Get skeleton accounts (for testing/debugging)
+app.get('/api/connections/skeleton-accounts', authenticateToken, async (req, res) => {
+    try {
+        const client = await pool.connect();
+        
+        const result = await client.query(`
+            SELECT 
+                sa.*,
+                json_agg(
+                    json_build_object(
+                        'id', sc.id,
+                        'uuid', sc.uuid,
+                        'name', sc.name,
+                        'birth_year', sc.birth_year,
+                        'is_merged', sc.is_merged
+                    )
+                ) FILTER (WHERE sc.id IS NOT NULL) as skeleton_children,
+                json_agg(DISTINCT
+                    json_build_object(
+                        'id', scr.id,
+                        'uuid', scr.uuid,
+                        'requester_parent_id', scr.requester_parent_id,
+                        'message', scr.message,
+                        'is_converted', scr.is_converted,
+                        'created_at', scr.created_at
+                    )
+                ) FILTER (WHERE scr.id IS NOT NULL) as connection_requests
+            FROM skeleton_accounts sa
+            LEFT JOIN skeleton_children sc ON sa.id = sc.skeleton_account_id
+            LEFT JOIN skeleton_connection_requests scr ON sa.id = scr.skeleton_account_id
+            WHERE sa.is_merged = false
+            GROUP BY sa.id
+            ORDER BY sa.created_at DESC
+        `);
+        
+        client.release();
+        
+        res.json({
+            success: true,
+            data: result.rows
+        });
+        
+    } catch (error) {
+        console.error('❌ Get skeleton accounts error:', error);
+        res.status(500).json({ success: false, error: 'Failed to get skeleton accounts' });
     }
 });
 
@@ -4067,6 +4233,128 @@ async function updateActivityInvitedChildren(client, activityId) {
         
     } catch (error) {
         console.error('❌ Failed to update activity invited_children:', error);
+    }
+}
+
+// ===== SKELETON ACCOUNT MERGING =====
+// Merges skeleton accounts into real accounts during registration
+async function mergeSkeletonAccounts(client, newUser, email, phone) {
+    try {
+        console.log('🔄 Checking for skeleton accounts to merge:', { email, phone, userId: newUser.id });
+        
+        // Find skeleton accounts matching email or phone
+        const skeletonAccountsQuery = await client.query(`
+            SELECT * FROM skeleton_accounts 
+            WHERE (contact_method = $1 OR ($2 IS NOT NULL AND contact_method = $2)) 
+            AND is_merged = false
+        `, [email, phone]);
+        
+        if (skeletonAccountsQuery.rows.length === 0) {
+            console.log('✅ No skeleton accounts found to merge');
+            return;
+        }
+        
+        console.log(`📋 Found ${skeletonAccountsQuery.rows.length} skeleton accounts to merge`);
+        
+        for (const skeletonAccount of skeletonAccountsQuery.rows) {
+            console.log(`🔄 Merging skeleton account ${skeletonAccount.id} (${skeletonAccount.contact_method})`);
+            
+            // Get skeleton children for this account
+            const skeletonChildren = await client.query(`
+                SELECT * FROM skeleton_children 
+                WHERE skeleton_account_id = $1 AND is_merged = false
+            `, [skeletonAccount.id]);
+            
+            console.log(`👶 Found ${skeletonChildren.rows.length} skeleton children to merge`);
+            
+            // Create real children from skeleton children
+            const createdChildren = [];
+            for (const skeletonChild of skeletonChildren.rows) {
+                console.log(`👶 Creating real child: ${skeletonChild.name}`);
+                
+                const childResult = await client.query(`
+                    INSERT INTO children (parent_id, name, birth_year)
+                    VALUES ($1, $2, $3)
+                    RETURNING *
+                `, [newUser.id, skeletonChild.name, skeletonChild.birth_year]);
+                
+                const newChild = childResult.rows[0];
+                createdChildren.push({ skeleton: skeletonChild, real: newChild });
+                
+                // Mark skeleton child as merged
+                await client.query(`
+                    UPDATE skeleton_children 
+                    SET is_merged = true, merged_with_child_id = $1
+                    WHERE id = $2
+                `, [newChild.id, skeletonChild.id]);
+                
+                console.log(`✅ Created real child ${newChild.name} (${newChild.uuid}) from skeleton ${skeletonChild.id}`);
+            }
+            
+            // Get skeleton connection requests for this account
+            const skeletonRequests = await client.query(`
+                SELECT scr.*, u.username as requester_username, c.name as requester_child_name, c.uuid as requester_child_uuid
+                FROM skeleton_connection_requests scr
+                JOIN users u ON scr.requester_parent_id = u.id
+                JOIN children c ON scr.requester_child_id = c.id
+                WHERE scr.skeleton_account_id = $1 AND scr.is_converted = false
+            `, [skeletonAccount.id]);
+            
+            console.log(`📞 Found ${skeletonRequests.rows.length} skeleton connection requests to convert`);
+            
+            // Convert skeleton connection requests to real connection requests
+            for (const skeletonRequest of skeletonRequests.rows) {
+                // Find the matching real child
+                const matchingChild = createdChildren.find(child => 
+                    child.skeleton.id === skeletonRequest.skeleton_child_id
+                );
+                
+                if (matchingChild) {
+                    console.log(`📞 Converting connection request from ${skeletonRequest.requester_username} to real request`);
+                    
+                    const connectionRequestResult = await client.query(`
+                        INSERT INTO connection_requests (
+                            requester_id, target_parent_id, child_uuid, target_child_uuid, message, status
+                        ) VALUES ($1, $2, $3, $4, $5, 'pending')
+                        RETURNING *
+                    `, [
+                        skeletonRequest.requester_parent_id,
+                        newUser.id,
+                        skeletonRequest.requester_child_uuid,
+                        matchingChild.real.uuid,
+                        skeletonRequest.message
+                    ]);
+                    
+                    const realRequest = connectionRequestResult.rows[0];
+                    
+                    // Mark skeleton request as converted
+                    await client.query(`
+                        UPDATE skeleton_connection_requests
+                        SET is_converted = true, converted_to_request_id = $1
+                        WHERE id = $2
+                    `, [realRequest.id, skeletonRequest.id]);
+                    
+                    console.log(`✅ Converted skeleton request ${skeletonRequest.id} to real request ${realRequest.uuid}`);
+                } else {
+                    console.error(`❌ Could not find matching real child for skeleton request ${skeletonRequest.id}`);
+                }
+            }
+            
+            // Mark skeleton account as merged
+            await client.query(`
+                UPDATE skeleton_accounts
+                SET is_merged = true, merged_with_user_id = $1, merged_at = NOW()
+                WHERE id = $2
+            `, [newUser.id, skeletonAccount.id]);
+            
+            console.log(`✅ Marked skeleton account ${skeletonAccount.id} as merged`);
+        }
+        
+        console.log(`🎉 Successfully merged ${skeletonAccountsQuery.rows.length} skeleton accounts`);
+        
+    } catch (error) {
+        console.error('❌ Skeleton account merging failed:', error);
+        // Don't throw error - let registration succeed even if merging fails
     }
 }
 
