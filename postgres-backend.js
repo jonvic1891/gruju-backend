@@ -4273,10 +4273,10 @@ async function mergeSkeletonAccounts(client, newUser, email, phone) {
                 console.log(`👶 Creating real child: ${skeletonChild.name}`);
                 
                 const childResult = await client.query(`
-                    INSERT INTO children (parent_id, name, birth_year)
-                    VALUES ($1, $2, $3)
+                    INSERT INTO children (parent_id, name)
+                    VALUES ($1, $2)
                     RETURNING *
-                `, [newUser.id, skeletonChild.name, skeletonChild.birth_year]);
+                `, [newUser.id, skeletonChild.name]);
                 
                 const newChild = childResult.rows[0];
                 createdChildren.push({ skeleton: skeletonChild, real: newChild });
