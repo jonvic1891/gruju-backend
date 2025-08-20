@@ -1382,6 +1382,128 @@ app.delete('/api/children/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// Edit child endpoint
+app.put('/api/children/:childUuid', authenticateToken, async (req, res) => {
+    try {
+        const childUuid = req.params.childUuid;
+        const { name, first_name, last_name, age, grade, school, interests } = req.body;
+
+        // Handle both old (name) and new (first_name/last_name) formats
+        let firstName, lastName, fullName;
+        
+        if (first_name !== undefined || last_name !== undefined) {
+            firstName = first_name?.trim() || '';
+            lastName = last_name?.trim() || '';
+            fullName = `${firstName} ${lastName}`.trim();
+        } else if (name) {
+            // Legacy support: split name into first and last
+            const nameParts = name.trim().split(' ');
+            firstName = nameParts[0] || '';
+            lastName = nameParts.slice(1).join(' ') || '';
+            fullName = name.trim();
+        }
+
+        const client = await pool.connect();
+        
+        // ✅ SECURITY: Check if the child belongs to this user using UUID
+        const childCheck = await client.query(
+            'SELECT id FROM children WHERE uuid = $1 AND parent_id = $2',
+            [childUuid, req.user.id]
+        );
+
+        if (childCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Child not found or access denied' });
+        }
+
+        const childId = childCheck.rows[0].id;
+
+        // Build dynamic update query based on provided fields
+        const updateFields = [];
+        const updateValues = [];
+        let paramIndex = 1;
+
+        if (fullName) {
+            updateFields.push(`name = $${paramIndex}`);
+            updateValues.push(fullName);
+            paramIndex++;
+        }
+        
+        if (firstName !== undefined) {
+            updateFields.push(`first_name = $${paramIndex}`);
+            updateValues.push(firstName);
+            paramIndex++;
+        }
+        
+        if (lastName !== undefined) {
+            updateFields.push(`last_name = $${paramIndex}`);
+            updateValues.push(lastName);
+            paramIndex++;
+        }
+
+        if (age !== undefined) {
+            updateFields.push(`age = $${paramIndex}`);
+            updateValues.push(age);
+            paramIndex++;
+        }
+
+        if (grade !== undefined) {
+            updateFields.push(`grade = $${paramIndex}`);
+            updateValues.push(grade);
+            paramIndex++;
+        }
+
+        if (school !== undefined) {
+            updateFields.push(`school = $${paramIndex}`);
+            updateValues.push(school);
+            paramIndex++;
+        }
+
+        if (interests !== undefined) {
+            updateFields.push(`interests = $${paramIndex}`);
+            updateValues.push(interests);
+            paramIndex++;
+        }
+
+        if (updateFields.length === 0) {
+            client.release();
+            return res.status(400).json({ success: false, error: 'No fields to update' });
+        }
+
+        // Add updated_at timestamp
+        updateFields.push(`updated_at = NOW()`);
+        
+        // Add WHERE clause parameters
+        updateValues.push(childId);
+        const whereClause = `id = $${paramIndex}`;
+
+        const updateQuery = `
+            UPDATE children 
+            SET ${updateFields.join(', ')} 
+            WHERE ${whereClause}
+            RETURNING uuid, name, first_name, last_name, age, grade, school, interests, created_at, updated_at
+        `;
+
+        console.log('🔄 Updating child:', { childUuid, updateFields, updateValues });
+
+        const result = await client.query(updateQuery, updateValues);
+        client.release();
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Child not found' });
+        }
+
+        res.json({
+            success: true,
+            data: result.rows[0]
+        });
+
+    } catch (error) {
+        console.error('Update child error:', error);
+        res.status(500).json({ success: false, error: 'Failed to update child' });
+    }
+});
+
 // Activities endpoints
 
 // Update endpoint that frontend expects - PUT /api/activities/:uuid (must be before GET route)
