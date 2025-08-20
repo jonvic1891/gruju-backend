@@ -1819,9 +1819,9 @@ app.get('/api/activities/details/:activityUuid', authenticateToken, async (req, 
         const client = await pool.connect();
         
         try {
-            // Get activity details with authorization check
+            // Get activity details with authorization check (owner OR invited guest)
             const activityQuery = `
-                SELECT 
+                SELECT DISTINCT
                     a.uuid as activity_uuid,
                     a.name,
                     a.description,
@@ -1838,14 +1838,16 @@ app.get('/api/activities/details/:activityUuid', authenticateToken, async (req, 
                     a.created_at,
                     a.updated_at,
                     c.name as child_name,
-                    c.uuid as child_uuid
+                    c.uuid as child_uuid,
+                    CASE WHEN u.id = $2 THEN true ELSE false END as is_owner
                 FROM activities a 
                 JOIN children c ON a.child_id = c.id 
                 JOIN users u ON c.parent_id = u.id 
-                WHERE a.uuid = $1 AND u.uuid = $2
+                LEFT JOIN activity_invitations ai ON a.id = ai.activity_id AND (ai.invited_parent_id = $2 OR ai.inviter_parent_id = $2)
+                WHERE a.uuid = $1 AND (u.id = $2 OR ai.id IS NOT NULL)
             `;
             
-            const activityResult = await client.query(activityQuery, [activityUuid, req.user.uuid]);
+            const activityResult = await client.query(activityQuery, [activityUuid, req.user.id]);
             
             if (activityResult.rows.length === 0) {
                 client.release();
@@ -1869,16 +1871,31 @@ app.get('/api/activities/details/:activityUuid', authenticateToken, async (req, 
             const pendingResult = await client.query(pendingQuery, [activityUuid]);
             const pendingConnections = pendingResult.rows.map(row => row.pending_connection_id);
             
+            // Get user's invitation for this activity (if exists)
+            const invitationQuery = `
+                SELECT ai.uuid as invitation_uuid, ai.status, ai.message, ai.viewed_at,
+                       c_invited.name as invited_child_name, c_invited.uuid as invited_child_uuid
+                FROM activity_invitations ai
+                LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
+                WHERE ai.activity_id = (SELECT id FROM activities WHERE uuid = $1)
+                  AND ai.invited_parent_id = $2
+            `;
+            
+            const invitationResult = await client.query(invitationQuery, [activityUuid, req.user.id]);
+            const invitation = invitationResult.rows.length > 0 ? invitationResult.rows[0] : null;
+            
             console.log('✅ Activity details retrieved:', {
                 activityName: activity.name,
                 activityUuid: activity.activity_uuid,
-                pendingConnectionsCount: pendingConnections.length
+                pendingConnectionsCount: pendingConnections.length,
+                hasInvitation: !!invitation
             });
             
-            // Include pending connections in response
+            // Include pending connections and invitation in response
             const response = {
                 ...activity,
-                pending_connections: pendingConnections
+                pending_connections: pendingConnections,
+                invitation: invitation
             };
             
             client.release();
