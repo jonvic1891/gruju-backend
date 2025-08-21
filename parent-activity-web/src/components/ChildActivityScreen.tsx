@@ -2029,13 +2029,19 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 }}
               >
                 <option value="">Create from scratch</option>
-                {activityTemplates.map((template) => (
-                  <option key={template.uuid} value={template.uuid}>
-                    {template.name}
-                    {template.activity_type && ` (${template.activity_type})`}
-                    {template.usage_count > 0 && ` - Used ${template.usage_count} times`}
+                {activityTemplates.length === 0 ? (
+                  <option value="" disabled style={{ fontStyle: 'italic', color: '#999' }}>
+                    No templates available yet
                   </option>
-                ))}
+                ) : (
+                  activityTemplates.map((template) => (
+                    <option key={template.uuid} value={template.uuid}>
+                      {template.name}
+                      {template.activity_type && ` (${template.activity_type})`}
+                      {template.usage_count > 0 && ` - Used ${template.usage_count} times`}
+                    </option>
+                  ))
+                )}
               </select>
             )}
             
