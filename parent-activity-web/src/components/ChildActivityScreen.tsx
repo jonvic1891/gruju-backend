@@ -60,7 +60,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [activityTypes, setActivityTypes] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
-  const [showTemplatePrompt, setShowTemplatePrompt] = useState(false);
   const [pendingTemplateData, setPendingTemplateData] = useState<any>(null);
   const [templateConfirmationMessage, setTemplateConfirmationMessage] = useState<string>('');
   
@@ -173,7 +172,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setAutoNotifyNewConnections(false);
     setSelectedConnectedChildren([]);
     setSelectedTemplate(null);
-    setShowTemplatePrompt(false);
     setPendingTemplateData(null);
     
     goBack();
@@ -755,50 +753,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     handleTemplateSelect(null);
   };
 
-  const handleSaveTemplate = async () => {
-    if (!pendingTemplateData) return;
-    
-    try {
-      const templateResponse = await apiService.createActivityTemplate(pendingTemplateData);
-      if (templateResponse.success) {
-        console.log('✅ Template saved successfully:', templateResponse.data);
-        // Reload templates to include the new one
-        loadActivityTemplates();
-        setTemplateConfirmationMessage(`Template "${pendingTemplateData?.name}" saved successfully!`);
-        setTimeout(() => setTemplateConfirmationMessage(''), 3000);
-      } else {
-        console.error('❌ Failed to save template:', templateResponse.error);
-      }
-    } catch (templateError) {
-      console.error('💥 Error saving template:', templateError);
-    } finally {
-      setShowTemplatePrompt(false);
-      setPendingTemplateData(null);
-      
-      // Navigate back after template decision
-      if (onBack) {
-        console.log('🔙 Using onBack to return to main activities URL after template save');
-        onBack();
-      } else {
-        console.log('📝 Using navigateToPage as fallback after template save');
-        navigateToPage('main');
-      }
-    }
-  };
-
-  const handleSkipTemplate = () => {
-    setShowTemplatePrompt(false);
-    setPendingTemplateData(null);
-    
-    // Navigate back after template decision
-    if (onBack) {
-      console.log('🔙 Using onBack to return to main activities URL after template skip');
-      onBack();
-    } else {
-      console.log('📝 Using navigateToPage as fallback after template skip');
-      navigateToPage('main');
-    }
-  };
 
   const handleActivityClick = async (activity: Activity) => {
     // Use proper navigation if available to navigate to activity-specific URL
@@ -1203,9 +1157,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           typical_start_time: newActivity.start_time || null
         };
 
-        // Store template data and show prompt
+        // Store template data for potential saving
         setPendingTemplateData(templateData);
-        setShowTemplatePrompt(true);
         shouldShowTemplatePrompt = true;
       }
 
@@ -1239,22 +1192,41 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         : `${createdActivities.length} activities created successfully!`;
       alert(message);
       
-      // Only navigate back if we're not showing the template prompt
-      if (!shouldShowTemplatePrompt) {
-        // After creating activity, go back to activities list (not to the activity detail)
-        // Stay on current child's activities page instead of going back to main children page
-        console.log('🏠 Activity created successfully, navigating back to main activities list');
+      // Show template save option in confirm dialog if we have template data
+      if (shouldShowTemplatePrompt && pendingTemplateData) {
+        const shouldSaveTemplate = window.confirm(
+          `Would you like to save "${pendingTemplateData.name}" as a template?\n\n` +
+          'This will make it easy to create similar activities in the future.\n\n' +
+          'Click "OK" to save as template, or "Cancel" to continue without saving.'
+        );
         
-        // Navigate back to the main activities URL (without the /new)
-        if (onBack) {
-          console.log('🔙 Using onBack to return to main activities URL');
-          onBack();
-        } else {
-          console.log('📝 Using navigateToPage as fallback');
-          navigateToPage('main');
+        if (shouldSaveTemplate) {
+          try {
+            const templateResponse = await apiService.createActivityTemplate(pendingTemplateData);
+            if (templateResponse.success) {
+              console.log('✅ Template saved successfully:', templateResponse.data);
+              // Reload templates to include the new one
+              loadActivityTemplates();
+              alert(`Template "${pendingTemplateData.name}" saved successfully!`);
+            } else {
+              console.error('❌ Failed to save template:', templateResponse.error);
+              alert('Failed to save template. Please try again.');
+            }
+          } catch (templateError) {
+            console.error('💥 Error saving template:', templateError);
+            alert('Failed to save template. Please try again.');
+          }
         }
+      }
+      
+      // Navigate back to activities list
+      console.log('🏠 Activity created successfully, navigating back to main activities list');
+      if (onBack) {
+        console.log('🔙 Using onBack to return to main activities URL');
+        onBack();
       } else {
-        console.log('🎯 Template prompt will be shown, staying on current page');
+        console.log('📝 Using navigateToPage as fallback');
+        navigateToPage('main');
       }
       
     } catch (error) {
@@ -2837,82 +2809,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         })()}
       </div>
 
-      {/* Template Save Prompt Modal */}
-      {showTemplatePrompt && pendingTemplateData && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            maxWidth: '400px',
-            width: '90%',
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)'
-          }}>
-            <h3 style={{ 
-              margin: '0 0 16px 0', 
-              color: '#2d3748',
-              fontSize: '20px',
-              fontWeight: '600'
-            }}>
-              💾 Save as Template?
-            </h3>
-            <p style={{ 
-              margin: '0 0 20px 0', 
-              color: '#4a5568',
-              lineHeight: '1.5'
-            }}>
-              Would you like to save "<strong>{pendingTemplateData?.name}</strong>" as a template? 
-              This will make it easy to create similar activities in the future.
-            </p>
-            <div style={{ 
-              display: 'flex', 
-              gap: '12px',
-              justifyContent: 'flex-end'
-            }}>
-              <button
-                onClick={handleSkipTemplate}
-                style={{
-                  padding: '10px 20px',
-                  border: '1px solid #dee2e6',
-                  borderRadius: '6px',
-                  background: '#f8f9fa',
-                  color: '#495057',
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
-              >
-                No thanks
-              </button>
-              <button
-                onClick={handleSaveTemplate}
-                style={{
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '6px',
-                  background: '#007bff',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  fontWeight: '500'
-                }}
-              >
-                Save Template
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
