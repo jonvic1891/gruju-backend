@@ -647,8 +647,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setLoadingTemplates(true);
       const response = await apiService.getActivityTemplates();
       if (response.success) {
-        setActivityTemplates(response.data);
-        console.log('✅ Activity templates loaded:', response.data.length);
+        setActivityTemplates(response.data || []);
+        console.log('✅ Activity templates loaded:', (response.data || []).length);
       } else {
         console.error('❌ Failed to load activity templates:', response.error);
         setActivityTemplates([]);
@@ -665,8 +665,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     try {
       const response = await apiService.getActivityTypes();
       if (response.success) {
-        setActivityTypes(response.data);
-        console.log('✅ Activity types loaded:', response.data.length);
+        setActivityTypes(response.data || []);
+        console.log('✅ Activity types loaded:', (response.data || []).length);
       } else {
         console.error('❌ Failed to load activity types:', response.error);
         setActivityTypes([]);
@@ -2083,6 +2083,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 </span>
               )}
             </div>
+          )}
           
           <div className="page-form">
             <input
@@ -2393,10 +2394,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 {addingActivity ? 'Adding...' : 'Add Activity'}
               </button>
             </div>
-          )}
+          </div>
         </div>
       </div>
     );
+  }
 
   if (currentPage === 'edit-activity' && editingActivity) {
     return (
