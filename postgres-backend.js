@@ -3951,14 +3951,14 @@ app.post('/api/activities/:activityUuid/cant-attend', authenticateToken, async (
 // Get user's activity templates
 app.get('/api/activity-templates', authenticateToken, async (req, res) => {
     try {
-        const parentUuid = req.user.uuid;
+        const parentId = req.user.id;
         
         const client = await pool.connect();
         const result = await client.query(`
             SELECT * FROM activity_templates 
-            WHERE parent_uuid = $1 
+            WHERE parent_id = $1 
             ORDER BY last_used_at DESC, usage_count DESC, name ASC
-        `, [parentUuid]);
+        `, [parentId]);
         
         client.release();
         res.json({ success: true, data: result.rows });
@@ -3988,7 +3988,7 @@ app.get('/api/activity-types', async (req, res) => {
 // Create activity template
 app.post('/api/activity-templates', authenticateToken, async (req, res) => {
     try {
-        const parentUuid = req.user.uuid;
+        const parentId = req.user.id;
         const {
             name,
             description,
@@ -4008,12 +4008,12 @@ app.post('/api/activity-templates', authenticateToken, async (req, res) => {
         const client = await pool.connect();
         const result = await client.query(`
             INSERT INTO activity_templates (
-                parent_uuid, name, description, location, website_url, 
+                parent_id, name, description, location, website_url, 
                 activity_type, cost, max_participants, typical_duration_hours, typical_start_time
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING *
         `, [
-            parentUuid,
+            parentId,
             name.trim(),
             description?.trim() || null,
             location?.trim() || null,
@@ -4026,7 +4026,7 @@ app.post('/api/activity-templates', authenticateToken, async (req, res) => {
         ]);
         
         client.release();
-        console.log(`✅ Created activity template: ${name} for parent ${parentUuid}`);
+        console.log(`✅ Created activity template: ${name} for parent ${parentId}`);
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
         console.error('🚨 Create activity template error:', error);
@@ -4037,7 +4037,7 @@ app.post('/api/activity-templates', authenticateToken, async (req, res) => {
 // Update activity template
 app.put('/api/activity-templates/:templateUuid', authenticateToken, async (req, res) => {
     try {
-        const parentUuid = req.user.uuid;
+        const parentId = req.user.id;
         const templateUuid = req.params.templateUuid;
         const {
             name,
@@ -4060,8 +4060,8 @@ app.put('/api/activity-templates/:templateUuid', authenticateToken, async (req, 
         // Check ownership
         const ownershipCheck = await client.query(`
             SELECT uuid FROM activity_templates 
-            WHERE uuid = $1 AND parent_uuid = $2
-        `, [templateUuid, parentUuid]);
+            WHERE uuid = $1 AND parent_id = $2
+        `, [templateUuid, parentId]);
 
         if (ownershipCheck.rows.length === 0) {
             client.release();
@@ -4080,11 +4080,11 @@ app.put('/api/activity-templates/:templateUuid', authenticateToken, async (req, 
                 typical_duration_hours = $10,
                 typical_start_time = $11,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE uuid = $1 AND parent_uuid = $2
+            WHERE uuid = $1 AND parent_id = $2
             RETURNING *
         `, [
             templateUuid,
-            parentUuid,
+            parentId,
             name.trim(),
             description?.trim() || null,
             location?.trim() || null,
@@ -4108,16 +4108,16 @@ app.put('/api/activity-templates/:templateUuid', authenticateToken, async (req, 
 // Delete activity template
 app.delete('/api/activity-templates/:templateUuid', authenticateToken, async (req, res) => {
     try {
-        const parentUuid = req.user.uuid;
+        const parentId = req.user.id;
         const templateUuid = req.params.templateUuid;
 
         const client = await pool.connect();
         
         const result = await client.query(`
             DELETE FROM activity_templates 
-            WHERE uuid = $1 AND parent_uuid = $2
+            WHERE uuid = $1 AND parent_id = $2
             RETURNING name
-        `, [templateUuid, parentUuid]);
+        `, [templateUuid, parentId]);
 
         if (result.rows.length === 0) {
             client.release();
@@ -4136,7 +4136,7 @@ app.delete('/api/activity-templates/:templateUuid', authenticateToken, async (re
 // Use activity template (increment usage count and update last_used_at)
 app.post('/api/activity-templates/:templateUuid/use', authenticateToken, async (req, res) => {
     try {
-        const parentUuid = req.user.uuid;
+        const parentId = req.user.id;
         const templateUuid = req.params.templateUuid;
 
         const client = await pool.connect();
@@ -4145,9 +4145,9 @@ app.post('/api/activity-templates/:templateUuid/use', authenticateToken, async (
             UPDATE activity_templates SET
                 usage_count = usage_count + 1,
                 last_used_at = CURRENT_TIMESTAMP
-            WHERE uuid = $1 AND parent_uuid = $2
+            WHERE uuid = $1 AND parent_id = $2
             RETURNING *
-        `, [templateUuid, parentUuid]);
+        `, [templateUuid, parentId]);
 
         if (result.rows.length === 0) {
             client.release();
