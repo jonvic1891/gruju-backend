@@ -2397,7 +2397,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         </div>
       </div>
     );
-  }
 
   if (currentPage === 'edit-activity' && editingActivity) {
     return (
