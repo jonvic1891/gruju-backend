@@ -16,7 +16,7 @@ async function createTables() {
       CREATE TABLE IF NOT EXISTS activity_templates (
           id SERIAL PRIMARY KEY,
           uuid VARCHAR(36) UNIQUE NOT NULL DEFAULT gen_random_uuid()::varchar,
-          parent_uuid VARCHAR(36) NOT NULL REFERENCES parents(uuid) ON DELETE CASCADE,
+          parent_uuid VARCHAR(36) NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
           name VARCHAR(255) NOT NULL,
           description TEXT,
           location VARCHAR(500),
