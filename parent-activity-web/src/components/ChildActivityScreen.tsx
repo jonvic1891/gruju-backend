@@ -54,6 +54,15 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [activityParticipants, setActivityParticipants] = useState<any>(null);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
   const [invitationData, setInvitationData] = useState<any>(null);
+  
+  // Activity Templates
+  const [activityTemplates, setActivityTemplates] = useState<any[]>([]);
+  const [activityTypes, setActivityTypes] = useState<any[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(true);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [showSaveTemplateOption, setShowSaveTemplateOption] = useState(false);
+  
   const apiService = ApiService.getInstance();
 
   // Get user-specific draft key to prevent cross-user data leakage
@@ -162,6 +171,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setIsSharedActivity(false);
     setAutoNotifyNewConnections(false);
     setSelectedConnectedChildren([]);
+    setShowSaveTemplateOption(false);
+    setSelectedTemplate(null);
+    setShowTemplateSelector(true);
     
     goBack();
   };
@@ -176,6 +188,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     loadActivities();
     loadConnectedChildren();
     loadPendingConnectionRequests();
+    loadActivityTemplates();
+    loadActivityTypes();
     
     // Check if there's a saved draft to restore
     restoreActivityDraft();
@@ -627,6 +641,100 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   };
 
+  // Template Loading Functions
+  const loadActivityTemplates = async () => {
+    try {
+      setLoadingTemplates(true);
+      const response = await apiService.getActivityTemplates();
+      if (response.success) {
+        setActivityTemplates(response.data);
+        console.log('✅ Activity templates loaded:', response.data.length);
+      } else {
+        console.error('❌ Failed to load activity templates:', response.error);
+        setActivityTemplates([]);
+      }
+    } catch (error) {
+      console.error('💥 Error loading activity templates:', error);
+      setActivityTemplates([]);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
+  const loadActivityTypes = async () => {
+    try {
+      const response = await apiService.getActivityTypes();
+      if (response.success) {
+        setActivityTypes(response.data);
+        console.log('✅ Activity types loaded:', response.data.length);
+      } else {
+        console.error('❌ Failed to load activity types:', response.error);
+        setActivityTypes([]);
+      }
+    } catch (error) {
+      console.error('💥 Error loading activity types:', error);
+      setActivityTypes([]);
+    }
+  };
+
+  const handleTemplateSelect = (template: any) => {
+    setSelectedTemplate(template);
+    
+    // Pre-fill the activity form with template data
+    setNewActivity({
+      name: template.name || '',
+      description: template.description || '',
+      start_date: '',
+      end_date: '',
+      start_time: template.typical_start_time || '',
+      end_time: template.typical_start_time ? 
+        // Add typical duration to start time if available
+        (template.typical_duration_hours ? 
+          addHoursToTime(template.typical_start_time, template.typical_duration_hours) : 
+          template.typical_start_time) : '',
+      location: template.location || '',
+      website_url: template.website_url || '',
+      cost: template.cost ? template.cost.toString() : '',
+      max_participants: template.max_participants ? template.max_participants.toString() : '',
+      auto_notify_new_connections: false
+    });
+
+    setShowTemplateSelector(false);
+    
+    // Track template usage
+    apiService.useActivityTemplate(template.uuid).catch(error => {
+      console.error('Failed to track template usage:', error);
+    });
+  };
+
+  const addHoursToTime = (timeString: string, hours: number): string => {
+    if (!timeString) return '';
+    const [hourStr, minuteStr] = timeString.split(':');
+    const totalMinutes = (parseInt(hourStr) + hours) * 60 + parseInt(minuteStr || '0');
+    const newHour = Math.floor(totalMinutes / 60) % 24;
+    const newMinute = totalMinutes % 60;
+    return `${newHour.toString().padStart(2, '0')}:${newMinute.toString().padStart(2, '0')}`;
+  };
+
+  const handleStartFromScratch = () => {
+    setSelectedTemplate(null);
+    setShowTemplateSelector(false);
+    // Reset form to empty state
+    setNewActivity({
+      name: '',
+      description: '',
+      start_date: '',
+      end_date: '',
+      start_time: '',
+      end_time: '',
+      location: '',
+      website_url: '',
+      cost: '',
+      max_participants: '',
+      auto_notify_new_connections: false
+    });
+  };
+
   const handleActivityClick = async (activity: Activity) => {
     // Use proper navigation if available to navigate to activity-specific URL
     if (onNavigateToActivity) {
@@ -1004,6 +1112,34 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         }
       }
 
+      // Save as template if requested
+      if (showSaveTemplateOption && createdActivities.length > 0) {
+        try {
+          const templateData = {
+            name: newActivity.name,
+            description: newActivity.description || null,
+            location: newActivity.location || null,
+            website_url: newActivity.website_url || null,
+            activity_type: null, // Could be enhanced to detect or allow user to specify
+            cost: newActivity.cost ? parseFloat(newActivity.cost) : null,
+            max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : null,
+            typical_duration_hours: null, // Could calculate from start/end times
+            typical_start_time: newActivity.start_time || null
+          };
+
+          const templateResponse = await apiService.createActivityTemplate(templateData);
+          if (templateResponse.success) {
+            console.log('✅ Template saved successfully:', templateResponse.data);
+            // Reload templates to include the new one
+            loadActivityTemplates();
+          } else {
+            console.error('❌ Failed to save template:', templateResponse.error);
+          }
+        } catch (templateError) {
+          console.error('💥 Error saving template:', templateError);
+        }
+      }
+
       // Reset form
       setNewActivity({
         name: '',
@@ -1022,6 +1158,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setIsSharedActivity(false);
       setAutoNotifyNewConnections(false);
       setSelectedConnectedChildren([]);
+      setShowSaveTemplateOption(false);
+      setSelectedTemplate(null);
+      setShowTemplateSelector(true);
       clearActivityDraft(); // Clear the saved draft after successful creation
       
       // Reload activities to include the newly created activity
@@ -1825,6 +1964,126 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               </button>
             </div>
           )}
+          
+          {/* Template Selector */}
+          {showTemplateSelector && (
+            <div className="template-selector" style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '20px',
+              border: '1px solid #e2e8f0'
+            }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#2d3748' }}>Choose how to create your activity</h3>
+              
+              {loadingTemplates ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                  Loading templates...
+                </div>
+              ) : (
+                <div>
+                  <button
+                    onClick={handleStartFromScratch}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      margin: '0 0 12px 0',
+                      background: '#007bff',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '16px'
+                    }}
+                  >
+                    🆕 Start from scratch
+                  </button>
+                  
+                  {activityTemplates.length > 0 && (
+                    <div>
+                      <p style={{ margin: '12px 0 8px 0', color: '#666', fontSize: '14px' }}>
+                        Or choose from your saved templates:
+                      </p>
+                      <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                        {activityTemplates.map((template) => (
+                          <div
+                            key={template.uuid}
+                            onClick={() => handleTemplateSelect(template)}
+                            style={{
+                              padding: '12px',
+                              margin: '0 0 8px 0',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              backgroundColor: '#f8f9fa',
+                              transition: 'background-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e9ecef'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+                          >
+                            <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+                              {template.activity_type && (
+                                <span style={{ 
+                                  fontSize: '12px', 
+                                  background: '#007bff', 
+                                  color: 'white', 
+                                  padding: '2px 6px', 
+                                  borderRadius: '4px', 
+                                  marginRight: '8px' 
+                                }}>
+                                  {template.activity_type}
+                                </span>
+                              )}
+                              {template.name}
+                            </div>
+                            {template.description && (
+                              <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
+                                {template.description.length > 60 ? 
+                                  template.description.substring(0, 60) + '...' : 
+                                  template.description}
+                              </div>
+                            )}
+                            <div style={{ fontSize: '12px', color: '#999' }}>
+                              {template.location && `📍 ${template.location}`}
+                              {template.cost && ` • $${template.cost}`}
+                              {template.usage_count > 0 && ` • Used ${template.usage_count} times`}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {!showTemplateSelector && (
+            <div style={{ marginBottom: '16px' }}>
+              <button
+                onClick={() => {
+                  setShowTemplateSelector(true);
+                  setSelectedTemplate(null);
+                }}
+                style={{
+                  background: '#f8f9fa',
+                  border: '1px solid #dee2e6',
+                  color: '#495057',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                ← Back to template selection
+              </button>
+              {selectedTemplate && (
+                <span style={{ marginLeft: '12px', color: '#666', fontSize: '14px' }}>
+                  Using template: <strong>{selectedTemplate.name}</strong>
+                </span>
+              )}
+            </div>
+          
           <div className="page-form">
             <input
               type="text"
@@ -2093,22 +2352,48 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 </div>
               )}
             </div>
-          </div>
-          <div className="page-actions">
-            <button
-              onClick={handleCancelActivity}
-              className="cancel-btn"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleCreateActivity}
-              disabled={addingActivity}
-              className={`confirm-btn ${addingActivity ? 'disabled' : ''}`}
-            >
-              {addingActivity ? 'Adding...' : 'Add Activity'}
-            </button>
-          </div>
+            
+            {/* Save as Template Option */}
+            <div style={{ 
+              background: '#f8f9fa', 
+              border: '1px solid #dee2e6', 
+              borderRadius: '8px', 
+              padding: '12px', 
+              marginTop: '16px' 
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={showSaveTemplateOption}
+                  onChange={(e) => setShowSaveTemplateOption(e.target.checked)}
+                  style={{ marginRight: '8px' }}
+                />
+                💾 Save this as a template for future use
+              </label>
+              {showSaveTemplateOption && (
+                <div style={{ marginTop: '8px', fontSize: '14px', color: '#666' }}>
+                  This will save the activity details (name, description, location, etc.) as a reusable template.
+                </div>
+              )}
+            </div>
+            
+            {/* Actions */}
+            <div className="page-actions">
+              <button
+                onClick={handleCancelActivity}
+                className="cancel-btn"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateActivity}
+                disabled={addingActivity}
+                className={`confirm-btn ${addingActivity ? 'disabled' : ''}`}
+              >
+                {addingActivity ? 'Adding...' : 'Add Activity'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

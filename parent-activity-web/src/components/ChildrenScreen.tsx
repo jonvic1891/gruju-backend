@@ -66,8 +66,6 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
   const [editChildFirstName, setEditChildFirstName] = useState('');
   const [editChildLastName, setEditChildLastName] = useState('');
   const [editChildBirthDate, setEditChildBirthDate] = useState('');
-  const [editChildGrade, setEditChildGrade] = useState('');
-  const [editChildSchool, setEditChildSchool] = useState('');
   const [editChildInterests, setEditChildInterests] = useState('');
   const [updatingChild, setUpdatingChild] = useState(false);
   const [childActivityCounts, setChildActivityCounts] = useState<Record<string, number>>({});
@@ -612,8 +610,6 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     }
     setEditChildBirthDate(birthDate);
     
-    setEditChildGrade(child.grade || '');
-    setEditChildSchool(child.school || '');
     setEditChildInterests(child.interests || '');
     setShowEditModal(true);
   };
@@ -644,8 +640,6 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
         first_name: editChildFirstName.trim(),
         last_name: editChildLastName.trim(),
         age: age,
-        grade: editChildGrade.trim() || undefined,
-        school: editChildSchool.trim() || undefined,
         interests: editChildInterests.trim() || undefined
       };
 
@@ -685,8 +679,6 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     setEditChildFirstName('');
     setEditChildLastName('');
     setEditChildBirthDate('');
-    setEditChildGrade('');
-    setEditChildSchool('');
     setEditChildInterests('');
   };
 
@@ -1147,26 +1139,6 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 onChange={(e) => setEditChildBirthDate(e.target.value)}
                 className="modal-input"
                 max={new Date().toISOString().split('T')[0]} // Can't be future date
-              />
-            </div>
-            <div className="form-group">
-              <label>Grade</label>
-              <input
-                type="text"
-                value={editChildGrade}
-                onChange={(e) => setEditChildGrade(e.target.value)}
-                placeholder="e.g., Grade 5, Year 3, Kindergarten"
-                className="modal-input"
-              />
-            </div>
-            <div className="form-group">
-              <label>School</label>
-              <input
-                type="text"
-                value={editChildSchool}
-                onChange={(e) => setEditChildSchool(e.target.value)}
-                placeholder="Enter school name"
-                className="modal-input"
               />
             </div>
             <div className="form-group">

@@ -159,40 +159,36 @@
   position: absolute;
   top: 16px;
   right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
-.edit-btn {
-  background: none;
-  border: none;
-  font-size: 16px;
+.child-actions .edit-btn, 
+.child-actions .delete-btn {
+  background: none !important;
+  border: none !important;
+  font-size: 14px !important;
   cursor: pointer;
-  padding: 8px 12px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-  color: #007bff;
-  margin-right: 8px;
-  min-width: 60px;
+  padding: 0 !important;
+  color: #000 !important;
+  text-decoration: none !important;
+  min-width: 32px;
+  text-align: center;
+  width: auto !important;
+  border-radius: 0 !important;
+  font-weight: normal !important;
+  transition: none !important;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
-.edit-btn:hover {
-  background: #e7f3ff;
-  color: #0056b3;
-}
-
-.delete-btn {
-  background: none;
-  border: none;
-  font-size: 16px;
-  cursor: pointer;
-  padding: 8px 12px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-  color: #dc3545;
-  min-width: 60px;
-}
-
-.delete-btn:hover {
-  background: #f8d7da;
+.child-actions .edit-btn:hover, 
+.child-actions .delete-btn:hover {
+  color: #333 !important;
+  background: none !important;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .modal-overlay {
@@ -211,14 +207,14 @@
 .modal {
   background: white;
   border-radius: 12px;
-  padding: 24px;
+  padding: 20px;
   width: 90%;
   max-width: 400px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .modal h3 {
-  margin: 0 0 20px 0;
+  margin: 0 0 16px 0;
   font-size: 20px;
   font-weight: bold;
   color: #343a40;
@@ -230,9 +226,9 @@
   box-sizing: border-box;
   border: 1px solid #ced4da;
   border-radius: 8px;
-  padding: 12px;
+  padding: 10px;
   font-size: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .name-fields {
@@ -242,7 +238,7 @@
 
 .name-fields .modal-input {
   flex: 1;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .modal-input:focus {
