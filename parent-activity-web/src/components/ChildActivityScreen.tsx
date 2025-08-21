@@ -60,7 +60,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [activityTypes, setActivityTypes] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
-  const [showSaveTemplateOption, setShowSaveTemplateOption] = useState(false);
+  const [showTemplatePrompt, setShowTemplatePrompt] = useState(false);
+  const [pendingTemplateData, setPendingTemplateData] = useState<any>(null);
   const [templateConfirmationMessage, setTemplateConfirmationMessage] = useState<string>('');
   
   const apiService = ApiService.getInstance();
@@ -171,8 +172,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setIsSharedActivity(false);
     setAutoNotifyNewConnections(false);
     setSelectedConnectedChildren([]);
-    setShowSaveTemplateOption(false);
     setSelectedTemplate(null);
+    setShowTemplatePrompt(false);
+    setPendingTemplateData(null);
     
     goBack();
   };
@@ -753,6 +755,33 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     handleTemplateSelect(null);
   };
 
+  const handleSaveTemplate = async () => {
+    if (!pendingTemplateData) return;
+    
+    try {
+      const templateResponse = await apiService.createActivityTemplate(pendingTemplateData);
+      if (templateResponse.success) {
+        console.log('✅ Template saved successfully:', templateResponse.data);
+        // Reload templates to include the new one
+        loadActivityTemplates();
+        setTemplateConfirmationMessage(`Template "${pendingTemplateData?.name}" saved successfully!`);
+        setTimeout(() => setTemplateConfirmationMessage(''), 3000);
+      } else {
+        console.error('❌ Failed to save template:', templateResponse.error);
+      }
+    } catch (templateError) {
+      console.error('💥 Error saving template:', templateError);
+    } finally {
+      setShowTemplatePrompt(false);
+      setPendingTemplateData(null);
+    }
+  };
+
+  const handleSkipTemplate = () => {
+    setShowTemplatePrompt(false);
+    setPendingTemplateData(null);
+  };
+
   const handleActivityClick = async (activity: Activity) => {
     // Use proper navigation if available to navigate to activity-specific URL
     if (onNavigateToActivity) {
@@ -1130,32 +1159,34 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         }
       }
 
-      // Save as template if requested
-      if (showSaveTemplateOption && createdActivities.length > 0) {
-        try {
-          const templateData = {
-            name: newActivity.name,
-            description: newActivity.description || null,
-            location: newActivity.location || null,
-            website_url: newActivity.website_url || null,
-            activity_type: null, // Could be enhanced to detect or allow user to specify
-            cost: newActivity.cost ? parseFloat(newActivity.cost) : null,
-            max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : null,
-            typical_duration_hours: null, // Could calculate from start/end times
-            typical_start_time: newActivity.start_time || null
-          };
-
-          const templateResponse = await apiService.createActivityTemplate(templateData);
-          if (templateResponse.success) {
-            console.log('✅ Template saved successfully:', templateResponse.data);
-            // Reload templates to include the new one
-            loadActivityTemplates();
-          } else {
-            console.error('❌ Failed to save template:', templateResponse.error);
-          }
-        } catch (templateError) {
-          console.error('💥 Error saving template:', templateError);
+      // Show template save prompt after successful activity creation
+      if (createdActivities.length > 0) {
+        // Calculate duration if both start and end times are provided
+        let durationHours = null;
+        if (newActivity.start_time && newActivity.end_time) {
+          const [startHour, startMin] = newActivity.start_time.split(':').map(Number);
+          const [endHour, endMin] = newActivity.end_time.split(':').map(Number);
+          const startMinutes = startHour * 60 + startMin;
+          const endMinutes = endHour * 60 + endMin;
+          durationHours = (endMinutes - startMinutes) / 60;
+          if (durationHours < 0) durationHours += 24; // Handle overnight activities
         }
+
+        const templateData = {
+          name: newActivity.name,
+          description: newActivity.description || null,
+          location: newActivity.location || null,
+          website_url: newActivity.website_url || null,
+          activity_type: null, // Could be enhanced to detect or allow user to specify
+          cost: newActivity.cost ? parseFloat(newActivity.cost) : null,
+          max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : null,
+          typical_duration_hours: durationHours,
+          typical_start_time: newActivity.start_time || null
+        };
+
+        // Store template data and show prompt
+        setPendingTemplateData(templateData);
+        setShowTemplatePrompt(true);
       }
 
       // Reset form
@@ -1176,7 +1207,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setIsSharedActivity(false);
       setAutoNotifyNewConnections(false);
       setSelectedConnectedChildren([]);
-      setShowSaveTemplateOption(false);
       setSelectedTemplate(null);
       setTemplateConfirmationMessage('');
       clearActivityDraft(); // Clear the saved draft after successful creation
@@ -2061,32 +2091,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             )}
           </div>
 
-          {/* Save as Template Option */}
-          <div style={{ 
-            marginBottom: '20px',
-            padding: '16px',
-            background: '#f8f9fa',
-            borderRadius: '8px',
-            border: '1px solid #dee2e6'
-          }}>
-            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={showSaveTemplateOption}
-                onChange={(e) => setShowSaveTemplateOption(e.target.checked)}
-                style={{ marginRight: '8px' }}
-              />
-              <span style={{ fontWeight: '600', color: '#2d3748' }}>
-                💾 Save this as a template for future use
-              </span>
-            </label>
-            {showSaveTemplateOption && (
-              <div style={{ marginTop: '8px', fontSize: '14px', color: '#666' }}>
-                This will save the activity details (name, description, location, etc.) as a reusable template.
-              </div>
-            )}
-          </div>
-          
           <div className="page-form">
             <input
               type="text"
@@ -2807,6 +2811,83 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         );
         })()}
       </div>
+
+      {/* Template Save Prompt Modal */}
+      {showTemplatePrompt && pendingTemplateData && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '400px',
+            width: '90%',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)'
+          }}>
+            <h3 style={{ 
+              margin: '0 0 16px 0', 
+              color: '#2d3748',
+              fontSize: '20px',
+              fontWeight: '600'
+            }}>
+              💾 Save as Template?
+            </h3>
+            <p style={{ 
+              margin: '0 0 20px 0', 
+              color: '#4a5568',
+              lineHeight: '1.5'
+            }}>
+              Would you like to save "<strong>{pendingTemplateData?.name}</strong>" as a template? 
+              This will make it easy to create similar activities in the future.
+            </p>
+            <div style={{ 
+              display: 'flex', 
+              gap: '12px',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={handleSkipTemplate}
+                style={{
+                  padding: '10px 20px',
+                  border: '1px solid #dee2e6',
+                  borderRadius: '6px',
+                  background: '#f8f9fa',
+                  color: '#495057',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                No thanks
+              </button>
+              <button
+                onClick={handleSaveTemplate}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  background: '#007bff',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500'
+                }}
+              >
+                Save Template
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
