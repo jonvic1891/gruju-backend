@@ -1535,7 +1535,7 @@ app.put('/api/activities/:activityId', authenticateToken, async (req, res) => {
                 const processedStartTime = start_time && start_time.trim() ? start_time.trim() : null;
                 const processedEndTime = end_time && end_time.trim() ? end_time.trim() : null;
                 const processedEndDate = end_date && end_date.trim() ? end_date.trim() : null;
-                const processedCost = cost && cost.trim() ? parseFloat(cost.trim()) : null;
+                const processedCost = cost !== null && cost !== undefined && cost !== '' ? parseFloat(cost) : null;
                 const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
                 const processedAutoNotify = auto_notify_new_connections !== undefined ? auto_notify_new_connections : false;
                 const processedIsShared = is_shared !== undefined ? is_shared : true;
@@ -1559,7 +1559,7 @@ app.put('/api/activities/:activityId', authenticateToken, async (req, res) => {
         const processedStartTime = start_time && start_time.trim() ? start_time.trim() : null;
         const processedEndTime = end_time && end_time.trim() ? end_time.trim() : null;
         const processedEndDate = end_date && end_date.trim() ? end_date.trim() : null;
-        const processedCost = cost && cost.trim() ? parseFloat(cost.trim()) : null;
+        const processedCost = cost !== null && cost !== undefined && cost !== '' ? parseFloat(cost) : null;
         const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
         const processedAutoNotify = auto_notify_new_connections !== undefined ? auto_notify_new_connections : false;
         const processedIsShared = is_shared !== undefined ? is_shared : true;
@@ -1746,7 +1746,7 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         const processedStartTime = start_time && start_time.trim() ? start_time.trim() : null;
         const processedEndTime = end_time && end_time.trim() ? end_time.trim() : null;
         const processedEndDate = end_date && end_date.trim() ? end_date.trim() : null;
-        const processedCost = cost && cost.trim() ? parseFloat(cost.trim()) : null;
+        const processedCost = cost !== null && cost !== undefined && cost !== '' ? parseFloat(cost) : null;
         const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
 
         // Determine if activity should be marked as shared
@@ -1908,7 +1908,7 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
         const processedStartTime = start_time && start_time.trim() ? start_time.trim() : null;
         const processedEndTime = end_time && end_time.trim() ? end_time.trim() : null;
         const processedEndDate = end_date && end_date.trim() ? end_date.trim() : null;
-        const processedCost = cost && cost.trim() ? parseFloat(cost.trim()) : null;
+        const processedCost = cost !== null && cost !== undefined && cost !== '' ? parseFloat(cost) : null;
         const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
 
         // ✅ SECURITY: Update using UUID and return minimal data
