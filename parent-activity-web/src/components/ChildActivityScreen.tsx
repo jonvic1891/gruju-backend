@@ -59,9 +59,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [activityTemplates, setActivityTemplates] = useState<any[]>([]);
   const [activityTypes, setActivityTypes] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
-  const [showTemplateSelector, setShowTemplateSelector] = useState(true);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [showSaveTemplateOption, setShowSaveTemplateOption] = useState(false);
+  const [templateConfirmationMessage, setTemplateConfirmationMessage] = useState<string>('');
   
   const apiService = ApiService.getInstance();
 
@@ -173,7 +173,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setSelectedConnectedChildren([]);
     setShowSaveTemplateOption(false);
     setSelectedTemplate(null);
-    setShowTemplateSelector(true);
     
     goBack();
   };
@@ -678,7 +677,33 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const handleTemplateSelect = (template: any) => {
+    if (template === null) {
+      // "Create from scratch" selected
+      setSelectedTemplate(null);
+      setTemplateConfirmationMessage('');
+      // Reset form to empty state
+      setNewActivity({
+        name: '',
+        description: '',
+        start_date: '',
+        end_date: '',
+        start_time: '',
+        end_time: '',
+        location: '',
+        website_url: '',
+        cost: '',
+        max_participants: '',
+        auto_notify_new_connections: false
+      });
+      setSelectedDates([]);
+      setIsSharedActivity(false);
+      setAutoNotifyNewConnections(false);
+      clearActivityDraft();
+      return;
+    }
+
     setSelectedTemplate(template);
+    setTemplateConfirmationMessage(`Template "${template.name}" loaded successfully!`);
     
     // Pre-fill the activity form with template data
     setNewActivity({
@@ -698,13 +723,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       max_participants: template.max_participants ? template.max_participants.toString() : '',
       auto_notify_new_connections: false
     });
-
-    setShowTemplateSelector(false);
+    
+    setSelectedDates([]);
+    setIsSharedActivity(false);
+    setAutoNotifyNewConnections(false);
+    clearActivityDraft(); // Clear any saved draft since we're using a template
     
     // Track template usage
     apiService.useActivityTemplate(template.uuid).catch(error => {
       console.error('Failed to track template usage:', error);
     });
+    
+    // Clear the confirmation message after 3 seconds
+    setTimeout(() => {
+      setTemplateConfirmationMessage('');
+    }, 3000);
   };
 
   const addHoursToTime = (timeString: string, hours: number): string => {
@@ -717,22 +750,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const handleStartFromScratch = () => {
-    setSelectedTemplate(null);
-    setShowTemplateSelector(false);
-    // Reset form to empty state
-    setNewActivity({
-      name: '',
-      description: '',
-      start_date: '',
-      end_date: '',
-      start_time: '',
-      end_time: '',
-      location: '',
-      website_url: '',
-      cost: '',
-      max_participants: '',
-      auto_notify_new_connections: false
-    });
+    handleTemplateSelect(null);
   };
 
   const handleActivityClick = async (activity: Activity) => {
@@ -1160,7 +1178,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setSelectedConnectedChildren([]);
       setShowSaveTemplateOption(false);
       setSelectedTemplate(null);
-      setShowTemplateSelector(true);
+      setTemplateConfirmationMessage('');
       clearActivityDraft(); // Clear the saved draft after successful creation
       
       // Reload activities to include the newly created activity
@@ -1965,125 +1983,103 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             </div>
           )}
           
-          {/* Template Selector */}
-          {showTemplateSelector && (
-            <div className="template-selector" style={{
-              background: 'white',
-              borderRadius: '12px',
-              padding: '20px',
-              marginBottom: '20px',
-              border: '1px solid #e2e8f0'
+          {/* Template Selector Dropdown */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '8px', 
+              fontWeight: '600', 
+              color: '#2d3748',
+              fontSize: '16px'
             }}>
-              <h3 style={{ margin: '0 0 16px 0', color: '#2d3748' }}>Choose how to create your activity</h3>
-              
-              {loadingTemplates ? (
-                <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-                  Loading templates...
-                </div>
-              ) : (
-                <div>
-                  <button
-                    onClick={handleStartFromScratch}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      margin: '0 0 12px 0',
-                      background: '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '16px'
-                    }}
-                  >
-                    🆕 Start from scratch
-                  </button>
-                  
-                  {activityTemplates.length > 0 && (
-                    <div>
-                      <p style={{ margin: '12px 0 8px 0', color: '#666', fontSize: '14px' }}>
-                        Or choose from your saved templates:
-                      </p>
-                      <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                        {activityTemplates.map((template) => (
-                          <div
-                            key={template.uuid}
-                            onClick={() => handleTemplateSelect(template)}
-                            style={{
-                              padding: '12px',
-                              margin: '0 0 8px 0',
-                              border: '1px solid #e2e8f0',
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                              backgroundColor: '#f8f9fa',
-                              transition: 'background-color 0.2s'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e9ecef'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                          >
-                            <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-                              {template.activity_type && (
-                                <span style={{ 
-                                  fontSize: '12px', 
-                                  background: '#007bff', 
-                                  color: 'white', 
-                                  padding: '2px 6px', 
-                                  borderRadius: '4px', 
-                                  marginRight: '8px' 
-                                }}>
-                                  {template.activity_type}
-                                </span>
-                              )}
-                              {template.name}
-                            </div>
-                            {template.description && (
-                              <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>
-                                {template.description.length > 60 ? 
-                                  template.description.substring(0, 60) + '...' : 
-                                  template.description}
-                              </div>
-                            )}
-                            <div style={{ fontSize: '12px', color: '#999' }}>
-                              {template.location && `📍 ${template.location}`}
-                              {template.cost && ` • $${template.cost}`}
-                              {template.usage_count > 0 && ` • Used ${template.usage_count} times`}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          
-          {!showTemplateSelector && (
-            <div style={{ marginBottom: '16px' }}>
-              <button
-                onClick={() => {
-                  setShowTemplateSelector(true);
-                  setSelectedTemplate(null);
+              Choose Template
+            </label>
+            {loadingTemplates ? (
+              <div style={{ 
+                padding: '12px', 
+                background: '#f8f9fa', 
+                borderRadius: '8px',
+                color: '#666',
+                textAlign: 'center'
+              }}>
+                Loading templates...
+              </div>
+            ) : (
+              <select
+                value={selectedTemplate ? selectedTemplate.uuid : ''}
+                onChange={(e) => {
+                  const selectedUuid = e.target.value;
+                  if (selectedUuid === '') {
+                    handleTemplateSelect(null);
+                  } else {
+                    const template = activityTemplates.find(t => t.uuid === selectedUuid);
+                    if (template) {
+                      handleTemplateSelect(template);
+                    }
+                  }
                 }}
                 style={{
-                  background: '#f8f9fa',
-                  border: '1px solid #dee2e6',
-                  color: '#495057',
-                  padding: '8px 16px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px'
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  fontSize: '16px',
+                  backgroundColor: 'white',
+                  cursor: 'pointer'
                 }}
               >
-                ← Back to template selection
-              </button>
-              {selectedTemplate && (
-                <span style={{ marginLeft: '12px', color: '#666', fontSize: '14px' }}>
-                  Using template: <strong>{selectedTemplate.name}</strong>
-                </span>
-              )}
-            </div>
-          )}
+                <option value="">Create from scratch</option>
+                {activityTemplates.map((template) => (
+                  <option key={template.uuid} value={template.uuid}>
+                    {template.name}
+                    {template.activity_type && ` (${template.activity_type})`}
+                    {template.usage_count > 0 && ` - Used ${template.usage_count} times`}
+                  </option>
+                ))}
+              </select>
+            )}
+            
+            {/* Template Confirmation Message */}
+            {templateConfirmationMessage && (
+              <div style={{
+                marginTop: '12px',
+                padding: '12px',
+                background: '#d4edda',
+                color: '#155724',
+                borderRadius: '8px',
+                border: '1px solid #c3e6cb',
+                fontSize: '14px'
+              }}>
+                ✅ {templateConfirmationMessage}
+              </div>
+            )}
+          </div>
+
+          {/* Save as Template Option */}
+          <div style={{ 
+            marginBottom: '20px',
+            padding: '16px',
+            background: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #dee2e6'
+          }}>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showSaveTemplateOption}
+                onChange={(e) => setShowSaveTemplateOption(e.target.checked)}
+                style={{ marginRight: '8px' }}
+              />
+              <span style={{ fontWeight: '600', color: '#2d3748' }}>
+                💾 Save this as a template for future use
+              </span>
+            </label>
+            {showSaveTemplateOption && (
+              <div style={{ marginTop: '8px', fontSize: '14px', color: '#666' }}>
+                This will save the activity details (name, description, location, etc.) as a reusable template.
+              </div>
+            )}
+          </div>
           
           <div className="page-form">
             <input
@@ -2354,29 +2350,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               )}
             </div>
             
-            {/* Save as Template Option */}
-            <div style={{ 
-              background: '#f8f9fa', 
-              border: '1px solid #dee2e6', 
-              borderRadius: '8px', 
-              padding: '12px', 
-              marginTop: '16px' 
-            }}>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={showSaveTemplateOption}
-                  onChange={(e) => setShowSaveTemplateOption(e.target.checked)}
-                  style={{ marginRight: '8px' }}
-                />
-                💾 Save this as a template for future use
-              </label>
-              {showSaveTemplateOption && (
-                <div style={{ marginTop: '8px', fontSize: '14px', color: '#666' }}>
-                  This will save the activity details (name, description, location, etc.) as a reusable template.
-                </div>
-              )}
-            </div>
             
             {/* Actions */}
             <div className="page-actions">
