@@ -774,12 +774,30 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     } finally {
       setShowTemplatePrompt(false);
       setPendingTemplateData(null);
+      
+      // Navigate back after template decision
+      if (onBack) {
+        console.log('🔙 Using onBack to return to main activities URL after template save');
+        onBack();
+      } else {
+        console.log('📝 Using navigateToPage as fallback after template save');
+        navigateToPage('main');
+      }
     }
   };
 
   const handleSkipTemplate = () => {
     setShowTemplatePrompt(false);
     setPendingTemplateData(null);
+    
+    // Navigate back after template decision
+    if (onBack) {
+      console.log('🔙 Using onBack to return to main activities URL after template skip');
+      onBack();
+    } else {
+      console.log('📝 Using navigateToPage as fallback after template skip');
+      navigateToPage('main');
+    }
   };
 
   const handleActivityClick = async (activity: Activity) => {
@@ -1160,6 +1178,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       }
 
       // Show template save prompt after successful activity creation
+      let shouldShowTemplatePrompt = false;
       if (createdActivities.length > 0) {
         // Calculate duration if both start and end times are provided
         let durationHours = null;
@@ -1187,6 +1206,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         // Store template data and show prompt
         setPendingTemplateData(templateData);
         setShowTemplatePrompt(true);
+        shouldShowTemplatePrompt = true;
       }
 
       // Reset form
@@ -1219,17 +1239,22 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         : `${createdActivities.length} activities created successfully!`;
       alert(message);
       
-      // After creating activity, go back to activities list (not to the activity detail)
-      // Stay on current child's activities page instead of going back to main children page
-      console.log('🏠 Activity created successfully, navigating back to main activities list');
-      
-      // Navigate back to the main activities URL (without the /new)
-      if (onBack) {
-        console.log('🔙 Using onBack to return to main activities URL');
-        onBack();
+      // Only navigate back if we're not showing the template prompt
+      if (!shouldShowTemplatePrompt) {
+        // After creating activity, go back to activities list (not to the activity detail)
+        // Stay on current child's activities page instead of going back to main children page
+        console.log('🏠 Activity created successfully, navigating back to main activities list');
+        
+        // Navigate back to the main activities URL (without the /new)
+        if (onBack) {
+          console.log('🔙 Using onBack to return to main activities URL');
+          onBack();
+        } else {
+          console.log('📝 Using navigateToPage as fallback');
+          navigateToPage('main');
+        }
       } else {
-        console.log('📝 Using navigateToPage as fallback');
-        navigateToPage('main');
+        console.log('🎯 Template prompt will be shown, staying on current page');
       }
       
     } catch (error) {
