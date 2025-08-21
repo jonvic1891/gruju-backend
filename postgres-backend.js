@@ -3953,12 +3953,20 @@ app.get('/api/activity-templates', authenticateToken, async (req, res) => {
     try {
         const parentId = req.user.id;
         
+        // Get parent UUID from parent ID
         const client = await pool.connect();
+        const parentResult = await client.query('SELECT uuid FROM users WHERE id = $1', [parentId]);
+        if (parentResult.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Parent not found' });
+        }
+        const parentUuid = parentResult.rows[0].uuid;
+        
         const result = await client.query(`
             SELECT * FROM activity_templates 
-            WHERE parent_id = $1 
+            WHERE parent_uuid = $1 
             ORDER BY last_used_at DESC, usage_count DESC, name ASC
-        `, [parentId]);
+        `, [parentUuid]);
         
         client.release();
         res.json({ success: true, data: result.rows });
@@ -3989,6 +3997,16 @@ app.get('/api/activity-types', async (req, res) => {
 app.post('/api/activity-templates', authenticateToken, async (req, res) => {
     try {
         const parentId = req.user.id;
+        
+        // Get parent UUID from parent ID
+        const client = await pool.connect();
+        const parentResult = await client.query('SELECT uuid FROM users WHERE id = $1', [parentId]);
+        if (parentResult.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Parent not found' });
+        }
+        const parentUuid = parentResult.rows[0].uuid;
+        
         const {
             name,
             description,
@@ -4005,15 +4023,14 @@ app.post('/api/activity-templates', authenticateToken, async (req, res) => {
             return res.status(400).json({ success: false, error: 'Template name is required' });
         }
 
-        const client = await pool.connect();
         const result = await client.query(`
             INSERT INTO activity_templates (
-                parent_id, name, description, location, website_url, 
+                parent_uuid, name, description, location, website_url, 
                 activity_type, cost, max_participants, typical_duration_hours, typical_start_time
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING *
         `, [
-            parentId,
+            parentUuid,
             name.trim(),
             description?.trim() || null,
             location?.trim() || null,
@@ -4026,7 +4043,7 @@ app.post('/api/activity-templates', authenticateToken, async (req, res) => {
         ]);
         
         client.release();
-        console.log(`✅ Created activity template: ${name} for parent ${parentId}`);
+        console.log(`✅ Created activity template: ${name} for parent ${parentUuid}`);
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
         console.error('🚨 Create activity template error:', error);
@@ -4039,6 +4056,16 @@ app.put('/api/activity-templates/:templateUuid', authenticateToken, async (req, 
     try {
         const parentId = req.user.id;
         const templateUuid = req.params.templateUuid;
+        
+        // Get parent UUID from parent ID
+        const client = await pool.connect();
+        const parentResult = await client.query('SELECT uuid FROM users WHERE id = $1', [parentId]);
+        if (parentResult.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Parent not found' });
+        }
+        const parentUuid = parentResult.rows[0].uuid;
+        
         const {
             name,
             description,
@@ -4052,16 +4079,15 @@ app.put('/api/activity-templates/:templateUuid', authenticateToken, async (req, 
         } = req.body;
 
         if (!name || name.trim() === '') {
+            client.release();
             return res.status(400).json({ success: false, error: 'Template name is required' });
         }
-
-        const client = await pool.connect();
         
         // Check ownership
         const ownershipCheck = await client.query(`
             SELECT uuid FROM activity_templates 
-            WHERE uuid = $1 AND parent_id = $2
-        `, [templateUuid, parentId]);
+            WHERE uuid = $1 AND parent_uuid = $2
+        `, [templateUuid, parentUuid]);
 
         if (ownershipCheck.rows.length === 0) {
             client.release();
@@ -4080,11 +4106,11 @@ app.put('/api/activity-templates/:templateUuid', authenticateToken, async (req, 
                 typical_duration_hours = $10,
                 typical_start_time = $11,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE uuid = $1 AND parent_id = $2
+            WHERE uuid = $1 AND parent_uuid = $2
             RETURNING *
         `, [
             templateUuid,
-            parentId,
+            parentUuid,
             name.trim(),
             description?.trim() || null,
             location?.trim() || null,
@@ -4111,13 +4137,20 @@ app.delete('/api/activity-templates/:templateUuid', authenticateToken, async (re
         const parentId = req.user.id;
         const templateUuid = req.params.templateUuid;
 
+        // Get parent UUID from parent ID
         const client = await pool.connect();
+        const parentResult = await client.query('SELECT uuid FROM users WHERE id = $1', [parentId]);
+        if (parentResult.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Parent not found' });
+        }
+        const parentUuid = parentResult.rows[0].uuid;
         
         const result = await client.query(`
             DELETE FROM activity_templates 
-            WHERE uuid = $1 AND parent_id = $2
+            WHERE uuid = $1 AND parent_uuid = $2
             RETURNING name
-        `, [templateUuid, parentId]);
+        `, [templateUuid, parentUuid]);
 
         if (result.rows.length === 0) {
             client.release();
@@ -4139,15 +4172,22 @@ app.post('/api/activity-templates/:templateUuid/use', authenticateToken, async (
         const parentId = req.user.id;
         const templateUuid = req.params.templateUuid;
 
+        // Get parent UUID from parent ID
         const client = await pool.connect();
+        const parentResult = await client.query('SELECT uuid FROM users WHERE id = $1', [parentId]);
+        if (parentResult.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Parent not found' });
+        }
+        const parentUuid = parentResult.rows[0].uuid;
         
         const result = await client.query(`
             UPDATE activity_templates SET
                 usage_count = usage_count + 1,
                 last_used_at = CURRENT_TIMESTAMP
-            WHERE uuid = $1 AND parent_id = $2
+            WHERE uuid = $1 AND parent_uuid = $2
             RETURNING *
-        `, [templateUuid, parentId]);
+        `, [templateUuid, parentUuid]);
 
         if (result.rows.length === 0) {
             client.release();
