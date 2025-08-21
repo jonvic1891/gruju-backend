@@ -3944,6 +3944,225 @@ app.post('/api/activities/:activityUuid/cant-attend', authenticateToken, async (
     }
 });
 
+// ================================
+// ACTIVITY TEMPLATES ENDPOINTS
+// ================================
+
+// Get user's activity templates
+app.get('/api/activity-templates', authenticateToken, async (req, res) => {
+    try {
+        const parentUuid = req.user.uuid;
+        
+        const client = await pool.connect();
+        const result = await client.query(`
+            SELECT * FROM activity_templates 
+            WHERE parent_uuid = $1 
+            ORDER BY last_used_at DESC, usage_count DESC, name ASC
+        `, [parentUuid]);
+        
+        client.release();
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        console.error('🚨 Get activity templates error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch activity templates' });
+    }
+});
+
+// Get activity types (for dropdown)
+app.get('/api/activity-types', async (req, res) => {
+    try {
+        const client = await pool.connect();
+        const result = await client.query(`
+            SELECT * FROM activity_types 
+            ORDER BY name ASC
+        `);
+        
+        client.release();
+        res.json({ success: true, data: result.rows });
+    } catch (error) {
+        console.error('🚨 Get activity types error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch activity types' });
+    }
+});
+
+// Create activity template
+app.post('/api/activity-templates', authenticateToken, async (req, res) => {
+    try {
+        const parentUuid = req.user.uuid;
+        const {
+            name,
+            description,
+            location,
+            website_url,
+            activity_type,
+            cost,
+            max_participants,
+            typical_duration_hours,
+            typical_start_time
+        } = req.body;
+
+        if (!name || name.trim() === '') {
+            return res.status(400).json({ success: false, error: 'Template name is required' });
+        }
+
+        const client = await pool.connect();
+        const result = await client.query(`
+            INSERT INTO activity_templates (
+                parent_uuid, name, description, location, website_url, 
+                activity_type, cost, max_participants, typical_duration_hours, typical_start_time
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING *
+        `, [
+            parentUuid,
+            name.trim(),
+            description?.trim() || null,
+            location?.trim() || null,
+            website_url?.trim() || null,
+            activity_type?.trim() || null,
+            cost ? parseFloat(cost) : null,
+            max_participants ? parseInt(max_participants) : null,
+            typical_duration_hours ? parseInt(typical_duration_hours) : null,
+            typical_start_time?.trim() || null
+        ]);
+        
+        client.release();
+        console.log(`✅ Created activity template: ${name} for parent ${parentUuid}`);
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        console.error('🚨 Create activity template error:', error);
+        res.status(500).json({ success: false, error: 'Failed to create activity template' });
+    }
+});
+
+// Update activity template
+app.put('/api/activity-templates/:templateUuid', authenticateToken, async (req, res) => {
+    try {
+        const parentUuid = req.user.uuid;
+        const templateUuid = req.params.templateUuid;
+        const {
+            name,
+            description,
+            location,
+            website_url,
+            activity_type,
+            cost,
+            max_participants,
+            typical_duration_hours,
+            typical_start_time
+        } = req.body;
+
+        if (!name || name.trim() === '') {
+            return res.status(400).json({ success: false, error: 'Template name is required' });
+        }
+
+        const client = await pool.connect();
+        
+        // Check ownership
+        const ownershipCheck = await client.query(`
+            SELECT uuid FROM activity_templates 
+            WHERE uuid = $1 AND parent_uuid = $2
+        `, [templateUuid, parentUuid]);
+
+        if (ownershipCheck.rows.length === 0) {
+            client.release();
+            return res.status(403).json({ success: false, error: 'Template not found or access denied' });
+        }
+
+        const result = await client.query(`
+            UPDATE activity_templates SET
+                name = $3,
+                description = $4,
+                location = $5,
+                website_url = $6,
+                activity_type = $7,
+                cost = $8,
+                max_participants = $9,
+                typical_duration_hours = $10,
+                typical_start_time = $11,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE uuid = $1 AND parent_uuid = $2
+            RETURNING *
+        `, [
+            templateUuid,
+            parentUuid,
+            name.trim(),
+            description?.trim() || null,
+            location?.trim() || null,
+            website_url?.trim() || null,
+            activity_type?.trim() || null,
+            cost ? parseFloat(cost) : null,
+            max_participants ? parseInt(max_participants) : null,
+            typical_duration_hours ? parseInt(typical_duration_hours) : null,
+            typical_start_time?.trim() || null
+        ]);
+        
+        client.release();
+        console.log(`✅ Updated activity template: ${templateUuid}`);
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        console.error('🚨 Update activity template error:', error);
+        res.status(500).json({ success: false, error: 'Failed to update activity template' });
+    }
+});
+
+// Delete activity template
+app.delete('/api/activity-templates/:templateUuid', authenticateToken, async (req, res) => {
+    try {
+        const parentUuid = req.user.uuid;
+        const templateUuid = req.params.templateUuid;
+
+        const client = await pool.connect();
+        
+        const result = await client.query(`
+            DELETE FROM activity_templates 
+            WHERE uuid = $1 AND parent_uuid = $2
+            RETURNING name
+        `, [templateUuid, parentUuid]);
+
+        if (result.rows.length === 0) {
+            client.release();
+            return res.status(403).json({ success: false, error: 'Template not found or access denied' });
+        }
+        
+        client.release();
+        console.log(`✅ Deleted activity template: ${result.rows[0].name}`);
+        res.json({ success: true, message: 'Activity template deleted successfully' });
+    } catch (error) {
+        console.error('🚨 Delete activity template error:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete activity template' });
+    }
+});
+
+// Use activity template (increment usage count and update last_used_at)
+app.post('/api/activity-templates/:templateUuid/use', authenticateToken, async (req, res) => {
+    try {
+        const parentUuid = req.user.uuid;
+        const templateUuid = req.params.templateUuid;
+
+        const client = await pool.connect();
+        
+        const result = await client.query(`
+            UPDATE activity_templates SET
+                usage_count = usage_count + 1,
+                last_used_at = CURRENT_TIMESTAMP
+            WHERE uuid = $1 AND parent_uuid = $2
+            RETURNING *
+        `, [templateUuid, parentUuid]);
+
+        if (result.rows.length === 0) {
+            client.release();
+            return res.status(403).json({ success: false, error: 'Template not found or access denied' });
+        }
+        
+        client.release();
+        console.log(`✅ Template usage tracked: ${result.rows[0].name}`);
+        res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+        console.error('🚨 Use activity template error:', error);
+        res.status(500).json({ success: false, error: 'Failed to track template usage' });
+    }
+});
+
 // Start server
 async function startServer() {
     try {

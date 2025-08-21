@@ -334,6 +334,31 @@ class ApiService {
       pending_connections: pendingConnections 
     });
   }
+
+  // Activity Templates
+  async getActivityTemplates(): Promise<ApiResponse<any[]>> {
+    return this.request('get', '/api/activity-templates');
+  }
+
+  async getActivityTypes(): Promise<ApiResponse<any[]>> {
+    return this.request('get', '/api/activity-types');
+  }
+
+  async createActivityTemplate(templateData: any): Promise<ApiResponse<any>> {
+    return this.request('post', '/api/activity-templates', templateData);
+  }
+
+  async updateActivityTemplate(templateUuid: string, templateData: any): Promise<ApiResponse<any>> {
+    return this.request('put', `/api/activity-templates/${templateUuid}`, templateData);
+  }
+
+  async deleteActivityTemplate(templateUuid: string): Promise<ApiResponse<any>> {
+    return this.request('delete', `/api/activity-templates/${templateUuid}`);
+  }
+
+  async useActivityTemplate(templateUuid: string): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/activity-templates/${templateUuid}/use`);
+  }
 }
 
 export default ApiService;
