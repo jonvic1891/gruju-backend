@@ -2881,7 +2881,7 @@ app.get('/api/connections/:childUuid', authenticateToken, async (req, res) => {
              JOIN children ch2 ON c.child2_id = ch2.id  
              JOIN users u1 ON ch1.parent_id = u1.id
              JOIN users u2 ON ch2.parent_id = u2.id
-             WHERE (ch1.id = $1 OR ch2.id = $1) AND c.status = 'accepted'
+             WHERE (ch1.id = $1 OR ch2.id = $1) AND c.status = 'active'
              ORDER BY c.created_at DESC`,
             [childId]
         );
