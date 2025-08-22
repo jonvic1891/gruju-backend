@@ -2113,62 +2113,6 @@ app.delete('/api/activities/delete/:activityId', authenticateToken, async (req, 
     }
 });
 
-// Get connections for a specific child
-app.get('/api/connections/:childUuid', authenticateToken, async (req, res) => {
-    try {
-        const childUuid = req.params.childUuid;
-        console.log(`🔍 Getting connections for specific child: ${childUuid}`);
-        
-        const client = await pool.connect();
-        
-        // Verify the child belongs to this user
-        const childCheck = await client.query(
-            'SELECT id FROM children WHERE uuid = $1 AND parent_id = $2',
-            [childUuid, req.user.id]
-        );
-        
-        if (childCheck.rows.length === 0) {
-            client.release();
-            return res.status(404).json({ success: false, error: 'Child not found' });
-        }
-        
-        const childId = childCheck.rows[0].id;
-        
-        // Get connections where this specific child is involved
-        const result = await client.query(
-            `SELECT c.uuid as connection_uuid,
-                    c.status, 
-                    c.created_at,
-                    -- For child1 side (when our child is child1)
-                    CASE WHEN ch1.id = $1 THEN ch2.uuid ELSE ch1.uuid END as connected_child_uuid,
-                    CASE WHEN ch1.id = $1 THEN ch2.name ELSE ch1.name END as name,
-                    CASE WHEN ch1.id = $1 THEN u2.username ELSE u1.username END as parentName,  
-                    CASE WHEN ch1.id = $1 THEN u2.uuid ELSE u1.uuid END as parentUuid,
-                    CASE WHEN ch1.id = $1 THEN ch2.birth_date ELSE ch1.birth_date END as birth_date,
-                    CASE WHEN ch1.id = $1 THEN ch2.school ELSE ch1.school END as school,
-                    CASE WHEN ch1.id = $1 THEN ch2.interests ELSE ch1.interests END as interests
-             FROM connections c
-             JOIN children ch1 ON c.child1_id = ch1.id
-             JOIN children ch2 ON c.child2_id = ch2.id  
-             JOIN users u1 ON ch1.parent_id = u1.id
-             JOIN users u2 ON ch2.parent_id = u2.id
-             WHERE (ch1.id = $1 OR ch2.id = $1) AND c.status = 'accepted'
-             ORDER BY c.created_at DESC`,
-            [childId]
-        );
-        
-        console.log(`✅ Found ${result.rows.length} connections for child ${childUuid}`);
-        client.release();
-
-        res.json({
-            success: true,
-            data: result.rows
-        });
-    } catch (error) {
-        console.error('Get child connections error:', error);
-        res.status(500).json({ success: false, error: 'Failed to fetch child connections' });
-    }
-});
 
 // Get connections (all for parent - legacy endpoint)
 app.get('/api/connections', authenticateToken, async (req, res) => {
@@ -2898,6 +2842,63 @@ app.get('/api/connections/skeleton-accounts', authenticateToken, async (req, res
     } catch (error) {
         console.error('❌ Get skeleton accounts error:', error);
         res.status(500).json({ success: false, error: 'Failed to get skeleton accounts' });
+    }
+});
+
+// Get connections for a specific child
+app.get('/api/connections/:childUuid', authenticateToken, async (req, res) => {
+    try {
+        const childUuid = req.params.childUuid;
+        console.log(`🔍 Getting connections for specific child: ${childUuid}`);
+        
+        const client = await pool.connect();
+        
+        // Verify the child belongs to this user
+        const childCheck = await client.query(
+            'SELECT id FROM children WHERE uuid = $1 AND parent_id = $2',
+            [childUuid, req.user.id]
+        );
+        
+        if (childCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Child not found' });
+        }
+        
+        const childId = childCheck.rows[0].id;
+        
+        // Get connections where this specific child is involved
+        const result = await client.query(
+            `SELECT c.uuid as connection_uuid,
+                    c.status, 
+                    c.created_at,
+                    -- For child1 side (when our child is child1)
+                    CASE WHEN ch1.id = $1 THEN ch2.uuid ELSE ch1.uuid END as connected_child_uuid,
+                    CASE WHEN ch1.id = $1 THEN ch2.name ELSE ch1.name END as name,
+                    CASE WHEN ch1.id = $1 THEN u2.username ELSE u1.username END as parentName,  
+                    CASE WHEN ch1.id = $1 THEN u2.uuid ELSE u1.uuid END as parentUuid,
+                    CASE WHEN ch1.id = $1 THEN ch2.birth_date ELSE ch1.birth_date END as birth_date,
+                    CASE WHEN ch1.id = $1 THEN ch2.school ELSE ch1.school END as school,
+                    CASE WHEN ch1.id = $1 THEN ch2.interests ELSE ch1.interests END as interests
+             FROM connections c
+             JOIN children ch1 ON c.child1_id = ch1.id
+             JOIN children ch2 ON c.child2_id = ch2.id  
+             JOIN users u1 ON ch1.parent_id = u1.id
+             JOIN users u2 ON ch2.parent_id = u2.id
+             WHERE (ch1.id = $1 OR ch2.id = $1) AND c.status = 'accepted'
+             ORDER BY c.created_at DESC`,
+            [childId]
+        );
+        
+        console.log(`✅ Found ${result.rows.length} connections for child ${childUuid}`);
+        client.release();
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+    } catch (error) {
+        console.error('Get child connections error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch child connections' });
     }
 });
 
