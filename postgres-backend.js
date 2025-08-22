@@ -2866,8 +2866,8 @@ app.get('/api/connections/:childUuid', authenticateToken, async (req, res) => {
         
         const childId = childCheck.rows[0].id;
         
-        // Get connections where this specific child is involved
-        const result = await client.query(
+        // Get active connections where this specific child is involved
+        const activeConnections = await client.query(
             `SELECT c.uuid as connection_uuid,
                     c.status, 
                     c.created_at,
@@ -2885,13 +2885,36 @@ app.get('/api/connections/:childUuid', authenticateToken, async (req, res) => {
              ORDER BY c.created_at DESC`,
             [childId]
         );
+
+        // Get pending connections where this child is involved
+        const pendingConnections = await client.query(
+            `SELECT cr.uuid as connection_uuid,
+                    'pending' as status,
+                    cr.created_at,
+                    -- When our child is the target of the request
+                    CASE WHEN c_target.id = $1 THEN c_requester.uuid ELSE c_target.uuid END as connected_child_uuid,
+                    CASE WHEN c_target.id = $1 THEN c_requester.name ELSE c_target.name END as name,
+                    CASE WHEN c_target.id = $1 THEN u_requester.username ELSE u_target.username END as parentName,
+                    CASE WHEN c_target.id = $1 THEN u_requester.uuid ELSE u_target.uuid END as parentUuid
+             FROM connection_requests cr
+             LEFT JOIN children c_requester ON cr.child_uuid = c_requester.uuid
+             LEFT JOIN children c_target ON cr.target_child_uuid = c_target.uuid
+             LEFT JOIN users u_requester ON c_requester.parent_id = u_requester.id
+             LEFT JOIN users u_target ON c_target.parent_id = u_target.id
+             WHERE (c_requester.id = $1 OR c_target.id = $1) AND cr.status = 'pending'
+             ORDER BY cr.created_at DESC`,
+            [childId]
+        );
+
+        // Combine active and pending connections
+        const allConnections = [...activeConnections.rows, ...pendingConnections.rows];
         
-        console.log(`✅ Found ${result.rows.length} connections for child ${childUuid}`);
+        console.log(`✅ Found ${activeConnections.rows.length} active + ${pendingConnections.rows.length} pending = ${allConnections.length} total connections for child ${childUuid}`);
         client.release();
 
         res.json({
             success: true,
-            data: result.rows
+            data: allConnections
         });
     } catch (error) {
         console.error('Get child connections error:', error);
