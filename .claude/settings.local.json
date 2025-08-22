@@ -26,7 +26,13 @@
       "Bash(npm install)",
       "Bash(npm test:*)",
       "Bash(heroku logs:*)",
-      "Bash(heroku run:*)"
+      "Bash(heroku run:*)",
+      "WebFetch(domain:cascadecamps.angelfishbooking.co.uk)",
+      "WebFetch(domain:cascadecamps.co.uk)",
+      "WebFetch(domain:www.cascadecamps.co.uk)",
+      "Bash(sed:*)",
+      "Bash(npx tsc:*)",
+      "Bash(DISABLE_ESLINT_PLUGIN=true npm run build)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

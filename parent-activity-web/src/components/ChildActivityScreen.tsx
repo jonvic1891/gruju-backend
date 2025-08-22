@@ -50,6 +50,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [jointHostChildren, setJointHostChildren] = useState<string[]>([]); // UUIDs of additional host children
   const [connectedChildren, setConnectedChildren] = useState<any[]>([]);
   const [parentChildren, setParentChildren] = useState<any[]>([]);
+  const [jointHostConnections, setJointHostConnections] = useState<{ [childUuid: string]: any[] }>({});
   const [pendingConnectionRequests, setPendingConnectionRequests] = useState<any[]>([]);
   const [activityDraft, setActivityDraft] = useState<any>(null);
   const [newActivity, setNewActivity] = useState({
@@ -221,6 +222,19 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       loadPendingConnectionRequests();
     }
   }, [isSharedActivity]);
+
+  // Load connections for joint host children when they change
+  useEffect(() => {
+    if (jointHostChildren.length > 0) {
+      console.log('🔄 Loading connections for joint host children:', jointHostChildren);
+      jointHostChildren.forEach(childUuid => {
+        // Only load if we don't already have connections for this child
+        if (!jointHostConnections[childUuid]) {
+          loadJointHostConnections(childUuid);
+        }
+      });
+    }
+  }, [jointHostChildren]);
 
   // Page navigation function
   const navigateToPage = (page: typeof currentPage) => {
@@ -501,53 +515,27 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const loadConnectedChildren = async () => {
     try {
       console.log(`🔄 Loading connected children for host child: ${child.name} (UUID: ${child.uuid})...`);
-      const response = await apiService.getConnections();
+      const response = await apiService.getChildConnections(child.uuid);
       console.log('📡 Connections API response:', response);
       if (response.success && response.data) {
-        // Get current user info to determine which children are ours vs connected
-        const currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
-        const currentUsername = currentUser.username;
-        console.log('👤 Current user:', currentUsername);
+        // The new API already returns only connected children for this specific child
+        const connected = response.data.map((connection: any) => ({
+          // Map to the expected format for backward compatibility
+          id: connection.connected_child_uuid, // Use UUID as ID for consistency
+          uuid: connection.connected_child_uuid,
+          name: connection.name,
+          parentName: connection.parentName,
+          parentUuid: connection.parentUuid,
+          birth_date: connection.birth_date,
+          school: connection.school,
+          interests: connection.interests
+        }));
         
-        // Extract connected children from connections, BUT ONLY for the specific host child
-        const children: any[] = [];
-        response.data.forEach((connection: any) => {
-          // ✅ SECURITY: Use UUIDs for matching instead of sequential IDs
-          // Only include connections where the current child (host child) is involved
-          console.log(`🔍 Checking connection: child1_uuid=${connection.child1_uuid}, child2_uuid=${connection.child2_uuid}, host_child_uuid=${child.uuid}`);
-          const isChild1Host = connection.child1_uuid === child.uuid;
-          const isChild2Host = connection.child2_uuid === child.uuid;
-          console.log(`🔍 Host matching: isChild1Host=${isChild1Host}, isChild2Host=${isChild2Host}`);
-          
-          if (isChild1Host && connection.child2_name && connection.child2_parent_name !== currentUsername) {
-            // Host child is child1, so add child2 as the connected child
-            children.push({
-              id: connection.child2_uuid, // Use UUID as primary ID for security
-              uuid: connection.child2_uuid, 
-              name: connection.child2_name,
-              parentId: connection.child2_parent_id,
-              parentUuid: connection.child2_parent_uuid,
-              parentName: connection.child2_parent_name,
-              connectionId: connection.connection_uuid || connection.id
-            });
-            console.log(`   ✅ Added connected child: ${connection.child2_name} (connected to host child ${child.name})`);
-          } else if (isChild2Host && connection.child1_name && connection.child1_parent_name !== currentUsername) {
-            // Host child is child2, so add child1 as the connected child
-            children.push({
-              id: connection.child1_uuid, // Use UUID as primary ID for security
-              uuid: connection.child1_uuid,
-              name: connection.child1_name,
-              parentId: connection.child1_parent_id,
-              parentUuid: connection.child1_parent_uuid,
-              parentName: connection.child1_parent_name,
-              connectionId: connection.connection_uuid || connection.id
-            });
-            console.log(`   ✅ Added connected child: ${connection.child1_name} (connected to host child ${child.name})`);
-          }
-        });
-        
-        console.log(`✅ Connected children loaded for ${child.name}: ${children.length}`, children);
-        setConnectedChildren(children);
+        setConnectedChildren(connected);
+        console.log(`✅ Loaded ${connected.length} connected children for ${child.name}:`, connected.map((c: any) => ({ 
+          name: c.name, 
+          parentName: c.parentName 
+        })));
       } else {
         console.log('❌ No connected children data or API error');
         setConnectedChildren([]);
@@ -712,6 +700,44 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     } catch (error) {
       console.error('💥 Error loading parent children:', error);
       setParentChildren([]);
+    }
+  };
+
+  const loadJointHostConnections = async (childUuid: string) => {
+    try {
+      console.log(`🔄 Loading connections for joint host child: ${childUuid}...`);
+      const response = await apiService.getChildConnections(childUuid);
+      if (response.success) {
+        // Map to the expected format for consistency
+        const mapped = (response.data || []).map((connection: any) => ({
+          id: connection.connected_child_uuid,
+          uuid: connection.connected_child_uuid,
+          name: connection.name,
+          parentName: connection.parentName,
+          parentUuid: connection.parentUuid,
+          birth_date: connection.birth_date,
+          school: connection.school,
+          interests: connection.interests
+        }));
+        
+        setJointHostConnections(prev => ({
+          ...prev,
+          [childUuid]: mapped
+        }));
+        console.log(`✅ Loaded ${mapped.length} connections for child ${childUuid}`);
+      } else {
+        console.error(`❌ Failed to load connections for child ${childUuid}:`, response.error);
+        setJointHostConnections(prev => ({
+          ...prev,
+          [childUuid]: []
+        }));
+      }
+    } catch (error) {
+      console.error(`💥 Error loading connections for child ${childUuid}:`, error);
+      setJointHostConnections(prev => ({
+        ...prev,
+        [childUuid]: []
+      }));
     }
   };
 
@@ -1093,7 +1119,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
     setAddingActivity(true);
     try {
-      const createdActivities = [];
+      const createdActivities: any[] = [];
       
       // Create activity for each selected date
       for (const date of datesToCreate) {
@@ -1141,35 +1167,73 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       if (isSharedActivity && selectedConnectedChildren.length > 0 && createdActivities.length > 0) {
         console.log(`🎯 Sending invitations for ${createdActivities.length} activities to ${selectedConnectedChildren.length} children`);
         
-        for (const activity of createdActivities) {
-          for (const childId of selectedConnectedChildren) {
-            try {
-              // Skip pending connections for now - they'll be invited when connections are accepted
-              if (typeof childId === 'string' && childId.startsWith('pending-child-')) {
-                console.log('Skipping pending connection invitation:', childId);
-                continue;
+        // Group invitations by host child for joint hosting
+        const invitationsByHost = new Map();
+        
+        for (const childId of selectedConnectedChildren) {
+          if (typeof childId === 'string' && (childId.includes('pending-child-') || childId.startsWith('pending-child-'))) {
+            console.log('Skipping pending connection invitation:', childId);
+            continue;
+          }
+          
+          let hostChildUuid = child.uuid; // Default to main host
+          let actualChildId = childId;
+          
+          // Parse prefixed IDs for joint hosting
+          if (typeof childId === 'string') {
+            if (childId.startsWith('main-')) {
+              hostChildUuid = child.uuid;
+              actualChildId = childId.replace('main-', '');
+            } else if (childId.startsWith('joint-')) {
+              // Format: joint-{hostChildUuid}-{connectedChildId}
+              const parts = childId.split('-');
+              if (parts.length >= 3) {
+                hostChildUuid = parts[1];
+                actualChildId = parts.slice(2).join('-');
               }
-              
-              // Find the connected child data to get the parent ID
-              // childId is now a UUID since we use UUIDs for connected children
-              const connectedChild = connectedChildren.find(cc => cc.uuid === childId);
-              console.log(`🔍 Looking for connected child with UUID: ${childId}`, connectedChild);
+            }
+          }
+          
+          if (!invitationsByHost.has(hostChildUuid)) {
+            invitationsByHost.set(hostChildUuid, []);
+          }
+          invitationsByHost.get(hostChildUuid).push(actualChildId);
+        }
+        
+        console.log('🎯 Invitations grouped by host:', Array.from(invitationsByHost.entries()));
+        
+        // Send invitations from each host child
+        for (const [hostChildUuid, childIds] of Array.from(invitationsByHost.entries())) {
+          const hostChild = hostChildUuid === child.uuid ? child : parentChildren.find(pc => pc.uuid === hostChildUuid);
+          if (!hostChild) continue;
+          
+          // Find the activity created for this host child
+          const hostActivity = createdActivities.find(activity => 
+            // For main child, it's the first activity
+            hostChildUuid === child.uuid ? activity === createdActivities[0] : 
+            // For joint children, find by matching host (this is simplified - in reality all activities have same details)
+            true // For now, use the first activity for all hosts since they're identical
+          ) || createdActivities[0];
+          
+          for (const actualChildId of childIds) {
+            try {
+              const connectedChild = connectedChildren.find(cc => cc.uuid === actualChildId);
+              console.log(`🔍 Looking for connected child with ID: ${actualChildId}`, connectedChild);
               
               if (connectedChild) {
-                console.log(`📧 Sending invitation to ${connectedChild.name} (parent UUID: ${connectedChild.parentUuid})`);
-                console.log(`🔍 Activity data:`, activity);
+                console.log(`📧 Sending invitation from ${hostChild.name} to ${connectedChild.name} (parent UUID: ${connectedChild.parentUuid})`);
                 await apiService.sendActivityInvitation(
-                  activity.uuid || String(activity.id), // Use UUID if available, fallback to id
-                  connectedChild.parentUuid, // Use the parent UUID for security
-                  typeof childId === 'string' ? childId : undefined, // The child UUID for the invitation
-                  `${child.name} would like to invite your child to join: ${activity.name}`
+                  hostActivity.uuid || String(hostActivity.id),
+                  connectedChild.parentUuid,
+                  actualChildId,
+                  `${hostChild.name} would like to invite your child to join: ${hostActivity.name}`
                 );
-                console.log(`✅ Invitation sent successfully`);
+                console.log(`✅ Invitation sent successfully from ${hostChild.name}`);
               } else {
-                console.error(`❌ Could not find connected child with UUID: ${childId}`);
+                console.error(`❌ Could not find connected child with ID: ${actualChildId}`);
               }
             } catch (inviteError) {
-              console.error('❌ Failed to send invitation:', inviteError);
+              console.error(`💥 Error sending invitation from ${hostChild.name} to child ${actualChildId}:`, inviteError);
             }
           }
         }
@@ -2294,43 +2358,41 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               
               {isSharedActivity && (
                 <div className="connected-children-section">
-                  <div className="children-selection-header">
-                    <label>
-                      {jointHostChildren.length > 0 
-                        ? `Invite Children (Host contacts for ${child.name}${jointHostChildren.length > 0 ? ` + ${jointHostChildren.length} joint host${jointHostChildren.length > 1 ? 's' : ''}` : ''}):` 
-                        : 'Invite Children:'
-                      }
-                    </label>
-                    {(connectedChildren.length > 0 || pendingConnectionRequests.length > 0) && (
-                      <div className="selection-controls">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const allConnectedUuids = connectedChildren.map(child => child.uuid);
-                            const allPendingIds = pendingConnectionRequests.map(request => `pending-child-${request.target_child_uuid || request.target_parent_uuid}`);
-                            const allIds = [...allConnectedUuids, ...allPendingIds];
-                            
-                            const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
-                            if (allSelected) {
-                              setSelectedConnectedChildren([]);
-                            } else {
-                              setSelectedConnectedChildren(allIds);
-                            }
-                          }}
-                          className="select-all-btn"
-                        >
-                          {(() => {
-                            const allConnectedUuids = connectedChildren.map(child => child.uuid);
-                            const allPendingIds = pendingConnectionRequests.map(request => `pending-child-${request.target_child_uuid || request.target_parent_uuid}`);
-                            const allIds = [...allConnectedUuids, ...allPendingIds];
-                            const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
-                            const totalCount = connectedChildren.length + pendingConnectionRequests.length;
-                            return allSelected ? 'Deselect All' : 'Select All';
-                          })()} ({connectedChildren.length + pendingConnectionRequests.length})
-                        </button>
+                  {jointHostChildren.length === 0 ? (
+                    // Single host - show original UI
+                    <>
+                      <div className="children-selection-header">
+                        <label>Invite Children:</label>
+                        {(connectedChildren.length > 0 || pendingConnectionRequests.length > 0) && (
+                          <div className="selection-controls">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const allConnectedUuids = connectedChildren.map(child => child.uuid);
+                                const allPendingIds = pendingConnectionRequests.map(request => `pending-child-${request.target_child_uuid || request.target_parent_uuid}`);
+                                const allIds = [...allConnectedUuids, ...allPendingIds];
+                                
+                                const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
+                                if (allSelected) {
+                                  setSelectedConnectedChildren([]);
+                                } else {
+                                  setSelectedConnectedChildren(allIds);
+                                }
+                              }}
+                              className="select-all-btn"
+                            >
+                              {(() => {
+                                const allConnectedUuids = connectedChildren.map(child => child.uuid);
+                                const allPendingIds = pendingConnectionRequests.map(request => `pending-child-${request.target_child_uuid || request.target_parent_uuid}`);
+                                const allIds = [...allConnectedUuids, ...allPendingIds];
+                                const allSelected = allIds.every(id => selectedConnectedChildren.includes(id));
+                                const totalCount = connectedChildren.length + pendingConnectionRequests.length;
+                                return allSelected ? 'Deselect All' : 'Select All';
+                              })()} ({connectedChildren.length + pendingConnectionRequests.length})
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
                   {connectedChildren.length === 0 && pendingConnectionRequests.length === 0 ? (
                     <div className="no-connections">
                       <p><strong>No connections found.</strong></p>
@@ -2451,6 +2513,127 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                           )}
                         </p>
                       )}
+                    </div>
+                  )}
+                  
+                    </>
+                  ) : (
+                    // Joint hosting - show separate sections for each host child
+                    <div className="joint-host-invitations">
+                      <div className="joint-host-header">
+                        <h4>Invite Children by Host:</h4>
+                        <p style={{ fontSize: '14px', color: '#666', marginBottom: '16px' }}>
+                          Select which children to invite from each host's contacts. Invitations will be sent from the respective host child.
+                        </p>
+                      </div>
+                      
+                      {/* Main host child section */}
+                      <div className="host-section" style={{ marginBottom: '20px' }}>
+                        <div className="host-section-header" style={{ 
+                          background: '#e3f2fd', 
+                          padding: '12px', 
+                          borderRadius: '8px', 
+                          marginBottom: '12px',
+                          border: '2px solid #2196f3'
+                        }}>
+                          <h5 style={{ margin: '0 0 4px 0', color: '#1976d2' }}>
+                            👑 {child.name}'s Contacts (Primary Host)
+                          </h5>
+                          <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>
+                            Invitations from this section will be sent by {child.name}
+                          </p>
+                        </div>
+                        
+                        {connectedChildren.length === 0 && pendingConnectionRequests.length === 0 ? (
+                          <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                            No connections found for {child.name}
+                          </p>
+                        ) : (
+                          <div className="children-list">
+                            {connectedChildren.map((connectedChild) => (
+                              <label key={`main-${connectedChild.id}`} className="child-checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedConnectedChildren.includes(`main-${connectedChild.id}`)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedConnectedChildren([...selectedConnectedChildren, `main-${connectedChild.id}`]);
+                                    } else {
+                                      setSelectedConnectedChildren(
+                                        selectedConnectedChildren.filter(id => id !== `main-${connectedChild.id}`)
+                                      );
+                                    }
+                                  }}
+                                />
+                                ✅ {connectedChild.name}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Joint host children sections */}
+                      {jointHostChildren.map((jointChildUuid) => {
+                        const jointChild = parentChildren.find(pc => pc.uuid === jointChildUuid);
+                        if (!jointChild) return null;
+                        
+                        return (
+                          <div key={jointChildUuid} className="host-section" style={{ marginBottom: '20px' }}>
+                            <div className="host-section-header" style={{ 
+                              background: '#f3e5f5', 
+                              padding: '12px', 
+                              borderRadius: '8px', 
+                              marginBottom: '12px',
+                              border: '2px solid #9c27b0'
+                            }}>
+                              <h5 style={{ margin: '0 0 4px 0', color: '#7b1fa2' }}>
+                                🤝 {jointChild.name}'s Contacts (Joint Host)
+                              </h5>
+                              <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>
+                                Invitations from this section will be sent by {jointChild.name}
+                              </p>
+                            </div>
+                            
+                            {(() => {
+                              const jointChildConnections = jointHostConnections[jointChildUuid] || [];
+                              
+                              if (jointChildConnections.length === 0) {
+                                return (
+                                  <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic' }}>
+                                    {jointHostConnections[jointChildUuid] === undefined 
+                                      ? `Loading connections for ${jointChild.name}...`
+                                      : `No connections found for ${jointChild.name}`
+                                    }
+                                  </p>
+                                );
+                              }
+                              
+                              return (
+                                <div className="children-list">
+                                  {jointChildConnections.map((connectedChild) => (
+                                    <label key={`joint-${jointChildUuid}-${connectedChild.uuid}`} className="child-checkbox">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedConnectedChildren.includes(`joint-${jointChildUuid}-${connectedChild.uuid}`)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedConnectedChildren([...selectedConnectedChildren, `joint-${jointChildUuid}-${connectedChild.uuid}`]);
+                                          } else {
+                                            setSelectedConnectedChildren(
+                                              selectedConnectedChildren.filter(id => id !== `joint-${jointChildUuid}-${connectedChild.uuid}`)
+                                            );
+                                          }
+                                        }}
+                                      />
+                                      ✅ {connectedChild.name}
+                                    </label>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                   

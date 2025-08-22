@@ -252,6 +252,10 @@ class ApiService {
     return this.request('get', '/api/connections');
   }
 
+  async getChildConnections(childUuid: string): Promise<ApiResponse<any[]>> {
+    return this.request('get', `/api/connections/${childUuid}`);
+  }
+
   async deleteConnection(connectionId: string): Promise<ApiResponse<any>> {
     // Try different possible endpoint patterns
     try {

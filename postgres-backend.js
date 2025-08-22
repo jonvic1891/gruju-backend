@@ -1719,7 +1719,7 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
     try {
         // ✅ SECURITY: Expect UUID instead of sequential ID
         const childUuid = req.params.childId;
-        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared } = req.body;
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, joint_host_children } = req.body;
 
         if (!name || !name.trim() || !start_date) {
             return res.status(400).json({ success: false, error: 'Activity name and start date are required' });
@@ -1758,11 +1758,51 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
             'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at',
             [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared]
         );
+
+        console.log('🎯 Primary activity created:', result.rows[0].uuid);
+        const createdActivities = [result.rows[0]];
+
+        // Create joint host activities if joint_host_children is provided
+        if (joint_host_children && Array.isArray(joint_host_children) && joint_host_children.length > 0) {
+            console.log('👥 Creating joint host activities for:', joint_host_children);
+
+            for (const jointChildUuid of joint_host_children) {
+                try {
+                    // Verify the joint child belongs to this user
+                    const jointChild = await client.query(
+                        'SELECT c.id FROM children c WHERE c.uuid = $1 AND c.parent_id = $2',
+                        [jointChildUuid, req.user.id]
+                    );
+
+                    if (jointChild.rows.length === 0) {
+                        console.log(`⚠️ Joint child ${jointChildUuid} not found or doesn't belong to user`);
+                        continue;
+                    }
+
+                    const jointChildId = jointChild.rows[0].id;
+
+                    // Create activity for joint host child
+                    const jointResult = await client.query(
+                        'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at',
+                        [jointChildId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared]
+                    );
+
+                    console.log('✅ Joint host activity created:', jointResult.rows[0].uuid, 'for child:', jointChildUuid);
+                    createdActivities.push(jointResult.rows[0]);
+                } catch (jointError) {
+                    console.error(`❌ Failed to create joint activity for child ${jointChildUuid}:`, jointError);
+                    // Continue with other joint children even if one fails
+                }
+            }
+        }
+
         client.release();
 
         res.json({
             success: true,
-            data: result.rows[0]
+            data: createdActivities[0], // Return primary activity for compatibility
+            joint_activities: createdActivities.length > 1 ? createdActivities : undefined, // Include all if joint hosting
+            message: createdActivities.length > 1 ? `Activity created for ${createdActivities.length} children` : 'Activity created successfully'
         });
     } catch (error) {
         console.error('Create activity error:', error);
@@ -2073,7 +2113,64 @@ app.delete('/api/activities/delete/:activityId', authenticateToken, async (req, 
     }
 });
 
-// Get connections
+// Get connections for a specific child
+app.get('/api/connections/:childUuid', authenticateToken, async (req, res) => {
+    try {
+        const childUuid = req.params.childUuid;
+        console.log(`🔍 Getting connections for specific child: ${childUuid}`);
+        
+        const client = await pool.connect();
+        
+        // Verify the child belongs to this user
+        const childCheck = await client.query(
+            'SELECT id FROM children WHERE uuid = $1 AND parent_id = $2',
+            [childUuid, req.user.id]
+        );
+        
+        if (childCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Child not found' });
+        }
+        
+        const childId = childCheck.rows[0].id;
+        
+        // Get connections where this specific child is involved
+        const result = await client.query(
+            `SELECT c.uuid as connection_uuid,
+                    c.status, 
+                    c.created_at,
+                    -- For child1 side (when our child is child1)
+                    CASE WHEN ch1.id = $1 THEN ch2.uuid ELSE ch1.uuid END as connected_child_uuid,
+                    CASE WHEN ch1.id = $1 THEN ch2.name ELSE ch1.name END as name,
+                    CASE WHEN ch1.id = $1 THEN u2.username ELSE u1.username END as parentName,  
+                    CASE WHEN ch1.id = $1 THEN u2.uuid ELSE u1.uuid END as parentUuid,
+                    CASE WHEN ch1.id = $1 THEN ch2.birth_date ELSE ch1.birth_date END as birth_date,
+                    CASE WHEN ch1.id = $1 THEN ch2.school ELSE ch1.school END as school,
+                    CASE WHEN ch1.id = $1 THEN ch2.interests ELSE ch1.interests END as interests
+             FROM connections c
+             JOIN children ch1 ON c.child1_id = ch1.id
+             JOIN children ch2 ON c.child2_id = ch2.id  
+             JOIN users u1 ON ch1.parent_id = u1.id
+             JOIN users u2 ON ch2.parent_id = u2.id
+             WHERE (ch1.id = $1 OR ch2.id = $1) AND c.status = 'accepted'
+             ORDER BY c.created_at DESC`,
+            [childId]
+        );
+        
+        console.log(`✅ Found ${result.rows.length} connections for child ${childUuid}`);
+        client.release();
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+    } catch (error) {
+        console.error('Get child connections error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch child connections' });
+    }
+});
+
+// Get connections (all for parent - legacy endpoint)
 app.get('/api/connections', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
