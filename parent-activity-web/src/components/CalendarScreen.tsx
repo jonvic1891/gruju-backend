@@ -8,10 +8,11 @@ console.log('📦 CalendarScreen.tsx loaded');
 
 interface CalendarScreenProps {
   initialDate?: string;
+  initialViewMode?: 'month' | 'week';
   onNavigateToActivity?: (child: Child, activity: Activity) => void;
 }
 
-const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, onNavigateToActivity }) => {
+const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialViewMode = 'month', onNavigateToActivity }) => {
   console.log('🎯 CalendarScreen component rendering with initialDate:', initialDate);
   
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -19,6 +20,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, onNavigate
   const [selectedActivities, setSelectedActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState(initialDate ? new Date(initialDate) : new Date());
+  const [viewMode, setViewMode] = useState<'month' | 'week'>(initialViewMode);
   const [showAddModal, setShowAddModal] = useState(false);
   const [children, setChildren] = useState<Child[]>([]);
   const [connectionRequests, setConnectionRequests] = useState<any[]>([]);
@@ -357,9 +359,64 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, onNavigate
   };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
-    const newMonth = new Date(currentMonth);
-    newMonth.setMonth(newMonth.getMonth() + (direction === 'next' ? 1 : -1));
-    setCurrentMonth(newMonth);
+    const newDate = new Date(currentMonth);
+    if (viewMode === 'week') {
+      // Navigate week by week
+      newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7));
+    } else {
+      // Navigate month by month
+      newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
+    }
+    setCurrentMonth(newDate);
+  };
+
+  // Generate week days for week view
+  const generateWeekDays = () => {
+    const startOfWeek = new Date(currentMonth);
+    const day = startOfWeek.getDay();
+    startOfWeek.setDate(startOfWeek.getDate() - day); // Start from Sunday
+    
+    const weekDays = [];
+    for (let i = 0; i < 7; i++) {
+      const currentDate = new Date(startOfWeek);
+      currentDate.setDate(startOfWeek.getDate() + i);
+      
+      const dateString = currentDate.toISOString().split('T')[0];
+      const dayActivities = activities.filter(activity => {
+        const activityDate = activity.start_date ? activity.start_date.split('T')[0] : '';
+        return activityDate === dateString;
+      });
+      
+      const dayConnectedActivities = connectedActivities.filter(activity => {
+        const activityDate = activity.start_date ? activity.start_date.split('T')[0] : '';
+        return activityDate === dateString;
+      });
+      
+      const dayInvitedActivities = invitedActivities.filter(activity => {
+        const activityDate = activity.start_date ? activity.start_date.split('T')[0] : '';
+        return activityDate === dateString;
+      });
+      
+      const dayPendingInvitations = pendingInvitations.filter(activity => {
+        const activityDate = activity.start_date ? activity.start_date.split('T')[0] : '';
+        return activityDate === dateString;
+      });
+      
+      const activityCount = dayActivities.length + 
+        (includeConnected ? dayConnectedActivities.length : 0) + 
+        (includeInvited ? dayInvitedActivities.length : 0) + 
+        (includePending ? dayPendingInvitations.length : 0);
+      
+      weekDays.push({
+        date: currentDate,
+        dateString,
+        activityCount,
+        isToday: dateString === new Date().toISOString().split('T')[0],
+        hasNotifications: dayPendingInvitations.length > 0
+      });
+    }
+    
+    return weekDays;
   };
 
   const handleDateClick = (dateString: string) => {
@@ -462,9 +519,9 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, onNavigate
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
-  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const weekDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  const days = generateCalendarDays();
+  const days = viewMode === 'month' ? generateCalendarDays() : generateWeekDays();
   
   console.log('🎨 CalendarScreen about to render JSX...');
 
@@ -513,49 +570,64 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, onNavigate
           </button>
         </div>
 
+        <div className="view-toggle">
+          <button 
+            className={`view-btn ${viewMode === 'month' ? 'active' : ''}`}
+            onClick={() => setViewMode('month')}
+          >
+            Month
+          </button>
+          <button 
+            className={`view-btn ${viewMode === 'week' ? 'active' : ''}`}
+            onClick={() => setViewMode('week')}
+          >
+            Week
+          </button>
+        </div>
+
         <div className="calendar-grid">
           <div className="weekdays">
-            {weekDays.map(day => (
+            {weekDayNames.map(day => (
               <div key={day} className="weekday">
                 {day}
               </div>
             ))}
           </div>
           
-          <div className="days">
+          <div className={`days ${viewMode === 'week' ? 'week-view' : ''}`}>
             {days.map((day, index) => (
               <div
                 key={index}
-                className={`day ${!day.isCurrentMonth ? 'other-month' : ''} ${
+                className={`day ${viewMode === 'month' && !(day as any).isCurrentMonth ? 'other-month' : ''} ${
                   day.isToday ? 'today' : ''
-                } ${day.isSelected ? 'selected' : ''} ${
-                  day.hasActivities || day.hasNotifications ? 'has-content' : ''
+                } ${(day as any).isSelected ? 'selected' : ''} ${
+                  (day as any).hasActivities || day.hasNotifications || day.activityCount > 0 ? 'has-content' : ''
                 }`}
                 onClick={() => handleDateClick(day.dateString)}
                 style={{
-                  ...((day.hasActivities || day.hasNotifications) && day.primaryColor ? {
-                    borderLeft: `4px solid ${day.primaryColor}`,
-                    backgroundColor: `${day.primaryColor}10`
+                  ...(((day as any).hasActivities || day.hasNotifications || day.activityCount > 0) && (day as any).primaryColor ? {
+                    borderLeft: `4px solid ${(day as any).primaryColor}`,
+                    backgroundColor: `${(day as any).primaryColor}10`
                   } : {})
                 }}
               >
                 <span className="day-number">{day.date.getDate()}</span>
-                {(day.hasNotifications || day.hasActivities) && (
+                {(day.hasNotifications || (day as any).hasActivities || day.activityCount > 0) && (
                   <div className="day-indicators">
                     {day.hasNotifications && (
                       <div 
                         className="notification-icon"
-                        style={{ color: day.primaryColor || '#FF9800' }}
-                        title={`${day.notificationCount} notification${day.notificationCount > 1 ? 's' : ''}`}
+                        style={{ color: (day as any).primaryColor || '#FF9800' }}
+                        title={`${(day as any).notificationCount || 0} notification${((day as any).notificationCount || 0) > 1 ? 's' : ''}`}
                       >
-                        {day.primaryIcon}
+                        {(day as any).primaryIcon || '●'}
                       </div>
                     )}
-                    {day.hasActivities && (
+                    {((day as any).hasActivities || day.activityCount > 0) && (
                       <div 
                         className="activity-count"
                         style={{ 
-                          backgroundColor: day.hasNotifications ? '#6c757d' : (day.primaryColor || '#007bff'),
+                          backgroundColor: day.hasNotifications ? '#6c757d' : ((day as any).primaryColor || '#007bff'),
                           color: 'white'
                         }}
                         title={`${day.activityCount} activit${day.activityCount > 1 ? 'ies' : 'y'}`}

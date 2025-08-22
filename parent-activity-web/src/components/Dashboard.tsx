@@ -31,6 +31,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   const [activityCreationActivityUuid, setActivityCreationActivityUuid] = useState<string | null>(null);
   // Removed navigationKey - no longer needed since we removed popstate handler
   const [calendarInitialDate, setCalendarInitialDate] = useState<string | undefined>(undefined);
+  const [calendarInitialViewMode, setCalendarInitialViewMode] = useState<'month' | 'week'>('month');
   const [children, setChildren] = useState<any[]>([]);
   const [childrenRefreshTrigger, setChildrenRefreshTrigger] = useState<number>(0);
   const { user } = useAuth();
@@ -154,6 +155,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
       navigate(`/${tab}`);
       if (tab !== 'calendar') {
         setCalendarInitialDate(undefined);
+        setCalendarInitialViewMode('month');
       }
     }
     setMobileMenuOpen(false);
@@ -204,16 +206,25 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
             navigate('/calendar');
           }} 
           onNavigateToChildCalendar={(child, activityDate) => {
+            // Check if activity is on weekend (Saturday or Sunday) to determine view mode
+            let viewModeParam = '';
+            let dayOfWeek = -1;
             if (activityDate) {
-              setCalendarInitialDate(activityDate);
+              const activityDateObj = new Date(activityDate);
+              dayOfWeek = activityDateObj.getDay();
+              if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
+                viewModeParam = '?view=week';
+              }
             }
-            const targetURL = `/children/${child.uuid}/activities`;
-            console.log('🔄 Navigating to child calendar activities:', targetURL);
             
-            // Use React Router navigate with replace: false to create history entry
+            // Navigate to child's activities page with date and view parameters
+            const targetURL = `/children/${child.uuid}/activities${viewModeParam}${activityDate ? `${viewModeParam ? '&' : '?'}date=${activityDate}` : ''}`;
+            console.log('🔄 Navigating to child calendar:', targetURL);
+            
+            // Use React Router navigate to child activities
             navigate(targetURL, { 
               replace: false,
-              state: { fromPath: '/children' }
+              state: { fromPath: '/children', initialDate: activityDate, initialViewMode: dayOfWeek === 0 || dayOfWeek === 6 ? 'week' : 'month' }
             });
           }}
           onNavigateToChildActivities={(child) => {
@@ -303,6 +314,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
       case 'calendar':
         return <CalendarScreen 
           initialDate={calendarInitialDate}
+          initialViewMode={calendarInitialViewMode}
           onNavigateToActivity={(child, activity) => {
             const childActivitiesPath = `/children/${child.uuid}/activities`;
             const activityUuid = (activity as any).activity_uuid || (activity as any).uuid;

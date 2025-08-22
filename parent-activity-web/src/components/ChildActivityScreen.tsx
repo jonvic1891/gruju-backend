@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-// React Router hooks removed - let Dashboard handle navigation
+import { useLocation } from 'react-router-dom';
+// React Router hooks removed for navigation - but need useLocation for URL params
 import ApiService from '../services/api';
 import { Child, Activity } from '../types';
 import TimePickerDropdown from './TimePickerDropdown';
@@ -17,14 +18,26 @@ interface ChildActivityScreenProps {
 }
 
 const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack, onDataChanged, onNavigateToConnections, onNavigateToActivity, initialActivityUuid, shouldRestoreActivityCreation }) => {
+  const location = useLocation();
+  
+  // Parse URL parameters for initial calendar view and date
+  const urlParams = new URLSearchParams(location.search);
+  const initialView = urlParams.get('view') === 'week' ? '7day' : '5day';
+  const initialDate = urlParams.get('date');
+  
   const [activities, setActivities] = useState<Activity[]>([]);
   const [invitedActivities, setInvitedActivities] = useState<any[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
   const [declinedInvitations, setDeclinedInvitations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<'main' | 'add-activity' | 'activity-detail' | 'edit-activity' | 'invite-activity'>('main');
-  const [calendarView, setCalendarView] = useState<'5day' | '7day'>('5day');
-  const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [calendarView, setCalendarView] = useState<'5day' | '7day'>(initialView);
+  const [currentWeek, setCurrentWeek] = useState(() => {
+    if (initialDate) {
+      return new Date(initialDate);
+    }
+    return new Date();
+  });
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [invitingActivity, setInvitingActivity] = useState<Activity | null>(null);
@@ -34,7 +47,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [isSharedActivity, setIsSharedActivity] = useState(false);
   const [autoNotifyNewConnections, setAutoNotifyNewConnections] = useState(false);
   const [selectedConnectedChildren, setSelectedConnectedChildren] = useState<(number | string)[]>([]);
+  const [jointHostChildren, setJointHostChildren] = useState<string[]>([]); // UUIDs of additional host children
   const [connectedChildren, setConnectedChildren] = useState<any[]>([]);
+  const [parentChildren, setParentChildren] = useState<any[]>([]);
   const [pendingConnectionRequests, setPendingConnectionRequests] = useState<any[]>([]);
   const [activityDraft, setActivityDraft] = useState<any>(null);
   const [newActivity, setNewActivity] = useState({
@@ -79,6 +94,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       isSharedActivity,
       autoNotifyNewConnections,
       selectedConnectedChildren,
+      jointHostChildren,
       childUuid: child.uuid
     };
     localStorage.setItem(getDraftKey(), JSON.stringify(draft));
@@ -110,6 +126,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           setIsSharedActivity(draft.isSharedActivity || false);
           setAutoNotifyNewConnections(draft.autoNotifyNewConnections || false);
           setSelectedConnectedChildren(draft.selectedConnectedChildren || []);
+          setJointHostChildren(draft.jointHostChildren || []);
           setActivityDraft(draft);
           
           // Automatically navigate to add-activity screen when draft is restored
@@ -171,6 +188,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setIsSharedActivity(false);
     setAutoNotifyNewConnections(false);
     setSelectedConnectedChildren([]);
+    setJointHostChildren([]);
     setSelectedTemplate(null);
     setPendingTemplateData(null);
     
@@ -189,6 +207,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     loadPendingConnectionRequests();
     loadActivityTemplates();
     loadActivityTypes();
+    loadParentChildren();
     
     // Check if there's a saved draft to restore
     restoreActivityDraft();
@@ -577,6 +596,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setIsSharedActivity(false);
       setAutoNotifyNewConnections(false);
       setSelectedConnectedChildren([]);
+      setJointHostChildren([]);
     }
     
     // Create a UUID-based URL for activity creation using special "new" identifier
@@ -676,6 +696,25 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   };
 
+  const loadParentChildren = async () => {
+    try {
+      console.log('🔄 Loading parent\'s children for joint hosting...');
+      const response = await apiService.getChildren();
+      if (response.success) {
+        // Filter out the current child since they're already the host
+        const otherChildren = (response.data || []).filter((c: any) => c.uuid !== child.uuid);
+        setParentChildren(otherChildren);
+        console.log('✅ Loaded parent children:', otherChildren.map((c: any) => ({ name: c.name, uuid: c.uuid })));
+      } else {
+        console.error('❌ Failed to load parent children:', response.error);
+        setParentChildren([]);
+      }
+    } catch (error) {
+      console.error('💥 Error loading parent children:', error);
+      setParentChildren([]);
+    }
+  };
+
   const handleTemplateSelect = (template: any) => {
     if (template === null) {
       // "Create from scratch" selected
@@ -698,6 +737,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setSelectedDates([]);
       setIsSharedActivity(false);
       setAutoNotifyNewConnections(false);
+      setJointHostChildren([]);
       clearActivityDraft();
       return;
     }
@@ -727,6 +767,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setSelectedDates([]);
     setIsSharedActivity(false);
     setAutoNotifyNewConnections(false);
+    setJointHostChildren([]);
     clearActivityDraft(); // Clear any saved draft since we're using a template
     
     // Track template usage
@@ -917,6 +958,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setIsSharedActivity(false);
     setAutoNotifyNewConnections(false);
     setSelectedConnectedChildren([]);
+    setJointHostChildren([]);
     
     setNewActivity({
       name: activity.name,
@@ -962,7 +1004,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         website_url: newActivity.website_url,
         cost: newActivity.cost ? parseFloat(newActivity.cost) : undefined,
         max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : undefined,
-        auto_notify_new_connections: isSharedActivity ? autoNotifyNewConnections : false
+        auto_notify_new_connections: isSharedActivity ? autoNotifyNewConnections : false,
+        joint_host_children: jointHostChildren.length > 0 ? jointHostChildren : undefined // Add joint host children
       };
 
       // Update the original activity with the first selected date
@@ -1061,7 +1104,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           cost: newActivity.cost ? parseFloat(newActivity.cost) : undefined,
           max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : undefined,
           auto_notify_new_connections: isSharedActivity ? autoNotifyNewConnections : false,
-          is_shared: isSharedActivity // Explicitly set is_shared when user creates shared activity
+          is_shared: isSharedActivity, // Explicitly set is_shared when user creates shared activity
+          joint_host_children: jointHostChildren.length > 0 ? jointHostChildren : undefined // Add joint host children
         };
 
         const response = await apiService.createActivity(child.uuid, activityData);
@@ -1132,35 +1176,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       }
 
       // Show template save prompt after successful activity creation
-      let shouldShowTemplatePrompt = false;
-      if (createdActivities.length > 0) {
-        // Calculate duration if both start and end times are provided
-        let durationHours = null;
-        if (newActivity.start_time && newActivity.end_time) {
-          const [startHour, startMin] = newActivity.start_time.split(':').map(Number);
-          const [endHour, endMin] = newActivity.end_time.split(':').map(Number);
-          const startMinutes = startHour * 60 + startMin;
-          const endMinutes = endHour * 60 + endMin;
-          durationHours = (endMinutes - startMinutes) / 60;
-          if (durationHours < 0) durationHours += 24; // Handle overnight activities
-        }
-
-        const templateData = {
-          name: newActivity.name,
-          description: newActivity.description || null,
-          location: newActivity.location || null,
-          website_url: newActivity.website_url || null,
-          activity_type: null, // Could be enhanced to detect or allow user to specify
-          cost: newActivity.cost ? parseFloat(newActivity.cost) : null,
-          max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : null,
-          typical_duration_hours: durationHours,
-          typical_start_time: newActivity.start_time || null
-        };
-
-        // Store template data for potential saving
-        setPendingTemplateData(templateData);
-        shouldShowTemplatePrompt = true;
-      }
+      const shouldShowTemplatePrompt = createdActivities.length > 0;
 
       // Reset form
       setNewActivity({
@@ -1180,6 +1196,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setIsSharedActivity(false);
       setAutoNotifyNewConnections(false);
       setSelectedConnectedChildren([]);
+      setJointHostChildren([]);
       setSelectedTemplate(null);
       setTemplateConfirmationMessage('');
       clearActivityDraft(); // Clear the saved draft after successful creation
@@ -1187,36 +1204,65 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       // Reload activities to include the newly created activity
       await loadActivities();
       
-      const message = createdActivities.length === 1 
-        ? 'Activity created successfully!' 
-        : `${createdActivities.length} activities created successfully!`;
-      alert(message);
-      
-      // Show template save option in confirm dialog if we have template data
-      if (shouldShowTemplatePrompt && pendingTemplateData) {
+      // Combine success message with template save option
+      if (shouldShowTemplatePrompt) {
+        // Calculate duration if both start and end times are provided
+        let durationHours = null;
+        if (newActivity.start_time && newActivity.end_time) {
+          const [startHour, startMin] = newActivity.start_time.split(':').map(Number);
+          const [endHour, endMin] = newActivity.end_time.split(':').map(Number);
+          
+          const startMinutes = startHour * 60 + startMin;
+          const endMinutes = endHour * 60 + endMin;
+          durationHours = (endMinutes - startMinutes) / 60;
+          if (durationHours < 0) durationHours += 24; // Handle overnight activities
+        }
+
+        const templateData = {
+          name: newActivity.name,
+          description: newActivity.description || null,
+          location: newActivity.location || null,
+          website_url: newActivity.website_url || null,
+          activity_type: null, // Could be enhanced to detect or allow user to specify
+          cost: newActivity.cost ? parseFloat(newActivity.cost) : null,
+          max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : null,
+          typical_duration_hours: durationHours,
+          typical_start_time: newActivity.start_time || null
+        };
+        
+        const successMessage = createdActivities.length === 1 
+          ? 'Activity created successfully!' 
+          : `${createdActivities.length} activities created successfully!`;
+        
         const shouldSaveTemplate = window.confirm(
-          `Would you like to save "${pendingTemplateData.name}" as a template?\n\n` +
-          'This will make it easy to create similar activities in the future.\n\n' +
-          'Click "OK" to save as template, or "Cancel" to continue without saving.'
+          `${successMessage}\n\n` +
+          `Save "${templateData.name}" as a template for future use?`
         );
         
         if (shouldSaveTemplate) {
+          console.log('🎯 Attempting to save template:', templateData);
           try {
-            const templateResponse = await apiService.createActivityTemplate(pendingTemplateData);
+            const templateResponse = await apiService.createActivityTemplate(templateData);
+            console.log('📡 Template API response:', templateResponse);
             if (templateResponse.success) {
               console.log('✅ Template saved successfully:', templateResponse.data);
               // Reload templates to include the new one
-              loadActivityTemplates();
-              alert(`Template "${pendingTemplateData.name}" saved successfully!`);
+              await loadActivityTemplates();
             } else {
               console.error('❌ Failed to save template:', templateResponse.error);
-              alert('Failed to save template. Please try again.');
+              alert(`Failed to save template: ${templateResponse.error}`);
             }
-          } catch (templateError) {
+          } catch (templateError: any) {
             console.error('💥 Error saving template:', templateError);
-            alert('Failed to save template. Please try again.');
+            alert(`Error saving template: ${templateError?.message || 'Unknown error'}`);
           }
         }
+      } else {
+        // Just show success message if no template prompt needed
+        const message = createdActivities.length === 1 
+          ? 'Activity created successfully!' 
+          : `${createdActivities.length} activities created successfully!`;
+        alert(message);
       }
       
       // Navigate back to activities list
@@ -2105,6 +2151,53 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               rows={3}
             />
             
+            {/* Joint Host Selection */}
+            {parentChildren.length > 0 && (
+              <div className="joint-host-section" style={{ marginBottom: '20px' }}>
+                <label className="section-label">Joint Host Children (Optional)</label>
+                <p className="section-description">
+                  Select additional children to co-host this activity. The activity will appear in all selected children's calendars.
+                </p>
+                <div className="children-list" style={{ marginTop: '12px' }}>
+                  {parentChildren.map((sibling: any) => (
+                    <label key={sibling.uuid} className="child-checkbox" style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      padding: '8px 12px', 
+                      marginBottom: '8px',
+                      background: '#f8f9fa',
+                      borderRadius: '8px',
+                      border: '1px solid #e9ecef'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={jointHostChildren.includes(sibling.uuid)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setJointHostChildren([...jointHostChildren, sibling.uuid]);
+                          } else {
+                            setJointHostChildren(jointHostChildren.filter(uuid => uuid !== sibling.uuid));
+                          }
+                        }}
+                        style={{ marginRight: '8px' }}
+                      />
+                      <span style={{ fontWeight: '500' }}>{sibling.name}</span>
+                      {sibling.birth_date && (
+                        <span style={{ 
+                          marginLeft: '8px', 
+                          fontSize: '14px', 
+                          color: '#666',
+                          fontStyle: 'italic'
+                        }}>
+                          (Age: {Math.floor((new Date().getTime() - new Date(sibling.birth_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000))})
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             <div className="date-selection-section">
               <label className="section-label">Select Activity Dates</label>
               <p className="section-description">Click dates to select/deselect them. You can choose multiple dates for recurring activities.</p>
@@ -2202,7 +2295,12 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               {isSharedActivity && (
                 <div className="connected-children-section">
                   <div className="children-selection-header">
-                    <label>Invite Children:</label>
+                    <label>
+                      {jointHostChildren.length > 0 
+                        ? `Invite Children (Host contacts for ${child.name}${jointHostChildren.length > 0 ? ` + ${jointHostChildren.length} joint host${jointHostChildren.length > 1 ? 's' : ''}` : ''}):` 
+                        : 'Invite Children:'
+                      }
+                    </label>
                     {(connectedChildren.length > 0 || pendingConnectionRequests.length > 0) && (
                       <div className="selection-controls">
                         <button
@@ -2237,7 +2335,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     <div className="no-connections">
                       <p><strong>No connections found.</strong></p>
                       <p style={{ fontSize: '14px', color: '#666', marginBottom: '12px' }}>
-                        To invite other children to this activity, you'll need to connect with their families first.
+                        {jointHostChildren.length > 0 
+                          ? `To invite other children, you'll need to connect with their families first. Note: Joint host children (${parentChildren.filter(pc => jointHostChildren.includes(pc.uuid)).map(pc => pc.name).join(', ')}) will automatically have access to this activity.`
+                          : 'To invite other children to this activity, you\'ll need to connect with their families first.'
+                        }
                       </p>
                       {onNavigateToConnections ? (
                         <button
@@ -2272,6 +2373,20 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     </div>
                   ) : (
                     <div className="children-list">
+                      {/* Joint hosting explanation */}
+                      {jointHostChildren.length > 0 && (
+                        <div style={{
+                          background: '#e3f2fd',
+                          border: '1px solid #2196f3',
+                          borderRadius: '8px',
+                          padding: '12px',
+                          marginBottom: '12px',
+                          fontSize: '14px'
+                        }}>
+                          <strong>📝 Joint Hosting Active:</strong> Invitations will be sent from both {child.name} and {parentChildren.filter(pc => jointHostChildren.includes(pc.uuid)).map(pc => pc.name).join(', ')} to the selected children below. Each invited child will see separate invitations from each host child.
+                        </div>
+                      )}
+                      
                       {/* Confirmed connections */}
                       {connectedChildren.map((connectedChild) => (
                         <label key={connectedChild.id} className="child-checkbox">

@@ -710,3 +710,95 @@
   align-items: center;
   font-weight: 500;
 }
+
+/* View Toggle Buttons */
+.view-toggle {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px;
+  border-radius: 8px;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.view-btn {
+  background: transparent;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.view-btn.active {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  font-weight: 600;
+}
+
+/* Week View Styles */
+.days.week-view {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.days.week-view .day {
+  height: 120px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.days.week-view .day-number {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.days.week-view .day-indicators {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.days.week-view .activity-count {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+
+@media (max-width: 768px) {
+  .view-toggle {
+    margin: 8px;
+  }
+  
+  .view-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  
+  .days.week-view .day {
+    height: 80px;
+    padding: 4px;
+  }
+  
+  .days.week-view .day-number {
+    font-size: 14px;
+  }
+}
