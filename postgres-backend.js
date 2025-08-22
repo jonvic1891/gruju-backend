@@ -2875,10 +2875,7 @@ app.get('/api/connections/:childUuid', authenticateToken, async (req, res) => {
                     CASE WHEN ch1.id = $1 THEN ch2.uuid ELSE ch1.uuid END as connected_child_uuid,
                     CASE WHEN ch1.id = $1 THEN ch2.name ELSE ch1.name END as name,
                     CASE WHEN ch1.id = $1 THEN u2.username ELSE u1.username END as parentName,  
-                    CASE WHEN ch1.id = $1 THEN u2.uuid ELSE u1.uuid END as parentUuid,
-                    CASE WHEN ch1.id = $1 THEN ch2.birth_date ELSE ch1.birth_date END as birth_date,
-                    CASE WHEN ch1.id = $1 THEN ch2.school ELSE ch1.school END as school,
-                    CASE WHEN ch1.id = $1 THEN ch2.interests ELSE ch1.interests END as interests
+                    CASE WHEN ch1.id = $1 THEN u2.uuid ELSE u1.uuid END as parentUuid
              FROM connections c
              JOIN children ch1 ON c.child1_id = ch1.id
              JOIN children ch2 ON c.child2_id = ch2.id  
