@@ -2886,22 +2886,21 @@ app.get('/api/connections/:childUuid', authenticateToken, async (req, res) => {
             [childId]
         );
 
-        // Get pending connections where this child is involved
+        // Get pending connections where this child is the SENDER (not receiver)
         const pendingConnections = await client.query(
             `SELECT cr.uuid as connection_uuid,
                     'pending' as status,
                     cr.created_at,
-                    -- When our child is the target of the request
-                    CASE WHEN c_target.id = $1 THEN c_requester.uuid ELSE c_target.uuid END as connected_child_uuid,
-                    CASE WHEN c_target.id = $1 THEN c_requester.name ELSE c_target.name END as name,
-                    CASE WHEN c_target.id = $1 THEN u_requester.username ELSE u_target.username END as parentName,
-                    CASE WHEN c_target.id = $1 THEN u_requester.uuid ELSE u_target.uuid END as parentUuid
+                    -- Our child is the requester, so we want the target child info
+                    c_target.uuid as connected_child_uuid,
+                    c_target.name as name,
+                    u_target.username as parentName,
+                    u_target.uuid as parentUuid
              FROM connection_requests cr
-             LEFT JOIN children c_requester ON cr.child_uuid = c_requester.uuid
-             LEFT JOIN children c_target ON cr.target_child_uuid = c_target.uuid
-             LEFT JOIN users u_requester ON c_requester.parent_id = u_requester.id
-             LEFT JOIN users u_target ON c_target.parent_id = u_target.id
-             WHERE (c_requester.id = $1 OR c_target.id = $1) AND cr.status = 'pending'
+             JOIN children c_requester ON cr.child_uuid = c_requester.uuid
+             JOIN children c_target ON cr.target_child_uuid = c_target.uuid
+             JOIN users u_target ON c_target.parent_id = u_target.id
+             WHERE c_requester.id = $1 AND cr.status = 'pending'
              ORDER BY cr.created_at DESC`,
             [childId]
         );
