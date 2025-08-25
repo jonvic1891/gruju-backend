@@ -171,8 +171,8 @@ class ApiService {
     return this.request('post', `/api/activities/${childUuid}`, activityData);
   }
 
-  async updateActivity(activityId: number, activityData: any): Promise<ApiResponse<any>> {
-    return this.request('put', `/api/activities/update/${activityId}`, activityData);
+  async updateActivity(activityUuid: string, activityData: any): Promise<ApiResponse<any>> {
+    return this.request('put', `/api/activities/update/${activityUuid}`, activityData);
   }
 
   async deleteActivity(activityId: number): Promise<ApiResponse<any>> {

@@ -327,32 +327,26 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
               historyLength: window.history.length 
             });
             
-            // CRITICAL: When navigating from calendar to activity, we need to create proper history stack
-            // First push the child activities page, then navigate to the activity detail
-            // This ensures browser back button has somewhere to go back to
+            // Set a flag to indicate this navigation came from calendar
+            sessionStorage.setItem('navigationSource', 'calendar');
+            console.log('🏷️ Set navigationSource=calendar in sessionStorage');
+            console.log('🏷️ Verification - sessionStorage now contains:', sessionStorage.getItem('navigationSource'));
             
-            console.log('📝 Step 1: Navigate to child activities page to create history entry');
-            navigate(childActivitiesPath, { replace: false });
+            // DIRECT navigation from calendar to activity detail - skip intermediate page
+            // This ensures browser back button goes directly back to calendar
+            console.log('📝 Direct navigation from calendar to activity detail (no intermediate page)');
+            navigate(activityPath, { 
+              replace: false,
+              state: { 
+                fromPath: '/calendar', // Mark that this came from calendar
+                parentPath: childActivitiesPath 
+              } 
+            });
             
-            // Use setTimeout to ensure the first navigation completes before the second
-            setTimeout(() => {
-              console.log('📝 Step 2: Navigate to activity detail page');
-              navigate(activityPath, { 
-                replace: false,
-                state: { 
-                  fromPath: childActivitiesPath,
-                  parentPath: childActivitiesPath 
-                } 
-              });
-              
-              setTimeout(() => {
-                console.log('📚 Final browser history after two-step navigation:', {
-                  length: window.history.length,
-                  state: window.history.state,
-                  currentURL: window.location.href
-                });
-              }, 50);
-            }, 50);
+            console.log('📚 Direct navigation completed:', {
+              currentPath: activityPath,
+              historyLength: window.history.length
+            });
           }}
         />;
       case 'connections':

@@ -27,31 +27,52 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
   const [connectedActivities, setConnectedActivities] = useState<Activity[]>([]);
   const [invitedActivities, setInvitedActivities] = useState<Activity[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<Activity[]>([]);
-  const [includeConnected, setIncludeConnected] = useState(false);
-  const [includeInvited, setIncludeInvited] = useState(true);
-  const [includePending, setIncludePending] = useState(true);
+  // Set all activity types to true by default since we removed the filter UI
+  const includeConnected = true; // Enable connected activities
+  const includeInvited = true;
+  const includePending = true;
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [showActivityDetail, setShowActivityDetail] = useState(false);
   const [activityParticipants, setActivityParticipants] = useState<any>(null);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
+  const [selectedChildrenFilter, setSelectedChildrenFilter] = useState<string[]>([]); // Empty means show all children
   const { user } = useAuth();
   const apiService = ApiService.getInstance();
+
+  // Child color mapping - consistent colors for each child
+  const childColors = [
+    '#007bff', // Blue
+    '#28a745', // Green
+    '#dc3545', // Red
+    '#fd7e14', // Orange
+    '#6f42c1', // Purple
+    '#e83e8c', // Pink
+    '#20c997', // Teal
+    '#ffc107'  // Yellow
+  ];
+
+  const getChildColor = (childUuid: string) => {
+    if (!childUuid) return '#007bff';
+    // Create a simple hash of the childUuid to get consistent color assignment
+    let hash = 0;
+    for (let i = 0; i < childUuid.length; i++) {
+      hash = childUuid.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return childColors[Math.abs(hash) % childColors.length];
+  };
 
   useEffect(() => {
     console.log('📊 useEffect triggered with:', {
       currentMonth: currentMonth.toISOString(),
       includeConnected,
       includeInvited,
-      includePending
+      includePending,
+      childrenCount: children.length
     });
     
     loadActivities();
     loadChildren();
     loadConnectionRequests();
-    if (includeConnected) {
-      console.log('🔗 Loading connected activities...');
-      loadConnectedActivities();
-    }
     if (includeInvited) {
       console.log('📩 Loading invited activities...');
       loadInvitedActivities();
@@ -59,29 +80,45 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
     if (includePending) {
       console.log('⏳ Loading pending invitations...');
       loadPendingInvitations();
-    } else {
-      console.log('⚠️ includePending is false, skipping loadPendingInvitations');
     }
-  }, [currentMonth, includeConnected, includeInvited, includePending]);
+  }, [currentMonth, includeInvited, includePending, selectedChildrenFilter]);
+
+  // Separate useEffect for connected activities that depends on children being loaded
+  useEffect(() => {
+    if (includeConnected && children.length > 0) {
+      console.log('🔗 Loading connected activities for', children.length, 'children...');
+      loadConnectedActivities();
+    }
+  }, [children, includeConnected, currentMonth]);
 
   useEffect(() => {
     if (selectedDate) {
-      const ownActivities = activities.filter(activity => 
-        activity.start_date === selectedDate || 
-        (activity.start_date <= selectedDate && (activity.end_date || activity.start_date) >= selectedDate)
-      );
+      const ownActivities = activities.filter(activity => {
+        if (!activity.start_date) return false;
+        const activityDate = activity.start_date.split('T')[0];
+        const activityEndDate = activity.end_date ? activity.end_date.split('T')[0] : activityDate;
+        return activityDate === selectedDate || 
+               (activityDate <= selectedDate && activityEndDate >= selectedDate);
+      });
 
-      const connectedActivitiesForDay = includeConnected ? connectedActivities.filter(activity => 
-        activity.start_date === selectedDate || 
-        (activity.start_date <= selectedDate && (activity.end_date || activity.start_date) >= selectedDate)
-      ) : [];
+      const connectedActivitiesForDay = includeConnected ? connectedActivities.filter(activity => {
+        if (!activity.start_date) return false;
+        const activityDate = activity.start_date.split('T')[0];
+        const activityEndDate = activity.end_date ? activity.end_date.split('T')[0] : activityDate;
+        return activityDate === selectedDate || 
+               (activityDate <= selectedDate && activityEndDate >= selectedDate);
+      }) : [];
 
-      const invitedActivitiesForDay = includeInvited ? invitedActivities.filter(activity => 
-        activity.start_date === selectedDate || 
-        (activity.start_date <= selectedDate && (activity.end_date || activity.start_date) >= selectedDate)
-      ) : [];
+      const invitedActivitiesForDay = includeInvited ? invitedActivities.filter(activity => {
+        if (!activity.start_date) return false;
+        const activityDate = activity.start_date.split('T')[0];
+        const activityEndDate = activity.end_date ? activity.end_date.split('T')[0] : activityDate;
+        return activityDate === selectedDate || 
+               (activityDate <= selectedDate && activityEndDate >= selectedDate);
+      }) : [];
 
       const pendingInvitationsForDay = includePending ? pendingInvitations.filter(activity => {
+        if (!activity.start_date) return false;
         const activityDate = activity.start_date.split('T')[0];
         const activityEndDate = activity.end_date ? activity.end_date.split('T')[0] : activityDate;
         return activityDate === selectedDate || 
@@ -141,18 +178,22 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
 
   const loadConnectedActivities = async () => {
     try {
-      const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-      const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+      // Load connections for each child individually, like the child activity screen does
+      const allConnectedActivities: Activity[] = [];
       
-      const startDate = startOfMonth.toISOString().split('T')[0];
-      const endDate = endOfMonth.toISOString().split('T')[0];
-      
-      const response = await apiService.getConnectedActivities(startDate, endDate);
-      if (response.success && response.data) {
-        setConnectedActivities(response.data);
-      } else {
-        setConnectedActivities([]);
+      for (const child of children) {
+        if (child.uuid) {
+          console.log(`📡 Loading connections for child ${child.name} (${child.uuid})`);
+          const response = await apiService.getChildConnections(child.uuid);
+          if (response.success && response.data) {
+            // The response contains connection activities for this child
+            allConnectedActivities.push(...response.data);
+          }
+        }
       }
+      
+      console.log(`✅ Loaded ${allConnectedActivities.length} connected activities total`);
+      setConnectedActivities(allConnectedActivities);
     } catch (error) {
       console.error('Load connected activities error:', error);
       setConnectedActivities([]);
@@ -254,44 +295,88 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
     const current = new Date(startDate);
     
     for (let i = 0; i < 42; i++) {
-      const dateString = current.toISOString().split('T')[0];
-      const ownActivities = activities.filter(activity => 
-        activity.start_date === dateString || 
-        (activity.start_date <= dateString && (activity.end_date || activity.start_date) >= dateString)
-      );
+      // Use local date format to match activity dates without timezone conversion
+      const year = current.getFullYear();
+      const month = String(current.getMonth() + 1).padStart(2, '0');
+      const day = String(current.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}`;
+      
+      // Get local children UUIDs for filtering
+      const localChildrenUuids = children.map(c => c.uuid);
+      
+      // Filter activities by child if filter is applied
+      const shouldIncludeChild = (childUuid: string) => {
+        return selectedChildrenFilter.length === 0 || selectedChildrenFilter.includes(childUuid);
+      };
 
-      const connectedActivitiesForDay = includeConnected ? connectedActivities.filter(activity => 
-        activity.start_date === dateString || 
-        (activity.start_date <= dateString && (activity.end_date || activity.start_date) >= dateString)
-      ) : [];
+      // Own activities: where your children are the hosts
+      const ownActivities = activities.filter(activity => {
+        if (!activity.start_date) return false; // Skip activities without dates
+        const activityDate = activity.start_date.split('T')[0]; // Handle full datetime format
+        const matchesDate = activityDate === dateString || 
+          (activity.start_date <= dateString && (activity.end_date || activity.start_date) >= dateString);
+        const isLocalChild = activity.child_uuid && localChildrenUuids.includes(activity.child_uuid);
+        const matchesChild = activity.child_uuid ? shouldIncludeChild(activity.child_uuid) : true;
+        return matchesDate && isLocalChild && matchesChild;
+      });
 
-      const invitedActivitiesForDay = includeInvited ? invitedActivities.filter(activity => 
-        activity.start_date === dateString || 
-        (activity.start_date <= dateString && (activity.end_date || activity.start_date) >= dateString)
-      ) : [];
+      const connectedActivitiesForDay = includeConnected ? connectedActivities.filter(activity => {
+        if (!activity.start_date) return false; // Skip activities without dates
+        const activityDate = activity.start_date.split('T')[0]; // Handle full datetime format
+        const matchesDate = activityDate === dateString || 
+          (activity.start_date <= dateString && (activity.end_date || activity.start_date) >= dateString);
+        const isLocalChild = activity.child_uuid && localChildrenUuids.includes(activity.child_uuid);
+        const matchesChild = activity.child_uuid ? shouldIncludeChild(activity.child_uuid) : true;
+        return matchesDate && isLocalChild && matchesChild;
+      }) : [];
 
+      // Invited activities: where your children were invited and accepted
+      const invitedActivitiesForDay = includeInvited ? invitedActivities.filter(activity => {
+        if (!activity.start_date) return false; // Skip activities without dates
+        const activityDate = activity.start_date.split('T')[0]; // Handle full datetime format
+        const matchesDate = activityDate === dateString || 
+          (activity.start_date <= dateString && (activity.end_date || activity.start_date) >= dateString);
+        // For invited activities, check if one of your children was invited
+        const invitedChildUuid = (activity as any).invited_child_uuid;
+        const isLocalChildInvited = invitedChildUuid && localChildrenUuids.includes(invitedChildUuid);
+        const matchesChild = invitedChildUuid ? shouldIncludeChild(invitedChildUuid) : true;
+        return matchesDate && isLocalChildInvited && matchesChild;
+      }) : [];
+
+      // Pending invitations: where your children were invited but haven't responded
       const pendingInvitationsForDay = includePending ? pendingInvitations.filter(activity => {
+        if (!activity.start_date) return false; // Skip activities without dates
         const activityDate = activity.start_date.split('T')[0];
         const activityEndDate = activity.end_date ? activity.end_date.split('T')[0] : activityDate;
-        return activityDate === dateString || 
+        const matchesDate = activityDate === dateString || 
                (activityDate <= dateString && activityEndDate >= dateString);
+        // For pending invitations, check if one of your children was invited
+        const invitedChildUuid = (activity as any).invited_child_uuid;
+        const isLocalChildInvited = invitedChildUuid && localChildrenUuids.includes(invitedChildUuid);
+        const matchesChild = invitedChildUuid ? shouldIncludeChild(invitedChildUuid) : true;
+        return matchesDate && isLocalChildInvited && matchesChild;
       }) : [];
 
       const dayActivities = [...ownActivities, ...connectedActivitiesForDay, ...invitedActivitiesForDay, ...pendingInvitationsForDay];
       
-      // Debug specific dates
-      if (dateString === '2025-08-04' || dateString === '2025-08-07' || dateString === '2025-08-08' || dateString === '2025-08-15') {
-        console.log(`📅 ${dateString} DEBUG:`, {
-          ownActivities: ownActivities.length,
-          connectedActivitiesForDay: connectedActivitiesForDay.length,
-          invitedActivitiesForDay: invitedActivitiesForDay.length,
-          pendingInvitationsForDay: pendingInvitationsForDay.length,
-          totalDayActivities: dayActivities.length,
-          includePending,
-          pendingInvitationsTotal: pendingInvitations.length,
-          samplePendingDates: pendingInvitations.map(p => ({ name: p.name, date: p.start_date }))
-        });
-      }
+      // Group activities by child for color coding
+      const activitiesByChild = dayActivities.reduce((acc, activity) => {
+        // For invited activities, use the invited child UUID; for own activities, use the host child UUID
+        const isInvited = invitedActivitiesForDay.includes(activity) || pendingInvitationsForDay.includes(activity);
+        const childUuid = isInvited 
+          ? ((activity as any).invited_child_uuid || activity.child_uuid || 'unknown')
+          : (activity.child_uuid || 'unknown');
+        
+        if (!acc[childUuid]) {
+          acc[childUuid] = [];
+        }
+        acc[childUuid].push(activity);
+        return acc;
+      }, {} as Record<string, any[]>);
+
+      const childrenWithActivities = Object.keys(activitiesByChild).filter(uuid => uuid !== 'unknown');
+      
+      // Debug removed - calendar logic is working correctly
       
       
       // Find connection requests for this date
@@ -314,33 +399,31 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
         primaryIcon = getNotificationIcon(latestNotification.status, isIncoming);
         primaryColor = getNotificationColor(latestNotification.status, isIncoming);
       } else if (hasActivities) {
-        // Set primary color based on activity types when no notifications
-        const hasPending = pendingInvitationsForDay.length > 0;
-        const hasInvited = invitedActivitiesForDay.length > 0;
-        const hasConnected = connectedActivitiesForDay.length > 0;
-        const hasOwn = ownActivities.length > 0;
-        
-        if (hasPending) {
-          primaryColor = '#fd7e14'; // Orange for pending invitations
-          primaryIcon = '⏳';
-          console.log(`🎯 ${dateString} set as PENDING with color ${primaryColor}`);
-        } else if (hasInvited) {
-          primaryColor = '#ff9800'; // Light orange for accepted invitations
-          primaryIcon = '📩';
-        } else if (hasConnected) {
-          primaryColor = '#28a745'; // Green for connected activities
-          primaryIcon = '🤝';
-        } else if (hasOwn) {
-          primaryColor = '#007bff'; // Blue for own activities
-          primaryIcon = '🏠';
+        // Use child-specific colors for activities
+        if (childrenWithActivities.length === 1) {
+          // Single child - use their color
+          const childUuid = childrenWithActivities[0];
+          primaryColor = getChildColor(childUuid);
+        } else if (childrenWithActivities.length > 1) {
+          // Multiple children - use a mixed color approach or primary child
+          primaryColor = getChildColor(childrenWithActivities[0]); // Use first child's color as primary
+        } else {
+          // Fallback color
+          primaryColor = '#007bff';
         }
       }
       
       days.push({
         date: new Date(current),
         dateString,
-        isCurrentMonth: current.getMonth() === month,
-        isToday: dateString === new Date().toISOString().split('T')[0],
+        isCurrentMonth: current.getMonth() === currentMonth.getMonth(),
+        isToday: dateString === (() => {
+          const today = new Date();
+          const todayYear = today.getFullYear();
+          const todayMonth = String(today.getMonth() + 1).padStart(2, '0');
+          const todayDay = String(today.getDate()).padStart(2, '0');
+          return `${todayYear}-${todayMonth}-${todayDay}`;
+        })(),
         isSelected: dateString === selectedDate,
         hasActivities,
         hasNotifications,
@@ -349,7 +432,9 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
         activities: dayActivities,
         notifications: dayNotifications,
         primaryColor,
-        primaryIcon
+        primaryIcon,
+        activitiesByChild, // Child-specific activities for rendering multiple children
+        childrenWithActivities // Array of child UUIDs with activities this day
       });
       
       current.setDate(current.getDate() + 1);
@@ -421,6 +506,17 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
 
   const handleDateClick = (dateString: string) => {
     setSelectedDate(dateString);
+    
+    // Auto-scroll to the activities list section
+    setTimeout(() => {
+      const activitiesSection = document.querySelector('.activities-list');
+      if (activitiesSection) {
+        activitiesSection.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }
+    }, 100); // Small delay to ensure the activities have rendered
   };
 
   const formatTime = (activity: Activity) => {
@@ -530,31 +626,83 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
       <div className="calendar-header">
         <h2>Calendar</h2>
         <div className="calendar-options">
-          <label className="connected-toggle">
-            <input
-              type="checkbox"
-              checked={includeConnected}
-              onChange={(e) => setIncludeConnected(e.target.checked)}
-            />
-            <span>Show Connected Activities</span>
-          </label>
-          <label className="invited-toggle">
-            <input
-              type="checkbox"
-              checked={includeInvited}
-              onChange={(e) => setIncludeInvited(e.target.checked)}
-            />
-            <span>Show Accepted Invitations</span>
-          </label>
-          <label className="pending-toggle">
-            <input
-              type="checkbox"
-              checked={includePending}
-              onChange={(e) => setIncludePending(e.target.checked)}
-            />
-            <span>Show Pending Invitations</span>
-          </label>
+          {/* Single Children Filter Dropdown */}
+          <div className="filter-dropdown">
+            <label>Show activities for:</label>
+            <select
+              value={selectedChildrenFilter.length === 0 ? 'all' : selectedChildrenFilter.length === 1 ? selectedChildrenFilter[0] : 'multiple'}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === 'all') {
+                  setSelectedChildrenFilter([]);
+                } else {
+                  setSelectedChildrenFilter([value]);
+                }
+              }}
+              className="single-select"
+            >
+              <option value="all">All Children</option>
+              {children.map((child) => (
+                <option key={child.uuid} value={child.uuid}>
+                  {child.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+        
+        {/* Color Key Legend */}
+        {(() => {
+          // Only show local children in the legend since we only show their activities
+          const localChildrenUuids = children.map(c => c.uuid);
+          
+          // Get all unique local children who have activities
+          const localChildrenWithActivities = [
+            // From own activities (always local children)
+            ...activities.map(a => a.child_uuid),
+            // From invited activities (only the invited local children)
+            ...(includeInvited ? invitedActivities.map(a => (a as any).invited_child_uuid) : []),
+            // From pending invitations (only the invited local children)
+            ...(includePending ? pendingInvitations.map(a => (a as any).invited_child_uuid) : [])
+          ].filter((uuid, index, arr) => {
+            return uuid && arr.indexOf(uuid) === index && localChildrenUuids.includes(uuid);
+          }); // Only include local children with activities
+
+          const childrenWithActivitiesToShow = localChildrenWithActivities.map(uuid => {
+            const localChild = children.find(c => c.uuid === uuid);
+            return { uuid, name: localChild?.name || 'Unknown', isLocal: true };
+          });
+
+          return childrenWithActivitiesToShow.length > 0 && (
+            <div className="color-key-section">
+              <h4 style={{ margin: '10px 0 8px 0', fontSize: '14px', color: '#666' }}>Color Key:</h4>
+              <div className="color-key-items">
+                {childrenWithActivitiesToShow.map((child) => (
+                  <div key={child.uuid} className="color-key-item">
+                    <div 
+                      className="color-swatch" 
+                      style={{ 
+                        backgroundColor: getChildColor(child.uuid || ''),
+                        width: '16px',
+                        height: '16px',
+                        borderRadius: '50%',
+                        marginRight: '6px'
+                      }}
+                    />
+                    <span style={{ 
+                      fontSize: '13px', 
+                      color: '#333',
+                      fontWeight: child.isLocal ? 'bold' : 'normal',
+                      fontStyle: child.isLocal ? 'normal' : 'italic'
+                    }}>
+                      {child.name}{child.isLocal ? '' : ' (external)'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="calendar-container">
@@ -624,15 +772,137 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
                       </div>
                     )}
                     {((day as any).hasActivities || day.activityCount > 0) && (
-                      <div 
-                        className="activity-count"
-                        style={{ 
-                          backgroundColor: day.hasNotifications ? '#6c757d' : ((day as any).primaryColor || '#007bff'),
-                          color: 'white'
-                        }}
-                        title={`${day.activityCount} activit${day.activityCount > 1 ? 'ies' : 'y'}`}
-                      >
-                        {day.activityCount}
+                      <div className="activity-indicators">
+                        {(day as any).childrenWithActivities?.length > 1 ? (
+                          // Multiple children - show stacked indicators
+                          <div className="multi-child-indicators">
+                            {(day as any).childrenWithActivities.map((childUuid: string, childIndex: number) => {
+                              const childActivities = (day as any).activitiesByChild[childUuid] || [];
+                              const childName = children.find(c => c.uuid === childUuid)?.name || 
+                                               (childActivities[0]?.child_name) || 'Unknown';
+                              const nameParts = childName.split(' ');
+                              const firstInitial = nameParts[0]?.charAt(0).toUpperCase() || '';
+                              const lastInitial = nameParts[1]?.charAt(0).toUpperCase() || '';
+                              const childInitials = firstInitial + lastInitial;
+                              return (
+                                <div
+                                  key={childUuid}
+                                  className="child-indicator"
+                                  style={{
+                                    backgroundColor: getChildColor(childUuid),
+                                    color: 'white',
+                                    fontSize: '11px',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    marginBottom: '3px',
+                                    fontWeight: 'bold',
+                                    minWidth: '45px',
+                                    height: '20px',
+                                    textAlign: 'center',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                                  }}
+                                  title={`${childName}: ${childActivities.length} activit${childActivities.length > 1 ? 'ies' : 'y'}`}
+                                >
+                                  <span style={{ 
+                                    letterSpacing: '0.5px', 
+                                    fontSize: '9px',
+                                    fontWeight: '700',
+                                    backgroundColor: 'rgba(255,255,255,0.3)',
+                                    borderRadius: '50%',
+                                    width: '16px',
+                                    height: '16px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: '1px solid rgba(255,255,255,0.4)'
+                                  }}>{childInitials}</span>
+                                  <span style={{ 
+                                    fontSize: '13px', 
+                                    fontWeight: '900',
+                                    color: '#fff',
+                                    textShadow: '0 1px 1px rgba(0,0,0,0.2)'
+                                  }}>{childActivities.length}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          // Single child - show initials + count
+                          (() => {
+                            const singleChildUuid = (day as any).childrenWithActivities?.[0];
+                            if (singleChildUuid) {
+                              const childActivities = (day as any).activitiesByChild[singleChildUuid] || [];
+                              const childName = children.find(c => c.uuid === singleChildUuid)?.name || 
+                                               (childActivities[0]?.child_name) || 'Unknown';
+                              const nameParts = childName.split(' ');
+                              const firstInitial = nameParts[0]?.charAt(0).toUpperCase() || '';
+                              const lastInitial = nameParts[1]?.charAt(0).toUpperCase() || '';
+                              const childInitials = firstInitial + lastInitial;
+                              return (
+                                <div 
+                                  className="activity-count"
+                                  style={{ 
+                                    backgroundColor: getChildColor(singleChildUuid),
+                                    color: 'white',
+                                    fontSize: '11px',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    fontWeight: 'bold',
+                                    minWidth: '45px',
+                                    height: '20px',
+                                    textAlign: 'center',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                                  }}
+                                  title={`${childName}: ${day.activityCount} activit${day.activityCount > 1 ? 'ies' : 'y'}`}
+                                >
+                                  <span style={{ 
+                                    letterSpacing: '0.5px', 
+                                    fontSize: '9px',
+                                    fontWeight: '700',
+                                    backgroundColor: 'rgba(255,255,255,0.3)',
+                                    borderRadius: '50%',
+                                    width: '16px',
+                                    height: '16px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: '1px solid rgba(255,255,255,0.4)'
+                                  }}>{childInitials}</span>
+                                  <span style={{ 
+                                    fontSize: '13px', 
+                                    fontWeight: '900',
+                                    color: '#fff',
+                                    textShadow: '0 1px 1px rgba(0,0,0,0.2)'
+                                  }}>{day.activityCount}</span>
+                                </div>
+                              );
+                            } else {
+                              // Fallback for activities without clear child attribution
+                              return (
+                                <div 
+                                  className="activity-count"
+                                  style={{ 
+                                    backgroundColor: '#007bff',
+                                    color: 'white',
+                                    fontSize: '10px',
+                                    padding: '2px 6px',
+                                    borderRadius: '3px',
+                                    fontWeight: 'bold'
+                                  }}
+                                  title={`${day.activityCount} activit${day.activityCount > 1 ? 'ies' : 'y'}`}
+                                >
+                                  {day.activityCount}
+                                </div>
+                              );
+                            }
+                          })()
+                        )}
                       </div>
                     )}
                   </div>
@@ -649,88 +919,202 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
           
           {selectedActivities.length > 0 ? (
             <div className="activities-list">
-              {selectedActivities.map((activity, index) => {
-                // Determine activity type
-                const isOwn = activities.some(a => a.uuid === activity.uuid || a.id === activity.id);
-                const isConnected = connectedActivities.some(a => a.uuid === activity.uuid || a.id === activity.id);
-                const isInvited = invitedActivities.some(a => a.uuid === activity.uuid || a.id === activity.id);
-                const isPending = pendingInvitations.some(a => a.uuid === activity.uuid || a.id === activity.id);
-                
-                let activityType = '';
-                let activityIcon = '';
-                let activityColor = '';
-                
-                if (isOwn) {
-                  activityType = 'Your Activity';
-                  activityIcon = '🏠';
-                  activityColor = '#007bff';
-                } else if (isConnected) {
-                  activityType = `Connected (${activity.parent_username || 'Friend'})`;
-                  activityIcon = '🤝';
-                  activityColor = '#28a745';
-                } else if (isInvited) {
-                  activityType = `Invited by ${activity.host_parent_username || 'Friend'}`;
-                  activityIcon = '📩';
-                  activityColor = '#ff9800';
-                } else if (isPending) {
-                  activityType = `Pending Invitation from ${activity.host_parent_username || 'Friend'}`;
-                  activityIcon = '⏳';
-                  activityColor = '#fd7e14';
-                }
+              {(() => {
+                // Group activities by child, excluding pending invitations
+                const activitiesByChild = selectedActivities.reduce((groups, activity) => {
+                  // Skip activities that are only pending invitations
+                  const isPending = pendingInvitations.some(a => a.uuid === activity.uuid || a.id === activity.id);
+                  const isOwnActivity = activities.some(a => a.uuid === activity.uuid || a.id === activity.id);
+                  const isInvitedActivity = connectedActivities.some(a => a.uuid === activity.uuid || a.id === activity.id) ||
+                                           invitedActivities.some(a => a.uuid === activity.uuid || a.id === activity.id);
+                  
+                  // Only skip if it's pending AND not our own activity AND not an accepted/connected activity
+                  if (isPending && !isOwnActivity && !isInvitedActivity) {
+                    return groups;
+                  }
+                  
+                  // For invited activities, try to get the child who was invited
+                  const childUuid = isInvitedActivity 
+                    ? ((activity as any).invited_child_uuid || activity.child_uuid || '')
+                    : (activity.child_uuid || '');
+                  const childName = children.find(c => c.uuid === childUuid)?.name || 'Unknown Child';
+                  
+                  if (!groups[childName]) {
+                    groups[childName] = {
+                      childUuid,
+                      activities: []
+                    };
+                  }
+                  groups[childName].activities.push({
+                    ...activity,
+                    isOwnActivity,
+                    isInvitedActivity,
+                    childUuid,
+                    childName
+                  });
+                  return groups;
+                }, {} as Record<string, { childUuid: string; activities: any[] }>);
 
-                return (
-                  <div 
-                    key={index} 
-                    className="activity-card clickable-card" 
-                    style={{ borderLeft: `4px solid ${activityColor}` }}
-                    onClick={() => handleActivityClick({
-                      ...activity,
-                      isPendingInvitation: isPending,
-                      isDeclinedInvitation: false,
-                      invitationId: isPending ? activity.invitation_id : undefined,
-                      hostParent: activity.host_parent_username,
-                      message: activity.invitation_message
-                    })}
-                  >
-                    <div className="activity-header">
-                      <div className="activity-title-row">
-                        <h4 className="activity-name">{activity.name}</h4>
-                        <div className="activity-type" style={{ color: activityColor }}>
-                          {activityIcon} {activityType}
-                        </div>
+                return Object.entries(activitiesByChild).map(([childName, group]) => {
+                  const childColor = getChildColor(group.childUuid);
+                  
+                  return (
+                    <div key={childName} className="child-activity-group" style={{ marginBottom: '20px' }}>
+                      {/* Child Name Header */}
+                      <div className="child-header" style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        marginBottom: '8px',
+                        padding: '8px 12px',
+                        backgroundColor: childColor,
+                        color: 'white',
+                        borderRadius: '6px',
+                        fontWeight: 'bold',
+                        fontSize: '14px'
+                      }}>
+                        <span>{childName}</span>
+                        <span style={{ 
+                          marginLeft: 'auto', 
+                          fontSize: '12px', 
+                          opacity: 0.9 
+                        }}>
+                          {group.activities.length} activit{group.activities.length > 1 ? 'ies' : 'y'}
+                        </span>
                       </div>
-                      <span className="activity-time">{formatTime(activity)}</span>
-                    </div>
-                    {activity.description && (
-                      <p className="activity-description">{activity.description}</p>
-                    )}
-                    {activity.location && (
-                      <div className="activity-location">📍 {activity.location}</div>
-                    )}
-                    {activity.cost && (
-                      <div className="activity-cost">💰 ${activity.cost}</div>
-                    )}
-                    {activity.website_url && (
-                      <div className="activity-url">
-                        <a href={activity.website_url} target="_blank" rel="noopener noreferrer">
-                          🌐 Visit Website
-                        </a>
+
+                      {/* Activities for this child */}
+                      <div className="child-activities">
+                        {group.activities.map((activity, index) => {
+                          // Use the flags we already determined during grouping
+                          const isOwnActivity = activity.isOwnActivity;
+                          const isInvitedActivity = activity.isInvitedActivity;
+                          
+                          let activitySource = '';
+                          if (isInvitedActivity) {
+                            // Show the host child's name for invited activities (connected or accepted)
+                            const hostChildName = activity.host_child_name || activity.child_name || 'Friend';
+                            // Only show "Invited by" if the host is NOT one of the parent's own children
+                            const isOwnChildHost = children.some(child => child.name === hostChildName);
+                            if (!isOwnChildHost) {
+                              activitySource = `Invited by ${hostChildName}`;
+                            }
+                          }
+
+                          return (
+                            <div 
+                              key={index} 
+                              className="activity-card" 
+                              style={{ 
+                                borderLeft: `4px solid ${childColor}`,
+                                marginBottom: '8px',
+                                padding: '10px',
+                                position: 'relative'
+                              }}
+                            >
+                              {/* View button - positioned top-right */}
+                              <button 
+                                className="view-activity-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleActivityClick({
+                                    ...activity,
+                                    isPendingInvitation: false,
+                                    isDeclinedInvitation: false,
+                                    hostParent: activity.host_parent_username
+                                  });
+                                }}
+                                style={{
+                                  position: 'absolute',
+                                  top: '8px',
+                                  right: '8px',
+                                  fontSize: '12px',
+                                  padding: '6px 12px',
+                                  backgroundColor: childColor,
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '16px',
+                                  cursor: 'pointer',
+                                  fontWeight: 'bold',
+                                  boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                                  minWidth: '50px'
+                                }}
+                              >
+                                View
+                              </button>
+
+                              {/* Activity Name + Time */}
+                              <div className="activity-title-time" style={{
+                                fontSize: '15px',
+                                fontWeight: 'bold',
+                                marginBottom: '4px',
+                                color: '#333',
+                                paddingRight: '80px' // Make space for click hint
+                              }}>
+                                {activity.name} {formatTime(activity)}
+                              </div>
+
+                              {/* Activity Details Row */}
+                              <div className="activity-details-row" style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'flex-start',
+                                gap: '12px',
+                                fontSize: '12px',
+                                color: '#666'
+                              }}>
+                                <div className="activity-left-details">
+                                  {activity.location && (
+                                    <div className="activity-location">📍 {activity.location}</div>
+                                  )}
+                                  {activitySource && (
+                                    <div className="activity-source" style={{ color: childColor, fontWeight: '500' }}>
+                                      {activitySource}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="activity-right-details" style={{ textAlign: 'right' }}>
+                                  {activity.cost && (
+                                    <div className="activity-cost">💰 ${activity.cost}</div>
+                                  )}
+                                  {activity.max_participants && (
+                                    <div className="activity-max-participants">
+                                      👥 Max {activity.max_participants}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Description if present */}
+                              {activity.description && (
+                                <div className="activity-description" style={{
+                                  marginTop: '6px',
+                                  fontSize: '12px',
+                                  color: '#555',
+                                  fontStyle: 'italic',
+                                  lineHeight: '1.3'
+                                }}>
+                                  {activity.description}
+                                </div>
+                              )}
+
+                              {/* Website link if present */}
+                              {activity.website_url && (
+                                <div className="activity-url" style={{ marginTop: '4px' }}>
+                                  <a href={activity.website_url} target="_blank" rel="noopener noreferrer" 
+                                     style={{ fontSize: '11px', color: childColor }}>
+                                    🌐 Visit Website
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    )}
-                    {activity.invitation_message && (
-                      <div className="invitation-message">💌 "{activity.invitation_message}"</div>
-                    )}
-                    <div className="click-hint" style={{ 
-                      fontSize: '12px', 
-                      color: '#666', 
-                      marginTop: '8px',
-                      fontStyle: 'italic' 
-                    }}>
-                      Click for details
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           ) : (
             <div className="no-activities">

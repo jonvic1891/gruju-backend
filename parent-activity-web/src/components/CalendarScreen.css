@@ -18,7 +18,7 @@
 
 .calendar-header h2 {
   margin: 0;
-  color: white;
+  color: black;
   font-size: 32px;
   font-weight: 700;
   letter-spacing: -0.5px;
@@ -27,14 +27,14 @@
 .calendar-options {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 24px;
 }
 
 .invited-toggle {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: white;
+  color: black;
   font-size: 14px;
   font-weight: 500;
 }
@@ -47,7 +47,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: white;
+  color: black;
   font-size: 14px;
   font-weight: 500;
 }
@@ -91,7 +91,7 @@
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  color: white;
+  color: black;
 }
 
 .connected-toggle input[type="checkbox"] {
@@ -140,7 +140,7 @@
 
 .nav-btn {
   background: #007bff;
-  color: white;
+  color: black;
   border: none;
   border-radius: 50%;
   width: 44px;
@@ -221,7 +221,7 @@
 
 .day.selected {
   background: #007bff;
-  color: white;
+  color: black;
 }
 
 .day.has-activities {
@@ -371,7 +371,7 @@
 
 .add-activity-btn {
   background: #007bff;
-  color: white;
+  color: black;
   border: none;
   border-radius: 8px;
   padding: 12px 20px;
@@ -420,6 +420,55 @@
 .loading {
   font-size: 18px;
   color: #6c757d;
+}
+
+/* Enhanced activity list styles */
+.activity-time-location {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.activity-location-main {
+  color: #666;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.who-is-going {
+  border-left: 2px solid rgba(0,0,0,0.1);
+}
+
+.activity-extra-details > div {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.activity-action-button:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.clickable-card {
+  position: relative;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.clickable-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+  border-color: rgba(0,123,255,0.3);
+}
+
+.click-to-view-hint {
+  transition: all 0.2s ease;
+}
+
+.clickable-card:hover .click-to-view-hint {
+  transform: scale(1.02);
+  font-weight: 900;
 }
 
 @media (max-width: 768px) {
@@ -619,7 +668,7 @@
 
 .confirm-btn {
   background: #3182ce;
-  color: white;
+  color: black;
 }
 
 .confirm-btn:hover {
@@ -628,7 +677,7 @@
 
 .delete-btn {
   background: #e53e3e;
-  color: white;
+  color: black;
 }
 
 .delete-btn:hover {
@@ -730,7 +779,7 @@
   border: none;
   padding: 8px 16px;
   border-radius: 6px;
-  color: white;
+  color: black;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -743,7 +792,7 @@
 
 .view-btn.active {
   background: rgba(255, 255, 255, 0.2);
-  color: white;
+  color: black;
   font-weight: 600;
 }
 
@@ -802,3 +851,138 @@
     font-size: 14px;
   }
 }
+/* Removed old child filter checkbox styles - now using dropdowns */
+
+/* Multi-child indicators */
+.activity-indicators {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.multi-child-indicators {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  align-items: center;
+}
+
+.child-indicator {
+  min-width: 16px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  border-radius: 2px;
+  text-align: center;
+}
+
+/* Activity list enhancements */
+.activity-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.child-name-badge {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* Color Key Legend */
+.color-key-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.color-key-items {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.color-key-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Multi-select dropdown styles */
+.filter-dropdown {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-dropdown label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.multi-select {
+  min-width: 160px;
+  max-height: 120px;
+  padding: 6px 8px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 13px;
+  background: white;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.multi-select:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.multi-select option {
+  padding: 4px 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.multi-select option:checked {
+  background: #007bff;
+  color: white;
+}
+
+.multi-select option:hover {
+  background: #f8f9fa;
+}
+
+/* Single select dropdown styles (replaces multi-select for children filter) */
+.single-select {
+  min-width: 160px;
+  padding: 8px 12px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.single-select:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.single-select option {
+  padding: 8px 12px;
+  font-size: 14px;
+  font-weight: 500;
+}
+

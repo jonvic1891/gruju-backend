@@ -30,6 +30,7 @@ export interface Activity {
   activity_uuid?: string; // UUID field for secure activity identification
   uuid?: string; // Alternative UUID field name for compatibility
   child_id: number;
+  child_uuid?: string; // UUID field for the child who owns this activity  
   name: string;
   description?: string;
   start_date: string;

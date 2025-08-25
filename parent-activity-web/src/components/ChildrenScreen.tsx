@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ApiService from '../services/api';
 import { Child } from '../types';
 import ChildActivityScreen from './ChildActivityScreen';
@@ -53,6 +54,8 @@ interface ChildrenScreenProps {
 }
 
 const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, onNavigateToChildCalendar, onNavigateToChildActivities, onNavigateToActivity, onNavigateBack, initialSelectedChildId, initialActivityUuid, onChildSelectionChange, onNavigateToConnections, shouldRestoreActivityCreation, refreshTrigger }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -723,6 +726,28 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     // Scroll to top before navigating back
     window.scrollTo({ top: 0, behavior: 'smooth' });
     
+    // Check if we have a navigation state indicating we came from calendar
+    console.log('🔍 Checking navigation state:', location.state);
+    console.log('🔍 SessionStorage navigationSource:', sessionStorage.getItem('navigationSource'));
+    console.log('🔍 Current pathname:', location.pathname);
+    
+    // Try multiple approaches to detect if we came from calendar
+    const fromState = location.state?.fromPath === '/calendar';
+    const fromSession = sessionStorage.getItem('navigationSource') === 'calendar';
+    const cameFromCalendar = fromState || fromSession;
+    
+    console.log('🔍 Detection results:', { fromState, fromSession, cameFromCalendar });
+    
+    if (cameFromCalendar) {
+      console.log('🔙 Detected calendar origin, navigating directly to /calendar');
+      // Clear the session storage flag
+      sessionStorage.removeItem('navigationSource');
+      // Direct navigation to calendar instead of trying to manipulate history
+      navigate('/calendar', { replace: true });
+      return;
+    }
+    
+    console.log('🔙 Standard back navigation');
     // Use proper navigation if available, otherwise fallback to browser back
     if (onNavigateBack) {
       onNavigateBack();
