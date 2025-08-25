@@ -1931,6 +1931,23 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
         const { activityId } = req.params;
         const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants } = req.body;
         
+        console.log('🔍 Update activity request:', {
+            activityId,
+            userId: req.user.id,
+            body: req.body
+        });
+        
+        // Validate required fields
+        if (!name || typeof name !== 'string') {
+            console.error('❌ Invalid name field:', { name, type: typeof name });
+            return res.status(400).json({ success: false, error: 'Activity name is required' });
+        }
+        
+        if (!start_date) {
+            console.error('❌ Invalid start_date field:', { start_date });
+            return res.status(400).json({ success: false, error: 'Start date is required' });
+        }
+        
         const client = await pool.connect();
         
         // ✅ SECURITY: Verify the activity belongs to this user using UUID
@@ -1938,6 +1955,12 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
             'SELECT a.id FROM activities a JOIN children c ON a.child_id = c.id WHERE a.uuid = $1 AND c.parent_id = $2',
             [activityId, req.user.id]
         );
+        
+        console.log('🔍 Activity ownership check:', {
+            activityId,
+            userId: req.user.id,
+            found: activityCheck.rows.length
+        });
         
         if (activityCheck.rows.length === 0) {
             client.release();
@@ -1951,6 +1974,34 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
         const processedCost = cost !== null && cost !== undefined && cost !== '' ? parseFloat(cost) : null;
         const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
 
+        console.log('🔍 Processed values:', {
+            processedStartTime,
+            processedEndTime,
+            processedEndDate,
+            processedCost,
+            processedMaxParticipants
+        });
+
+        // Prepare parameters array with validation
+        const updateParams = [
+            name.trim(), 
+            description || null, 
+            start_date, 
+            processedEndDate, 
+            processedStartTime, 
+            processedEndTime, 
+            location || null, 
+            website_url || null, 
+            processedCost, 
+            processedMaxParticipants, 
+            activityId
+        ];
+        
+        console.log('🔍 Update parameters:', {
+            paramCount: updateParams.length,
+            params: updateParams
+        });
+
         // ✅ SECURITY: Update using UUID and return minimal data
         const result = await client.query(
             `UPDATE activities SET 
@@ -1958,14 +2009,26 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
                 start_time = $5, end_time = $6, location = $7, website_url = $8, 
                 cost = $9, max_participants = $10, updated_at = NOW()
              WHERE uuid = $11 RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, updated_at`,
-            [name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, activityId]
+            updateParams
         );
+        
+        console.log('🔍 Update result:', {
+            rowsAffected: result.rowCount,
+            returningData: result.rows[0]
+        });
         
         client.release();
         res.json({ success: true, data: result.rows[0] });
     } catch (error) {
-        console.error('Update activity error:', error);
-        res.status(500).json({ success: false, error: 'Failed to update activity' });
+        console.error('❌ Update activity error:', error);
+        console.error('❌ Update activity error details:', {
+            activityId: req.params.activityId,
+            userId: req.user?.id,
+            body: req.body,
+            error: error.message,
+            stack: error.stack
+        });
+        res.status(500).json({ success: false, error: 'Failed to update activity', details: error.message });
     }
 });
 
