@@ -1173,15 +1173,15 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
 
         const client = await pool.connect();
         
-        // Check if email or username already exists for another user
+        // Check if email or phone already exists for another user
         const existingUser = await client.query(
-            'SELECT id FROM users WHERE (email = $1 OR username = $2) AND id != $3',
-            [email, username, req.user.id]
+            'SELECT id FROM users WHERE (email = $1 OR phone = $2) AND id != $3',
+            [email, phone, req.user.id]
         );
 
         if (existingUser.rows.length > 0) {
             client.release();
-            return res.status(409).json({ error: 'Email or username already exists' });
+            return res.status(409).json({ error: 'Email or phone number already exists' });
         }
 
         // Update user
