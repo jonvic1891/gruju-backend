@@ -268,6 +268,129 @@
   color: #6c757d;
 }
 
+/* Parents Section */
+.parents-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.parents-header h3 {
+  margin: 0;
+  color: #343a40;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.add-btn {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.add-btn:hover {
+  background: #0056b3;
+}
+
+.parents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.parent-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  background: #f8f9fa;
+  transition: border-color 0.2s ease;
+}
+
+.parent-card:hover {
+  border-color: #007bff;
+}
+
+.parent-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.parent-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #28a745;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.parent-details {
+  flex: 1;
+}
+
+.parent-details h4 {
+  margin: 0 0 4px 0;
+  color: #343a40;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.parent-details p {
+  margin: 2px 0;
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.delete-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.delete-btn:hover {
+  background: #c82333;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 24px;
+  color: #6c757d;
+}
+
+.empty-state p {
+  margin: 8px 0;
+  font-size: 14px;
+}
 
 @media (max-width: 768px) {
   .profile-avatar {

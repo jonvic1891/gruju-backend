@@ -167,15 +167,15 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
   };
 
   const notifyNewConnectionAboutFutureActivities = async (
-    newConnectionParentId: number, 
-    requestorChildId: number,
-    targetChildId?: number
+    newConnectionParentUuid: string, 
+    requestorChildUuid: string,
+    targetChildUuid?: string
   ) => {
     try {
       console.log('🔔 Starting auto-notification process:', {
-        newConnectionParentId,
-        requestorChildId,  
-        targetChildId,
+        newConnectionParentUuid,
+        requestorChildUuid,  
+        targetChildUuid,
         note: 'Sending current user auto-notify activities to new connection'
       });
 
@@ -232,14 +232,14 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
         for (const activity of futureActivities) {
           try {
             // Determine which child to invite based on the connection request
-            const inviteChildId = targetChildId || requestorChildId;
+            const inviteChildUuid = targetChildUuid || requestorChildUuid;
             
-            console.log(`📧 Sending invitation for activity "${activity.name}" to child ${inviteChildId}`);
+            console.log(`📧 Sending invitation for activity "${activity.name}" to child ${inviteChildUuid}`);
             
             const inviteResponse = await apiService.sendActivityInvitation(
-              activity.uuid || String(activity.id),
-              newConnectionParentId,
-              typeof inviteChildId === 'string' ? inviteChildId : undefined,
+              activity.uuid || activity.activity_uuid || String(activity.id),
+              newConnectionParentUuid,
+              inviteChildUuid,
               `Welcome to our connection! ${activity.child_name} would like to invite your child to join: ${activity.name}`
             );
             

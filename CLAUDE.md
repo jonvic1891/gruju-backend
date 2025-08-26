@@ -51,3 +51,40 @@ git push heroku main
 - Backend: Node.js Express, PostgreSQL on Heroku
 - Database: Uses UUIDs for security, IDs for internal references
 - Authentication: JWT tokens
+
+## 🚨 CRITICAL SECURITY POLICY: UUID-ONLY FRONTEND
+
+**MANDATORY RULE: The frontend MUST NEVER use numeric IDs for any user-facing operations.**
+
+### UUID-Only Policy
+1. **FORBIDDEN**: All numeric `id`, `child_id`, `parent_id`, `activity_id`, `invitation_id` fields
+2. **REQUIRED**: Always use UUID fields: `uuid`, `child_uuid`, `parent_uuid`, `activity_uuid`, `invitation_uuid`
+3. **API CALLS**: All API endpoints must receive UUID parameters, never numeric IDs
+4. **DATA TYPES**: All TypeScript interfaces marked numeric IDs as `// DEPRECATED: Backend only`
+
+### Conversion Guide
+- `child_id` → `child_uuid` (string)
+- `parent_id` → `parent_uuid` (string) 
+- `activity_id` → `activity_uuid` (string)
+- `invitation_id` → `invitation_uuid` (string)
+- `connection_id` → `connection_uuid` (string)
+
+### Why UUIDs Only?
+- **Security**: Numeric IDs expose database structure and enable enumeration attacks
+- **Privacy**: UUIDs prevent unauthorized access to other users' data
+- **Scalability**: UUIDs work across distributed systems
+- **Compliance**: Required for proper data protection
+
+### Frontend Implementation
+- All API service methods use UUID parameters
+- All React components pass UUIDs between components
+- All state management uses UUIDs as keys
+- All routing uses UUIDs in URL parameters
+
+### Backend Compatibility
+- Backend still uses numeric IDs internally for database efficiency
+- Backend accepts both UUIDs and IDs during transition period
+- Backend always returns both ID and UUID fields in responses
+- Frontend MUST ignore numeric ID fields and only use UUIDs
+
+**⚠️ Any code that uses numeric IDs in the frontend is a SECURITY VULNERABILITY and must be immediately converted to UUIDs.**

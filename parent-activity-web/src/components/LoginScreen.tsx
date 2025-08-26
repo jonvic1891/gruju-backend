@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import PhoneInput from './PhoneInput';
+import { validatePhoneNumber } from '../utils/phoneValidation';
 import './LoginScreen.css';
 
 const LoginScreen = () => {
@@ -92,6 +94,13 @@ const LoginScreen = () => {
         return;
       }
       
+      // Validate phone number
+      const phoneValidation = validatePhoneNumber(phone);
+      if (!phoneValidation.isValid) {
+        alert(`Invalid phone number: ${phoneValidation.error}`);
+        return;
+      }
+      
       if (password !== confirmPassword) {
         alert('Passwords do not match');
         return;
@@ -160,11 +169,10 @@ const LoginScreen = () => {
                   autoComplete="family-name"
                 />
               </div>
-              <input
-                type="tel"
-                placeholder="Phone"
+              <PhoneInput
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={setPhone}
+                placeholder="Phone"
                 className="input"
                 autoComplete="tel"
               />

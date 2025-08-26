@@ -1074,20 +1074,52 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const sendInvitations = async () => {
+    console.log('🔍 sendInvitations called:', {
+      selectedConnectedChildren,
+      selectedConnectedChildrenLength: selectedConnectedChildren.length,
+      selectedActivity: selectedActivity?.name,
+      activityUuid: selectedActivity?.uuid || selectedActivity?.activity_uuid
+    });
+    
     if (selectedConnectedChildren.length === 0 || !selectedActivity) {
+      console.log('⚠️ sendInvitations early return:', {
+        reason: selectedConnectedChildren.length === 0 ? 'No children selected' : 'No activity selected'
+      });
       return { success: true, count: 0 };
     }
 
     // Send invitations to selected children
     const invitationPromises = selectedConnectedChildren.map(async (childId) => {
       const childIdStr = String(childId);
+      console.log('🔍 Processing invitation for childId:', childIdStr);
+      
       if (childIdStr.startsWith('pending-child-')) {
+        console.log('📝 Pending child invitation:', childIdStr);
         const pendingId = childIdStr.replace('pending-child-', '');
         return apiService.createPendingInvitations(selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id), [pendingId]);
       } else {
-        const connectedChild = connectedChildren.find(c => c.uuid === childIdStr);
-        if (connectedChild && connectedChild.parent_id) {
-          return apiService.sendActivityInvitation(selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id), connectedChild.parent_id, childIdStr);
+        console.log('👥 Looking for connected child with UUID:', childIdStr);
+        console.log('👥 Available connectedChildren:', connectedChildren);
+        const connectedChild = connectedChildren.find(c => c.uuid === childIdStr || c.connected_child_uuid === childIdStr);
+        console.log('🔍 Found connectedChild:', connectedChild);
+        
+        if (connectedChild) {
+          console.log('📧 Attempting to send invitation:', {
+            activityId: selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id),
+            parentId: connectedChild.parent_id || connectedChild.parentUuid,
+            childId: childIdStr,
+            hasParentId: !!connectedChild.parent_id,
+            hasParentUuid: !!connectedChild.parentUuid
+          });
+          
+          const parentId = connectedChild.parent_id || connectedChild.parentUuid;
+          if (parentId) {
+            return apiService.sendActivityInvitation(selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id), parentId, childIdStr);
+          } else {
+            console.error('❌ No parent ID found for connectedChild:', connectedChild);
+          }
+        } else {
+          console.error('❌ Connected child not found for UUID:', childIdStr);
         }
       }
     });
@@ -1103,6 +1135,13 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const handleUpdateActivity = async () => {
+    console.log('🚀 handleUpdateActivity called:', {
+      selectedActivity: selectedActivity?.name,
+      newActivityName: newActivity.name,
+      selectedConnectedChildren,
+      currentPage
+    });
+    
     if (!selectedActivity || !newActivity.name.trim()) {
       alert('Please enter activity name');
       return;
@@ -1116,6 +1155,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
     setAddingActivity(true);
     try {
+      // Get activity UUID - prioritize UUID over numeric ID for consistency
+      const activityUuid = (selectedActivity as any).activity_uuid || 
+                           (selectedActivity as any).uuid;
+      
       const originalDate = selectedActivity.start_date.split('T')[0];
       const selectedDatesSorted = [...selectedDates].sort();
       const firstSelectedDate = selectedDatesSorted[0];
@@ -1137,19 +1180,16 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       // Update the original activity with the first selected date
       const mainActivityData = {
         ...baseActivityData,
-        start_date: firstSelectedDate,
-        end_date: firstSelectedDate
+        start_date: firstSelectedDate || originalDate,
+        end_date: firstSelectedDate || originalDate
       };
-
-      // Get activity UUID - prioritize UUID over numeric ID for consistency
-      const activityUuid = (selectedActivity as any).activity_uuid || 
-                           (selectedActivity as any).uuid;
       
-      console.log('🔍 Activity UUID resolution:', {
-        activity_uuid: (selectedActivity as any).activity_uuid,
-        uuid: (selectedActivity as any).uuid,
-        resolved: activityUuid,
-        selectedActivity
+      console.log('🔍 Activity update data being sent:', {
+        activityUuid,
+        mainActivityData,
+        originalDate,
+        selectedDates,
+        firstSelectedDate
       });
       
       if (!activityUuid) {
@@ -1159,7 +1199,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         return;
       }
       
+      console.log('🚀 Calling apiService.updateActivity...');
       const response = await apiService.updateActivity(activityUuid, mainActivityData);
+      console.log('🚀 Activity update response:', response);
       
       if (response.success) {
         let successMessage = 'Activity updated successfully!';
@@ -1191,7 +1233,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         }
 
         // Automatically send invitations if there are selected children
+        console.log('📧 About to send invitations after activity update...');
         const invitationResult = await sendInvitations();
+        console.log('📧 Invitation result:', invitationResult);
         if (invitationResult.count > 0) {
           successMessage += ` ${invitationResult.count} invitation${invitationResult.count > 1 ? 's' : ''} sent!`;
           setSelectedConnectedChildren([]);
@@ -1215,7 +1259,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const handleDeleteActivity = async (activity: Activity) => {
     if (window.confirm(`Are you sure you want to delete "${activity.name}"?`)) {
       try {
-        const response = await apiService.deleteActivity(activity.id);
+        const response = await apiService.deleteActivity(activity.uuid || activity.activity_uuid || String(activity.id));
         if (response.success) {
           goBack();
           loadActivities();
@@ -1503,14 +1547,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   };
 
-  const handleSendInvitation = async (invitedParentId: number, childId?: number) => {
+  const handleSendInvitation = async (invitedParentUuid: string, childUuid?: string) => {
     if (!invitingActivity) return;
 
     try {
       const response = await apiService.sendActivityInvitation(
-        invitingActivity.uuid || String(invitingActivity.id), 
-        invitedParentId, 
-        childId ? String(childId) : undefined, 
+        invitingActivity.uuid || invitingActivity.activity_uuid || String(invitingActivity.id), 
+        invitedParentUuid, 
+        childUuid, 
         invitationMessage
       );
       

@@ -1282,6 +1282,267 @@ app.put('/api/users/change-password', authenticateToken, async (req, res) => {
     }
 });
 
+// Parent management endpoints
+// Get all parents for current account
+app.get('/api/parents', authenticateToken, async (req, res) => {
+    try {
+        const client = await pool.connect();
+        const currentUserUuid = req.user.uuid;
+        
+        console.log(`🔍 GET /api/parents - User UUID: ${currentUserUuid}`);
+        
+        // Get all parents for the current account (including the primary parent)
+        const result = await client.query(`
+            SELECT 
+                uuid,
+                account_uuid,
+                username,
+                email,
+                phone,
+                is_primary,
+                role,
+                created_at,
+                updated_at
+            FROM parents 
+            WHERE account_uuid = $1
+            ORDER BY is_primary DESC, created_at ASC
+        `, [currentUserUuid]);
+        
+        client.release();
+        
+        console.log(`📋 Found ${result.rows.length} parents for account`);
+        res.json({ 
+            success: true, 
+            data: result.rows 
+        });
+        
+    } catch (error) {
+        console.error('Get parents error:', error);
+        res.status(500).json({ success: false, error: 'Failed to get parents' });
+    }
+});
+
+// Create new parent for current account
+app.post('/api/parents', authenticateToken, async (req, res) => {
+    try {
+        const { username, email, phone, role = 'parent' } = req.body;
+        const currentUserUuid = req.user.uuid;
+        
+        console.log(`📝 POST /api/parents - Creating parent for account: ${currentUserUuid}`);
+        
+        // Validate required fields
+        if (!username || !email || !phone) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Username, email, and phone are required' 
+            });
+        }
+        
+        // Validate role
+        const validRoles = ['parent', 'guardian', 'caregiver'];
+        if (!validRoles.includes(role)) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Invalid role. Must be parent, guardian, or caregiver' 
+            });
+        }
+        
+        const client = await pool.connect();
+        
+        // Check if email already exists for this account
+        const existingParent = await client.query(`
+            SELECT uuid FROM parents 
+            WHERE account_uuid = $1 AND email = $2
+        `, [currentUserUuid, email]);
+        
+        if (existingParent.rows.length > 0) {
+            client.release();
+            return res.status(400).json({ 
+                success: false, 
+                error: 'A parent with this email already exists for this account' 
+            });
+        }
+        
+        // Create new parent
+        const result = await client.query(`
+            INSERT INTO parents (account_uuid, username, email, phone, role, is_primary)
+            VALUES ($1, $2, $3, $4, $5, false)
+            RETURNING uuid, account_uuid, username, email, phone, is_primary, role, created_at, updated_at
+        `, [currentUserUuid, username, email, phone, role]);
+        
+        client.release();
+        
+        const newParent = result.rows[0];
+        console.log(`✅ Created parent: ${newParent.uuid} for account: ${currentUserUuid}`);
+        
+        res.json({ 
+            success: true, 
+            data: newParent,
+            message: 'Parent added successfully' 
+        });
+        
+    } catch (error) {
+        console.error('Create parent error:', error);
+        res.status(500).json({ success: false, error: 'Failed to create parent' });
+    }
+});
+
+// Update parent information
+app.put('/api/parents/:parentUuid', authenticateToken, async (req, res) => {
+    try {
+        const { parentUuid } = req.params;
+        const { username, email, phone, role } = req.body;
+        const currentUserUuid = req.user.uuid;
+        
+        console.log(`🔄 PUT /api/parents/${parentUuid} - Updating parent`);
+        
+        // Validate role if provided
+        if (role) {
+            const validRoles = ['parent', 'guardian', 'caregiver'];
+            if (!validRoles.includes(role)) {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'Invalid role. Must be parent, guardian, or caregiver' 
+                });
+            }
+        }
+        
+        const client = await pool.connect();
+        
+        // Verify parent belongs to current account
+        const parentCheck = await client.query(`
+            SELECT uuid, is_primary FROM parents 
+            WHERE uuid = $1 AND account_uuid = $2
+        `, [parentUuid, currentUserUuid]);
+        
+        if (parentCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Parent not found or not authorized' 
+            });
+        }
+        
+        // Build dynamic update query
+        const updates = [];
+        const values = [];
+        let paramCount = 1;
+        
+        if (username) {
+            updates.push(`username = $${paramCount++}`);
+            values.push(username);
+        }
+        if (email) {
+            updates.push(`email = $${paramCount++}`);
+            values.push(email);
+        }
+        if (phone) {
+            updates.push(`phone = $${paramCount++}`);
+            values.push(phone);
+        }
+        if (role) {
+            updates.push(`role = $${paramCount++}`);
+            values.push(role);
+        }
+        
+        if (updates.length === 0) {
+            client.release();
+            return res.status(400).json({ 
+                success: false, 
+                error: 'No fields to update' 
+            });
+        }
+        
+        // Add WHERE clause parameters
+        values.push(parentUuid);
+        values.push(currentUserUuid);
+        
+        const updateQuery = `
+            UPDATE parents 
+            SET ${updates.join(', ')}, updated_at = NOW()
+            WHERE uuid = $${paramCount++} AND account_uuid = $${paramCount++}
+            RETURNING uuid, account_uuid, username, email, phone, is_primary, role, created_at, updated_at
+        `;
+        
+        const result = await client.query(updateQuery, values);
+        client.release();
+        
+        console.log(`✅ Updated parent: ${parentUuid}`);
+        
+        res.json({ 
+            success: true, 
+            data: result.rows[0],
+            message: 'Parent updated successfully' 
+        });
+        
+    } catch (error) {
+        console.error('Update parent error:', error);
+        res.status(500).json({ success: false, error: 'Failed to update parent' });
+    }
+});
+
+// Delete parent from account
+app.delete('/api/parents/:parentUuid', authenticateToken, async (req, res) => {
+    try {
+        const { parentUuid } = req.params;
+        const currentUserUuid = req.user.uuid;
+        
+        console.log(`🗑️ DELETE /api/parents/${parentUuid} - Removing parent`);
+        
+        const client = await pool.connect();
+        
+        // Verify parent belongs to current account and is not primary
+        const parentCheck = await client.query(`
+            SELECT uuid, is_primary, username FROM parents 
+            WHERE uuid = $1 AND account_uuid = $2
+        `, [parentUuid, currentUserUuid]);
+        
+        if (parentCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Parent not found or not authorized' 
+            });
+        }
+        
+        const parent = parentCheck.rows[0];
+        if (parent.is_primary) {
+            client.release();
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Cannot delete primary account holder' 
+            });
+        }
+        
+        // Delete the parent
+        const result = await client.query(`
+            DELETE FROM parents 
+            WHERE uuid = $1 AND account_uuid = $2 AND is_primary = false
+            RETURNING username
+        `, [parentUuid, currentUserUuid]);
+        
+        client.release();
+        
+        if (result.rows.length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Failed to delete parent' 
+            });
+        }
+        
+        console.log(`✅ Deleted parent: ${parentUuid} (${result.rows[0].username})`);
+        
+        res.json({ 
+            success: true, 
+            message: `Parent ${result.rows[0].username} removed successfully` 
+        });
+        
+    } catch (error) {
+        console.error('Delete parent error:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete parent' });
+    }
+});
+
 // Children endpoints
 app.get('/api/children', authenticateToken, async (req, res) => {
     try {

@@ -139,6 +139,25 @@ class ApiService {
     return this.request('put', '/api/users/change-password', passwordData);
   }
 
+  // Parents
+  async getParents(): Promise<ApiResponse<any[]>> {
+    // Add cache-busting parameter to force fresh request
+    const timestamp = Date.now();
+    return this.request('get', `/api/parents?_t=${timestamp}`);
+  }
+
+  async createParent(parentData: { username: string; email: string; phone: string; role?: string }): Promise<ApiResponse<any>> {
+    return this.request('post', '/api/parents', parentData);
+  }
+
+  async deleteParent(parentUuid: string): Promise<ApiResponse<any>> {
+    return this.request('delete', `/api/parents/${parentUuid}`);
+  }
+
+  async updateParent(parentUuid: string, parentData: any): Promise<ApiResponse<any>> {
+    return this.request('put', `/api/parents/${parentUuid}`, parentData);
+  }
+
   // Children
   async getChildren(): Promise<ApiResponse<any[]>> {
     // Add cache-busting parameter to force fresh request
@@ -175,12 +194,12 @@ class ApiService {
     return this.request('put', `/api/activities/update/${activityUuid}`, activityData);
   }
 
-  async deleteActivity(activityId: number): Promise<ApiResponse<any>> {
-    return this.request('delete', `/api/activities/delete/${activityId}`);
+  async deleteActivity(activityUuid: string): Promise<ApiResponse<any>> {
+    return this.request('delete', `/api/activities/delete/${activityUuid}`);
   }
 
-  async duplicateActivity(activityId: number, newStartDate: string, newEndDate: string): Promise<ApiResponse<any>> {
-    return this.request('post', `/api/activities/${activityId}/duplicate`, {
+  async duplicateActivity(activityUuid: string, newStartDate: string, newEndDate: string): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/activities/${activityUuid}/duplicate`, {
       new_start_date: newStartDate,
       new_end_date: newEndDate
     });
@@ -278,10 +297,9 @@ class ApiService {
   }
 
   // Activity Invitations - TEMPORARY: Accept both UUIDs and IDs during migration
-  async sendActivityInvitation(activityUuid: string, invitedParentId: string | number, childUuid?: string, message?: string): Promise<ApiResponse<any>> {
+  async sendActivityInvitation(activityUuid: string, invitedParentUuid: string, childUuid?: string, message?: string): Promise<ApiResponse<any>> {
     return this.request('post', `/api/activities/${activityUuid}/invite`, { 
-      invited_parent_id: typeof invitedParentId === 'number' ? invitedParentId : undefined,
-      invited_parent_uuid: typeof invitedParentId === 'string' ? invitedParentId : undefined,
+      invited_parent_uuid: invitedParentUuid,
       child_uuid: childUuid,
       message 
     });
@@ -329,12 +347,12 @@ class ApiService {
     return this.request('post', `/api/activity-invitations/${invitationUuid}/mark-status-viewed`);
   }
 
-  async getActivityParticipants(activityId: string): Promise<ApiResponse<any>> {
-    return this.request('get', `/api/activities/${activityId}/participants`);
+  async getActivityParticipants(activityUuid: string): Promise<ApiResponse<any>> {
+    return this.request('get', `/api/activities/${activityUuid}/participants`);
   }
 
-  async createPendingInvitations(activityId: string, pendingConnections: string[]): Promise<ApiResponse<any>> {
-    return this.request('post', `/api/activities/${activityId}/pending-invitations`, { 
+  async createPendingInvitations(activityUuid: string, pendingConnections: string[]): Promise<ApiResponse<any>> {
+    return this.request('post', `/api/activities/${activityUuid}/pending-invitations`, { 
       pending_connections: pendingConnections 
     });
   }

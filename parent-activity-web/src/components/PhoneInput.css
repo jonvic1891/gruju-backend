@@ -1,0 +1,151 @@
+.phone-input-container {
+  position: relative;
+  width: 100%;
+}
+
+.phone-input-wrapper {
+  display: flex;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  position: relative;
+}
+
+.phone-input-wrapper:focus-within {
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.country-selector {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: #f8f9fa;
+  border-right: 1px solid #ddd;
+  cursor: pointer;
+  user-select: none;
+  min-width: 80px;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.country-selector:hover {
+  background: #e9ecef;
+}
+
+.flag {
+  font-size: 16px;
+}
+
+.dial-code {
+  font-size: 14px;
+  color: #495057;
+  font-weight: 500;
+}
+
+.dropdown-arrow {
+  font-size: 10px;
+  color: #6c757d;
+  margin-left: 4px;
+}
+
+.phone-number-input {
+  flex: 1;
+  border: none;
+  padding: 12px;
+  font-size: 14px;
+  outline: none;
+  background: transparent;
+}
+
+.phone-number-input::placeholder {
+  color: #6c757d;
+}
+
+.country-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #ddd;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.country-option {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  cursor: pointer;
+  gap: 8px;
+}
+
+.country-option:hover {
+  background: #f8f9fa;
+}
+
+.country-option.selected {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.country-name {
+  flex: 1;
+  font-size: 14px;
+}
+
+.dropdown-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9998;
+  background: transparent;
+}
+
+.country-dropdown-portal {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 250px;
+  overflow-y: auto;
+  min-width: 200px;
+}
+
+/* Form integration styles */
+.phone-input-wrapper.form-input {
+  padding: 0;
+  border: 1px solid #ddd;
+  height: 44px;
+  border-radius: 8px;
+}
+
+.phone-input-wrapper.input {
+  padding: 0;
+  border: 1px solid #ddd;
+  height: 50px;
+  border-radius: 6px;
+}
+
+/* Responsive design */
+@media (max-width: 480px) {
+  .country-name {
+    display: none;
+  }
+  
+  .country-selector {
+    min-width: 70px;
+  }
+  
+  .country-dropdown {
+    max-height: 150px;
+  }
+}

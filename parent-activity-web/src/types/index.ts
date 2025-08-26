@@ -1,6 +1,7 @@
 // User types
 export interface User {
-  id: number;
+  id: number; // Internal database ID - DEPRECATED: Use UUIDs in frontend
+  uuid?: string; // UUID field for secure identification
   username: string;
   email: string;
   phone: string;
@@ -9,14 +10,29 @@ export interface User {
   updated_at: string;
 }
 
+// Parent types - for multiple parents per account
+export interface Parent {
+  id: number; // Internal database ID - DEPRECATED: Use UUIDs in frontend
+  uuid: string; // UUID field for secure identification - ALWAYS USE THIS
+  account_uuid: string; // UUID of the primary parent account - ALWAYS USE THIS
+  username: string;
+  email: string;
+  phone: string;
+  is_primary: boolean; // Whether this is the primary account holder
+  role: 'parent' | 'guardian' | 'caregiver';
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Child {
-  id: number;
-  uuid: string; // UUID field for secure identification
+  id: number; // Internal database ID - DEPRECATED: Use UUIDs in frontend
+  uuid: string; // UUID field for secure identification - ALWAYS USE THIS
   name: string;
   first_name?: string;
   last_name?: string;
   display_name?: string;
-  parent_id: number;
+  parent_id: number; // DEPRECATED: Backend only
+  parent_uuid?: string; // UUID field for parent - USE THIS
   age?: number;
   grade?: string;
   school?: string;
@@ -26,11 +42,11 @@ export interface Child {
 }
 
 export interface Activity {
-  id: number;
-  activity_uuid?: string; // UUID field for secure activity identification
-  uuid?: string; // Alternative UUID field name for compatibility
-  child_id: number;
-  child_uuid?: string; // UUID field for the child who owns this activity  
+  id: number; // Internal database ID - DEPRECATED: Use UUIDs in frontend
+  activity_uuid?: string; // UUID field for secure activity identification - ALWAYS USE THIS
+  uuid?: string; // Alternative UUID field name for compatibility - ALWAYS USE THIS
+  child_id: number; // DEPRECATED: Backend only
+  child_uuid?: string; // UUID field for the child who owns this activity - ALWAYS USE THIS
   name: string;
   description?: string;
   start_date: string;
@@ -53,13 +69,14 @@ export interface Activity {
   parent_username?: string;
   host_parent_username?: string;
   invitation_message?: string;
-  invitation_id?: number; // Backend API field for invitation ID
-  activity_id?: number; // Original activity ID for invitations (to load participants)
+  invitation_id?: number; // DEPRECATED: Backend only
+  invitation_uuid?: string; // UUID field for invitation - ALWAYS USE THIS
+  activity_id?: number; // DEPRECATED: Backend only
   // Additional fields for invitation handling in frontend
   isPendingInvitation?: boolean;
   isAcceptedInvitation?: boolean;
   isDeclinedInvitation?: boolean;
-  invitationId?: number;
+  invitationId?: number; // DEPRECATED: Use invitationUuid
   invitationUuid?: string;
   hostParent?: string;
   message?: string;
@@ -68,31 +85,37 @@ export interface Activity {
 }
 
 export interface Connection {
-  id: number;
-  uuid?: string; // UUID field for secure connection identification
-  connection_uuid?: string; // Alternative UUID field name
-  child1_id: number;
-  child1_uuid?: string; // UUID for child1
-  child2_id: number;
-  child2_uuid?: string; // UUID for child2
+  id: number; // Internal database ID - DEPRECATED: Use UUIDs in frontend
+  uuid?: string; // UUID field for secure connection identification - ALWAYS USE THIS
+  connection_uuid?: string; // Alternative UUID field name - ALWAYS USE THIS
+  child1_id: number; // DEPRECATED: Backend only
+  child1_uuid?: string; // UUID for child1 - ALWAYS USE THIS
+  child2_id: number; // DEPRECATED: Backend only
+  child2_uuid?: string; // UUID for child2 - ALWAYS USE THIS
   status: 'active' | 'deleted';
   created_at: string;
   // Extended fields from backend joins
   child1_name?: string;
   child1_parent_name?: string;
-  child1_parent_id?: number;
+  child1_parent_id?: number; // DEPRECATED: Backend only
+  child1_parent_uuid?: string; // UUID for child1's parent - ALWAYS USE THIS
   child2_name?: string;
   child2_parent_name?: string;
-  child2_parent_id?: number;
+  child2_parent_id?: number; // DEPRECATED: Backend only
+  child2_parent_uuid?: string; // UUID for child2's parent - ALWAYS USE THIS
 }
 
 export interface ConnectionRequest {
-  id: number;
-  request_uuid: string;
-  requester_id: number;
-  target_parent_id: number;
-  child_id: number;
-  target_child_id?: number;
+  id: number; // Internal database ID - DEPRECATED: Use UUIDs in frontend
+  request_uuid: string; // UUID field for request - ALWAYS USE THIS
+  requester_id: number; // DEPRECATED: Backend only
+  requester_uuid?: string; // UUID for requester - ALWAYS USE THIS
+  target_parent_id: number; // DEPRECATED: Backend only
+  target_parent_uuid?: string; // UUID for target parent - ALWAYS USE THIS
+  child_id: number; // DEPRECATED: Backend only
+  child_uuid?: string; // UUID for child - ALWAYS USE THIS
+  target_child_id?: number; // DEPRECATED: Backend only
+  target_child_uuid?: string; // UUID for target child - ALWAYS USE THIS
   status: 'pending' | 'accepted' | 'declined';
   message?: string;
   created_at: string;
@@ -115,11 +138,16 @@ export interface ConnectionRequest {
 }
 
 export interface ActivityInvitation {
-  id: number;
-  activity_id: number;
-  inviter_parent_id: number;
-  invited_parent_id: number;
-  child_id?: number;
+  id: number; // Internal database ID - DEPRECATED: Use UUIDs in frontend
+  invitation_uuid?: string; // UUID field for invitation - ALWAYS USE THIS
+  activity_id: number; // DEPRECATED: Backend only
+  activity_uuid?: string; // UUID for activity - ALWAYS USE THIS
+  inviter_parent_id: number; // DEPRECATED: Backend only
+  inviter_parent_uuid?: string; // UUID for inviter parent - ALWAYS USE THIS
+  invited_parent_id: number; // DEPRECATED: Backend only
+  invited_parent_uuid?: string; // UUID for invited parent - ALWAYS USE THIS
+  child_id?: number; // DEPRECATED: Backend only
+  child_uuid?: string; // UUID for child - ALWAYS USE THIS
   status: 'pending' | 'accepted' | 'declined';
   message?: string;
   created_at: string;
@@ -167,8 +195,8 @@ export interface AuthResponse {
 }
 
 export interface SearchResult {
-  id?: number;
-  user_uuid?: string;
+  id?: number; // DEPRECATED: Backend only
+  user_uuid?: string; // UUID field for user - ALWAYS USE THIS
   username: string;
   email?: string;
   phone?: string;
