@@ -775,6 +775,52 @@ function authenticateToken(req, res, next) {
     });
 }
 
+// Helper function to resolve account user ID for multi-parent support
+async function resolveAccountUserId(userUuid) {
+    const client = await pool.connect();
+    try {
+        // First check if this user is a primary parent (their own account)
+        const primaryParent = await client.query(
+            'SELECT account_uuid FROM parents WHERE uuid = (SELECT uuid FROM users WHERE uuid = $1) AND is_primary = true',
+            [userUuid]
+        );
+        
+        if (primaryParent.rows.length > 0) {
+            // This is a primary parent - find their user ID
+            const userResult = await client.query(
+                'SELECT id FROM users WHERE uuid = $1',
+                [primaryParent.rows[0].account_uuid]
+            );
+            return userResult.rows[0]?.id;
+        }
+        
+        // Check if this user is an additional parent
+        const additionalParent = await client.query(
+            'SELECT account_uuid FROM parents WHERE uuid = (SELECT uuid FROM users WHERE uuid = $1) AND is_primary = false',
+            [userUuid]
+        );
+        
+        if (additionalParent.rows.length > 0) {
+            // This is an additional parent - find the account user ID
+            const accountResult = await client.query(
+                'SELECT id FROM users WHERE uuid = $1',
+                [additionalParent.rows[0].account_uuid]
+            );
+            return accountResult.rows[0]?.id;
+        }
+        
+        // Fallback: this user is not in parents table (legacy user)
+        const legacyUser = await client.query(
+            'SELECT id FROM users WHERE uuid = $1',
+            [userUuid]
+        );
+        return legacyUser.rows[0]?.id;
+        
+    } finally {
+        client.release();
+    }
+}
+
 // Admin middleware
 function requireAdmin(req, res, next) {
     if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'super_admin')) {
@@ -1325,16 +1371,24 @@ app.get('/api/parents', authenticateToken, async (req, res) => {
 // Create new parent for current account
 app.post('/api/parents', authenticateToken, async (req, res) => {
     try {
-        const { username, email, phone, role = 'parent' } = req.body;
+        const { username, email, phone, password, role = 'parent' } = req.body;
         const currentUserUuid = req.user.uuid;
         
         console.log(`📝 POST /api/parents - Creating parent for account: ${currentUserUuid}`);
         
         // Validate required fields
-        if (!username || !email || !phone) {
+        if (!username || !email || !phone || !password) {
             return res.status(400).json({ 
                 success: false, 
-                error: 'Username, email, and phone are required' 
+                error: 'Username, email, phone, and password are required' 
+            });
+        }
+        
+        // Validate password length
+        if (password.length < 6) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Password must be at least 6 characters long' 
             });
         }
         
@@ -1349,37 +1403,77 @@ app.post('/api/parents', authenticateToken, async (req, res) => {
         
         const client = await pool.connect();
         
-        // Check if email already exists for this account
-        const existingParent = await client.query(`
-            SELECT uuid FROM parents 
-            WHERE account_uuid = $1 AND email = $2
-        `, [currentUserUuid, email]);
-        
-        if (existingParent.rows.length > 0) {
+        try {
+            // Start transaction
+            await client.query('BEGIN');
+            
+            // Check if email already exists in users table (global check)
+            const existingUser = await client.query(`
+                SELECT uuid FROM users WHERE email = $1
+            `, [email]);
+            
+            if (existingUser.rows.length > 0) {
+                await client.query('ROLLBACK');
+                client.release();
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'An account with this email already exists' 
+                });
+            }
+            
+            // Check if email already exists for this account in parents table
+            const existingParent = await client.query(`
+                SELECT uuid FROM parents 
+                WHERE account_uuid = $1 AND email = $2
+            `, [currentUserUuid, email]);
+            
+            if (existingParent.rows.length > 0) {
+                await client.query('ROLLBACK');
+                client.release();
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'A parent with this email already exists for this account' 
+                });
+            }
+            
+            // Hash the password
+            const saltRounds = 10;
+            const hashedPassword = await bcrypt.hash(password, saltRounds);
+            
+            // Create new user account for the parent
+            const userResult = await client.query(`
+                INSERT INTO users (username, email, phone, password, role)
+                VALUES ($1, $2, $3, $4, 'user')
+                RETURNING uuid, username, email, phone, role, created_at, updated_at
+            `, [username, email, phone, hashedPassword]);
+            
+            const newUser = userResult.rows[0];
+            
+            // Create parent record linked to the account
+            const parentResult = await client.query(`
+                INSERT INTO parents (uuid, account_uuid, username, email, phone, role, is_primary)
+                VALUES ($1, $2, $3, $4, $5, $6, false)
+                RETURNING uuid, account_uuid, username, email, phone, is_primary, role, created_at, updated_at
+            `, [newUser.uuid, currentUserUuid, username, email, phone, role]);
+            
+            // Commit transaction
+            await client.query('COMMIT');
             client.release();
-            return res.status(400).json({ 
-                success: false, 
-                error: 'A parent with this email already exists for this account' 
+            
+            const newParent = parentResult.rows[0];
+            console.log(`✅ Created parent: ${newParent.uuid} and user account for account: ${currentUserUuid}`);
+            
+            res.json({ 
+                success: true, 
+                data: newParent,
+                message: 'Parent added successfully! They can now log in with their email and password.' 
             });
+            
+        } catch (transactionError) {
+            await client.query('ROLLBACK');
+            client.release();
+            throw transactionError;
         }
-        
-        // Create new parent
-        const result = await client.query(`
-            INSERT INTO parents (account_uuid, username, email, phone, role, is_primary)
-            VALUES ($1, $2, $3, $4, $5, false)
-            RETURNING uuid, account_uuid, username, email, phone, is_primary, role, created_at, updated_at
-        `, [currentUserUuid, username, email, phone, role]);
-        
-        client.release();
-        
-        const newParent = result.rows[0];
-        console.log(`✅ Created parent: ${newParent.uuid} for account: ${currentUserUuid}`);
-        
-        res.json({ 
-            success: true, 
-            data: newParent,
-            message: 'Parent added successfully' 
-        });
         
     } catch (error) {
         console.error('Create parent error:', error);
@@ -1546,6 +1640,16 @@ app.delete('/api/parents/:parentUuid', authenticateToken, async (req, res) => {
 // Children endpoints
 app.get('/api/children', authenticateToken, async (req, res) => {
     try {
+        console.log(`🔍 GET /api/children - User: ${req.user.email} (UUID: ${req.user.uuid})`);
+        
+        // Resolve the account user ID (handles both primary and additional parents)
+        const accountUserId = await resolveAccountUserId(req.user.uuid);
+        console.log(`📋 Resolved account user ID: ${accountUserId}`);
+        
+        if (!accountUserId) {
+            return res.status(404).json({ success: false, error: 'Account not found' });
+        }
+        
         const client = await pool.connect();
         // ✅ SECURITY: Return only UUID, no sequential IDs
         const result = await client.query(
@@ -1558,10 +1662,11 @@ app.get('/api/children', authenticateToken, async (req, res) => {
                 ELSE c.name 
              END as display_name
              FROM children c WHERE c.parent_id = $1 ORDER BY c.created_at DESC`,
-            [req.user.id]
+            [accountUserId]
         );
         client.release();
 
+        console.log(`✅ Found ${result.rows.length} children for account user ID ${accountUserId}`);
         res.json({
             success: true,
             data: result.rows
@@ -1597,14 +1702,25 @@ app.post('/api/children', authenticateToken, async (req, res) => {
             return res.status(400).json({ success: false, error: 'First name is required' });
         }
 
+        console.log(`🔍 POST /api/children - User: ${req.user.email} (UUID: ${req.user.uuid})`);
+        
+        // Resolve the account user ID (handles both primary and additional parents)
+        const accountUserId = await resolveAccountUserId(req.user.uuid);
+        console.log(`📋 Resolved account user ID for child creation: ${accountUserId}`);
+        
+        if (!accountUserId) {
+            return res.status(404).json({ success: false, error: 'Account not found' });
+        }
+
         const client = await pool.connect();
         // ✅ SECURITY: Only return necessary fields with UUID
         const result = await client.query(
             'INSERT INTO children (name, first_name, last_name, parent_id, age, grade, school, interests) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING uuid, name, first_name, last_name, age, grade, school, interests, created_at, updated_at',
-            [fullName, firstName, lastName, req.user.id, age, grade, school, interests]
+            [fullName, firstName, lastName, accountUserId, age, grade, school, interests]
         );
         client.release();
 
+        console.log(`✅ Created child: ${fullName} for account user ID ${accountUserId}`);
         res.json({
             success: true,
             data: result.rows[0]
@@ -2076,6 +2192,16 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
     try {
         const { start, end } = req.query;
         
+        console.log(`🔍 GET /api/calendar/activities - User: ${req.user.email} (UUID: ${req.user.uuid})`);
+        
+        // Resolve the account user ID (handles both primary and additional parents)
+        const accountUserId = await resolveAccountUserId(req.user.uuid);
+        console.log(`📋 Resolved account user ID for calendar activities: ${accountUserId}`);
+        
+        if (!accountUserId) {
+            return res.status(404).json({ success: false, error: 'Account not found' });
+        }
+        
         const client = await pool.connect();
         
         let query = `
@@ -2147,7 +2273,7 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
                 ai.id IS NOT NULL
             )
         `;
-        let params = [req.user.id];
+        let params = [accountUserId];
 
         if (start && end) {
             query += ' AND a.start_date BETWEEN $2 AND $3';
@@ -2161,7 +2287,7 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
 
         // Debug: Log ALL activities to see what's being returned
         console.log('🔍 Calendar Activities Debug:');
-        console.log(`Found ${result.rows.length} activities for user ${req.user.id} (${req.user.email})`);
+        console.log(`Found ${result.rows.length} activities for account user ${accountUserId} (${req.user.email})`);
         result.rows.forEach((activity, index) => {
             console.log(`${index + 1}. Activity: "${activity.name}" (UUID: ${activity.activity_uuid})`);
             console.log(`   - is_shared: ${activity.is_shared}`);
