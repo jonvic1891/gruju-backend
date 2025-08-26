@@ -5046,4 +5046,148 @@ app.delete('/api/admin/cleanup-recent-requests', authenticateToken, async (req, 
     }
 });
 
+// Admin endpoint to delete specific test accounts
+app.delete('/api/admin/delete-test-account', authenticateToken, async (req, res) => {
+    try {
+        const { email, user_id } = req.body;
+        
+        // Must provide either email or user_id
+        if (!email && !user_id) {
+            return res.status(400).json({
+                success: false,
+                error: 'Must provide either email or user_id'
+            });
+        }
+        
+        console.log('🧹 ADMIN: Deleting test account', { email, user_id });
+        
+        const client = await pool.connect();
+        
+        let userQuery;
+        let queryParams;
+        
+        if (email) {
+            userQuery = 'SELECT id, email, phone FROM users WHERE email = $1';
+            queryParams = [email];
+        } else {
+            userQuery = 'SELECT id, email, phone FROM users WHERE id = $1';
+            queryParams = [user_id];
+        }
+        
+        const userResult = await client.query(userQuery, queryParams);
+        
+        if (userResult.rows.length === 0) {
+            client.release();
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+        
+        const user = userResult.rows[0];
+        
+        // Safety check: only allow deletion of @example.com accounts
+        if (!user.email.endsWith('@example.com')) {
+            client.release();
+            return res.status(403).json({
+                success: false,
+                error: 'Can only delete test accounts with @example.com domains'
+            });
+        }
+        
+        console.log(`🗑️ Deleting test account: ${user.email} (ID: ${user.id})`);
+        
+        // Begin transaction for safe deletion
+        await client.query('BEGIN');
+        
+        try {
+            // Get all children for this user
+            const childrenResult = await client.query('SELECT id FROM children WHERE parent_id = $1', [user.id]);
+            const childIds = childrenResult.rows.map(row => row.id);
+            
+            console.log(`Found ${childIds.length} children to clean up`);
+            
+            // Delete in order to respect foreign key constraints
+            
+            // 1. Delete activity invitations for activities created by this user
+            await client.query(`
+                DELETE FROM activity_invitations 
+                WHERE activity_id IN (SELECT id FROM activities WHERE parent_id = $1)
+            `, [user.id]);
+            
+            // 2. Delete pending activity invitations for activities created by this user
+            await client.query(`
+                DELETE FROM pending_activity_invitations 
+                WHERE activity_id IN (SELECT id FROM activities WHERE parent_id = $1)
+            `, [user.id]);
+            
+            // 3. Delete activity invitations where this user was invited
+            await client.query('DELETE FROM activity_invitations WHERE invited_parent_id = $1', [user.id]);
+            
+            // 4. Delete activities created by this user
+            const deletedActivitiesResult = await client.query('DELETE FROM activities WHERE parent_id = $1 RETURNING id', [user.id]);
+            console.log(`Deleted ${deletedActivitiesResult.rows.length} activities`);
+            
+            // 5. Delete connections involving this user's children
+            if (childIds.length > 0) {
+                const deletedConnectionsResult = await client.query(`
+                    DELETE FROM connections 
+                    WHERE child1_id = ANY($1) OR child2_id = ANY($1)
+                    RETURNING id
+                `, [childIds]);
+                console.log(`Deleted ${deletedConnectionsResult.rows.length} connections`);
+            }
+            
+            // 6. Delete connection requests where this user was involved
+            const deletedRequestsResult = await client.query(`
+                DELETE FROM connection_requests 
+                WHERE requester_id = $1 OR target_parent_id = $1
+                RETURNING id
+            `, [user.id]);
+            console.log(`Deleted ${deletedRequestsResult.rows.length} connection requests`);
+            
+            // 7. Delete children
+            if (childIds.length > 0) {
+                await client.query('DELETE FROM children WHERE parent_id = $1', [user.id]);
+                console.log(`Deleted ${childIds.length} children`);
+            }
+            
+            // 8. Finally delete the user
+            await client.query('DELETE FROM users WHERE id = $1', [user.id]);
+            console.log(`Deleted user: ${user.email}`);
+            
+            // Commit transaction
+            await client.query('COMMIT');
+            
+            client.release();
+            
+            res.json({
+                success: true,
+                message: 'Test account deleted successfully',
+                deleted: {
+                    user: user.email,
+                    user_id: user.id,
+                    children: childIds.length,
+                    activities: deletedActivitiesResult.rows.length,
+                    connections: childIds.length > 0 ? deletedConnectionsResult.rows.length : 0,
+                    requests: deletedRequestsResult.rows.length
+                }
+            });
+            
+        } catch (deleteError) {
+            await client.query('ROLLBACK');
+            client.release();
+            throw deleteError;
+        }
+        
+    } catch (error) {
+        console.error('❌ Delete test account error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to delete test account',
+            details: error.message
+        });
+    }
+});
+
 startServer();
