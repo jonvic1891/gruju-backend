@@ -146,7 +146,7 @@ class ApiService {
     return this.request('get', `/api/parents?_t=${timestamp}`);
   }
 
-  async createParent(parentData: { username: string; email: string; phone: string; role?: string }): Promise<ApiResponse<any>> {
+  async createParent(parentData: { username: string; email: string; phone: string; password: string; role?: string }): Promise<ApiResponse<any>> {
     return this.request('post', '/api/parents', parentData);
   }
 

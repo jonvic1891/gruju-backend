@@ -22,10 +22,15 @@ const ProfileScreen = () => {
   // Parent management state
   const [parents, setParents] = useState<Parent[]>([]);
   const [showAddParentModal, setShowAddParentModal] = useState(false);
-  const [newParentUsername, setNewParentUsername] = useState('');
+  const [newParentFirstName, setNewParentFirstName] = useState('');
+  const [newParentLastName, setNewParentLastName] = useState('');
   const [newParentEmail, setNewParentEmail] = useState('');
   const [newParentPhone, setNewParentPhone] = useState('');
+  const [newParentPassword, setNewParentPassword] = useState('');
+  const [newParentConfirmPassword, setNewParentConfirmPassword] = useState('');
   const [newParentRole, setNewParentRole] = useState('parent');
+  const [showParentPassword, setShowParentPassword] = useState(false);
+  const [showParentConfirmPassword, setShowParentConfirmPassword] = useState(false);
   const [addingParent, setAddingParent] = useState(false);
   
   const apiService = ApiService.getInstance();
@@ -62,8 +67,20 @@ const ProfileScreen = () => {
   };
 
   const handleCreateParent = async () => {
-    if (!newParentUsername.trim() || !newParentEmail.trim() || !newParentPhone.trim()) {
+    if (!newParentFirstName.trim() || !newParentLastName.trim() || !newParentEmail.trim() || !newParentPhone.trim() || !newParentPassword.trim()) {
       alert('Please fill in all fields');
+      return;
+    }
+
+    // Validate password match
+    if (newParentPassword !== newParentConfirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
+
+    // Validate password length
+    if (newParentPassword.length < 6) {
+      alert('Password must be at least 6 characters long');
       return;
     }
 
@@ -84,17 +101,21 @@ const ProfileScreen = () => {
     setAddingParent(true);
     try {
       const response = await apiService.createParent({
-        username: newParentUsername.trim(),
+        username: `${newParentFirstName.trim()} ${newParentLastName.trim()}`,
         email: newParentEmail.trim(),
         phone: newParentPhone.trim(),
+        password: newParentPassword,
         role: newParentRole
       });
 
       if (response.success) {
         alert('Parent added successfully!');
-        setNewParentUsername('');
+        setNewParentFirstName('');
+        setNewParentLastName('');
         setNewParentEmail('');
         setNewParentPhone('');
+        setNewParentPassword('');
+        setNewParentConfirmPassword('');
         setNewParentRole('parent');
         setShowAddParentModal(false);
         loadParents(); // Reload the parents list
@@ -481,15 +502,28 @@ const ProfileScreen = () => {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Add Parent to Account</h3>
             
-            <div className="form-group">
-              <label>Full Name</label>
-              <input
-                type="text"
-                value={newParentUsername}
-                onChange={(e) => setNewParentUsername(e.target.value)}
-                className="form-input"
-                placeholder="Enter parent's full name"
-              />
+            <div className="name-fields">
+              <div className="form-group">
+                <label>First Name</label>
+                <input
+                  type="text"
+                  value={newParentFirstName}
+                  onChange={(e) => setNewParentFirstName(e.target.value)}
+                  className="form-input"
+                  placeholder="First name"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Last Name</label>
+                <input
+                  type="text"
+                  value={newParentLastName}
+                  onChange={(e) => setNewParentLastName(e.target.value)}
+                  className="form-input"
+                  placeholder="Last name"
+                />
+              </div>
             </div>
 
             <div className="form-group">
@@ -511,6 +545,48 @@ const ProfileScreen = () => {
                 className="form-input"
                 placeholder="Enter parent's phone number"
               />
+            </div>
+
+            <div className="form-group">
+              <label>Password</label>
+              <div className="password-field">
+                <input
+                  type={showParentPassword ? "text" : "password"}
+                  value={newParentPassword}
+                  onChange={(e) => setNewParentPassword(e.target.value)}
+                  className="form-input password-input"
+                  placeholder="Enter password (min 6 characters)"
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowParentPassword(!showParentPassword)}
+                >
+                  {showParentPassword ? '👁️' : '🙈'}
+                </button>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Confirm Password</label>
+              <div className="password-field">
+                <input
+                  type={showParentConfirmPassword ? "text" : "password"}
+                  value={newParentConfirmPassword}
+                  onChange={(e) => setNewParentConfirmPassword(e.target.value)}
+                  className="form-input password-input"
+                  placeholder="Confirm password"
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowParentConfirmPassword(!showParentConfirmPassword)}
+                >
+                  {showParentConfirmPassword ? '👁️' : '🙈'}
+                </button>
+              </div>
             </div>
 
             <div className="form-group">
