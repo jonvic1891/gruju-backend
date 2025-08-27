@@ -128,15 +128,40 @@ async function debugParentAccess() {
                 console.log('❌ Account user not found');
             }
             
+            // Check users table structure first
+            console.log('\n🔍 Checking users table columns...');
+            const usersColumns = await client.query(`
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND table_schema = 'public'
+                ORDER BY ordinal_position
+            `);
+            console.log('   Users table columns:');
+            usersColumns.rows.forEach(col => {
+                console.log(`     - ${col.column_name} (${col.data_type})`);
+            });
+            
             // Also check if there are any children linked to the additional parent's user record
             console.log('\n🔍 Looking for additional parent user record...');
             const additionalUser = await client.query(`
-                SELECT id, uuid, username, email FROM users WHERE uuid = $1
+                SELECT * FROM users WHERE uuid = $1
             `, [parent.uuid]);
+            
+            console.log('\n🔍 All recent users (to find the additional parent)...');
+            const recentUsers = await client.query(`
+                SELECT id, uuid, username, email, password_hash IS NOT NULL as has_password, created_at
+                FROM users ORDER BY created_at DESC LIMIT 5
+            `);
+            
+            recentUsers.rows.forEach((user, i) => {
+                console.log(`   ${i+1}. ${user.username} (${user.email}) - ID: ${user.id}, UUID: ${user.uuid}, Has Password: ${user.has_password}`);
+                console.log(`      Created: ${user.created_at}`);
+            });
             
             if (additionalUser.rows.length > 0) {
                 const addUser = additionalUser.rows[0];
                 console.log(`   Additional Parent User: ${addUser.username} (${addUser.email}) - ID: ${addUser.id}`);
+                console.log(`   Has password hash: ${addUser.password_hash ? 'Yes' : 'No'}`);
                 
                 const childrenViaDirect = await client.query(`
                     SELECT name, uuid, parent_id FROM children WHERE parent_id = $1
@@ -146,6 +171,20 @@ async function debugParentAccess() {
                 childrenViaDirect.rows.forEach((child, i) => {
                     console.log(`   ${i+1}. ${child.name} (${child.uuid}) - Parent ID: ${child.parent_id}`);
                 });
+                
+                // Check if we can find the user account by email
+                console.log('\n🔍 Finding user record by email...');
+                const userByEmail = await client.query(`
+                    SELECT * FROM users WHERE email = $1
+                `, [parent.email]);
+                
+                if (userByEmail.rows.length > 0) {
+                    const emailUser = userByEmail.rows[0];
+                    console.log(`   User by email: ${emailUser.username} (${emailUser.email}) - ID: ${emailUser.id}, UUID: ${emailUser.uuid}`);
+                    console.log(`   Has password hash: ${emailUser.password_hash ? 'Yes' : 'No'}`);
+                } else {
+                    console.log('   No user found with this email');
+                }
             } else {
                 console.log('   Additional parent has no user record (expected for additional parents)');
             }

@@ -1442,7 +1442,7 @@ app.post('/api/parents', authenticateToken, async (req, res) => {
             
             // Create new user account for the parent
             const userResult = await client.query(`
-                INSERT INTO users (username, email, phone, password, role)
+                INSERT INTO users (username, email, phone, password_hash, role)
                 VALUES ($1, $2, $3, $4, 'user')
                 RETURNING uuid, username, email, phone, role, created_at, updated_at
             `, [username, email, phone, hashedPassword]);
