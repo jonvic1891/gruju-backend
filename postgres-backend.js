@@ -2908,6 +2908,21 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
             }
         }
 
+        // Check for existing pending request to prevent duplicates
+        const existingRequest = await client.query(
+            'SELECT uuid FROM connection_requests WHERE requester_id = $1 AND target_parent_id = $2 AND child_uuid = $3 AND target_child_uuid = $4 AND status = $5',
+            [accountUserId, targetParentDbId, child_uuid, target_child_uuid, 'pending']
+        );
+        
+        if (existingRequest.rows.length > 0) {
+            client.release();
+            return res.status(409).json({ 
+                success: false, 
+                error: 'A pending connection request already exists for this combination',
+                existingRequestUuid: existingRequest.rows[0].uuid
+            });
+        }
+
         // ✅ SECURITY: Only return necessary fields, not RETURNING *
         const result = await client.query(
             'INSERT INTO connection_requests (requester_id, target_parent_id, child_uuid, target_child_uuid, message, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING uuid, message, status, created_at',
