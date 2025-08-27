@@ -1071,6 +1071,7 @@ app.post('/api/auth/login', async (req, res) => {
                 uuid: user.uuid,
                 username: user.username,
                 email: user.email,
+                phone: user.phone,
                 role: user.role,
                 family_name: user.family_name
             }
@@ -1162,7 +1163,7 @@ app.post('/api/auth/register', async (req, res) => {
 app.get('/api/auth/verify', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
-        const result = await client.query('SELECT id, username, email, phone, role, family_name FROM users WHERE id = $1 AND is_active = true', [req.user.id]);
+        const result = await client.query('SELECT uuid, username, email, phone, role, family_name FROM users WHERE id = $1 AND is_active = true', [req.user.id]);
         client.release();
 
         if (result.rows.length === 0) {
@@ -1171,7 +1172,9 @@ app.get('/api/auth/verify', authenticateToken, async (req, res) => {
 
         res.json({
             success: true,
-            user: result.rows[0]
+            data: {
+                user: result.rows[0]
+            }
         });
     } catch (error) {
         console.error('Auth verify error:', error);
