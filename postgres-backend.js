@@ -2958,25 +2958,33 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
         const requestUuid = req.params.requestId;
         const { action } = req.body;
 
-        console.log('📝 Connection request response:', { requestUuid, action, userId: req.user.id });
+        console.log(`📝 Connection request response - User: ${req.user.email} (UUID: ${req.user.uuid}):`, { requestUuid, action });
 
         if (!['accept', 'reject'].includes(action)) {
             return res.status(400).json({ success: false, error: 'Invalid action' });
         }
 
+        // Resolve the account user ID (handles both primary and additional parents)
+        const accountUserId = await resolveAccountUserId(req.user.uuid);
+        console.log(`📋 Resolved account user ID for connection respond: ${accountUserId}`);
+        
+        if (!accountUserId) {
+            return res.status(404).json({ success: false, error: 'Account not found' });
+        }
+
         const client = await pool.connect();
         
-        // First, let's see all connection requests for this user
+        // First, let's see all connection requests for this account
         const allRequests = await client.query(
             'SELECT * FROM connection_requests WHERE target_parent_id = $1',
-            [req.user.id]
+            [accountUserId]
         );
-        console.log('📋 All connection requests for user:', allRequests.rows);
+        console.log('📋 All connection requests for account:', allRequests.rows);
         
-        // ✅ SECURITY: Verify the request is for this user using UUID
+        // ✅ SECURITY: Verify the request is for this account using UUID
         const request = await client.query(
             'SELECT * FROM connection_requests WHERE uuid = $1 AND target_parent_id = $2 AND status = $3',
-            [requestUuid, req.user.id, 'pending']
+            [requestUuid, accountUserId, 'pending']
         );
 
         console.log('🔍 Specific request found:', request.rows);
@@ -2988,7 +2996,8 @@ app.post('/api/connections/respond/:requestId', authenticateToken, async (req, r
                 error: 'Connection request not found',
                 debug: {
                     requestUuid,
-                    userId: req.user.id,
+                    userId: req.user.uuid,
+                    accountUserId,
                     allRequests: allRequests.rows
                 }
             });
