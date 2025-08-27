@@ -994,11 +994,41 @@ app.post('/api/auth/login', async (req, res) => {
         const { email, password } = req.body;
         
         if (!email || !password) {
-            return res.status(400).json({ success: false, error: 'Email and password required' });
+            return res.status(400).json({ success: false, error: 'Email/phone and password required' });
         }
 
         const client = await pool.connect();
-        const result = await client.query('SELECT * FROM users WHERE email = $1 AND is_active = true', [email]);
+        let result;
+        
+        // Check if input looks like a phone number (contains digits and possibly + or -)
+        const isPhoneNumber = /^[\+\-\d\s\(\)]+$/.test(email.replace(/\s/g, ''));
+        
+        if (isPhoneNumber) {
+            // Login with phone number - try exact match first, then with country code variations
+            const cleanPhone = email.replace(/[\s\(\)\-]/g, ''); // Remove spaces, parentheses, dashes
+            
+            // Try multiple phone format variations
+            const phoneVariations = [
+                cleanPhone,
+                cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`,
+                cleanPhone.startsWith('+44') ? cleanPhone.replace('+44', '0') : cleanPhone,
+                cleanPhone.startsWith('0') && !cleanPhone.startsWith('+') ? `+44${cleanPhone.substring(1)}` : cleanPhone
+            ];
+            
+            console.log('📞 Attempting phone login with variations:', phoneVariations);
+            
+            for (const phoneVar of phoneVariations) {
+                result = await client.query('SELECT * FROM users WHERE phone = $1 AND is_active = true', [phoneVar]);
+                if (result.rows.length > 0) {
+                    console.log(`✅ Phone login successful with format: ${phoneVar}`);
+                    break;
+                }
+            }
+        } else {
+            // Login with email - case insensitive
+            result = await client.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND is_active = true', [email]);
+            console.log(`📧 Email login attempt for: ${email} (case insensitive)`);
+        }
 
         if (result.rows.length === 0) {
             await logActivity('warn', `Failed login attempt for ${email}`, null, null, req);

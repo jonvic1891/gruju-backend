@@ -16,6 +16,7 @@ const LoginScreen = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [phone, setPhone] = useState('');
+  const [loginWithPhone, setLoginWithPhone] = useState(false);
   const { login, register, isLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -27,6 +28,7 @@ const LoginScreen = () => {
     setLastName('');
     setConfirmPassword('');
     setPhone('');
+    setLoginWithPhone(false);
   }, [isRegisterMode]);
 
   const demoAccounts = [
@@ -83,7 +85,9 @@ const LoginScreen = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email.trim() || !password.trim()) {
+    const loginIdentifier = loginWithPhone ? phone : email;
+    
+    if (!loginIdentifier.trim() || !password.trim()) {
       alert('Please fill in all fields');
       return;
     }
@@ -113,7 +117,16 @@ const LoginScreen = () => {
         alert(`Registration Failed: ${result.error}`);
       }
     } else {
-      const result = await login({ email, password });
+      // For login, validate phone number if using phone login
+      if (loginWithPhone) {
+        const phoneValidation = validatePhoneNumber(phone);
+        if (!phoneValidation.isValid) {
+          alert(`Invalid phone number: ${phoneValidation.error}`);
+          return;
+        }
+      }
+      
+      const result = await login({ email: loginIdentifier, password });
       if (result.success) {
         navigate('/children', { replace: true });
       } else {
@@ -179,14 +192,43 @@ const LoginScreen = () => {
             </>
           )}
           
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="input"
-            autoComplete={isRegisterMode ? "email" : "username"}
-          />
+          {!isRegisterMode && (
+            <div className="login-type-toggle">
+              <button
+                type="button"
+                className={`toggle-button ${!loginWithPhone ? 'active' : ''}`}
+                onClick={() => setLoginWithPhone(false)}
+              >
+                📧 Email
+              </button>
+              <button
+                type="button"
+                className={`toggle-button ${loginWithPhone ? 'active' : ''}`}
+                onClick={() => setLoginWithPhone(true)}
+              >
+                📱 Phone
+              </button>
+            </div>
+          )}
+          
+          {!isRegisterMode && loginWithPhone ? (
+            <PhoneInput
+              value={phone}
+              onChange={setPhone}
+              placeholder="Phone Number"
+              className="input"
+              autoComplete="tel"
+            />
+          ) : (
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input"
+              autoComplete={isRegisterMode ? "email" : "username"}
+            />
+          )}
           
           <div className="password-field">
             <input

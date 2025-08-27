@@ -88,3 +88,13 @@ git push heroku main
 - Frontend MUST ignore numeric ID fields and only use UUIDs
 
 **⚠️ Any code that uses numeric IDs in the frontend is a SECURITY VULNERABILITY and must be immediately converted to UUIDs.**
+
+## Database Status Values
+
+### Connection Request Status
+Connection requests use the following status values (enforced by database constraint):
+- **`pending`**: Request has been sent but not yet responded to
+- **`accepted`**: Request was accepted, connection is active
+- **`rejected`**: Request was rejected/declined by the target parent
+
+**Important**: Always use `rejected` status for declined requests. Do not use `declined` - this value has been migrated to `rejected` for consistency.
