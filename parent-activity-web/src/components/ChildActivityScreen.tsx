@@ -1481,8 +1481,12 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           : `${createdActivities.length} activities created successfully!`;
         
         const shouldSaveTemplate = window.confirm(
-          `${successMessage}\n\n` +
-          `Save "${templateData.name}" as a template for future use?`
+          `🎉 ${successMessage}\n\n` +
+          `💾 SAVE AS TEMPLATE?\n\n` +
+          `Would you like to save "${templateData.name}" as a reusable template?\n` +
+          `This will help you create similar activities faster in the future.\n\n` +
+          `• Click OK to save as template\n` +
+          `• Click Cancel to skip`
         );
         
         if (shouldSaveTemplate) {
