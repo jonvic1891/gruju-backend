@@ -2567,9 +2567,19 @@ app.delete('/api/activities/delete/:activityId', authenticateToken, async (req, 
 // Get connections (all for parent - legacy endpoint)
 app.get('/api/connections', authenticateToken, async (req, res) => {
     try {
+        console.log(`🔍 GET /api/connections - User: ${req.user.email} (UUID: ${req.user.uuid})`);
+        
+        // Resolve the account user ID (handles both primary and additional parents)
+        const accountUserId = await resolveAccountUserId(req.user.uuid);
+        console.log(`📋 Resolved account user ID for connections: ${accountUserId}`);
+        
+        if (!accountUserId) {
+            return res.status(404).json({ success: false, error: 'Account not found' });
+        }
+        
         const client = await pool.connect();
         
-        // Debug: First check all connections for this user (including blocked ones)
+        // Debug: First check all connections for this account (including blocked ones)
         const allConnections = await client.query(
             `SELECT c.id, c.status, c.created_at,
                     u1.username as child1_parent_name, 
@@ -2582,9 +2592,9 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
              JOIN users u2 ON ch2.parent_id = u2.id
              WHERE (ch1.parent_id = $1 OR ch2.parent_id = $1)
              ORDER BY c.created_at DESC`,
-            [req.user.id]
+            [accountUserId]
         );
-        console.log(`🔍 All connections for user ${req.user.id}:`, allConnections.rows.map(c => ({
+        console.log(`🔍 All connections for account user ${accountUserId}:`, allConnections.rows.map(c => ({
             id: c.id,
             child1: c.child1_name,
             child2: c.child2_name,
@@ -2613,10 +2623,10 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
              JOIN users u2 ON ch2.parent_id = u2.id
              WHERE (ch1.parent_id = $1 OR ch2.parent_id = $1) AND c.status = 'active'
              ORDER BY c.created_at DESC`,
-            [req.user.id]
+            [accountUserId]
         );
         
-        console.log(`✅ Active connections for user ${req.user.id}:`, result.rows.map(c => ({
+        console.log(`✅ Active connections for account user ${accountUserId}:`, result.rows.map(c => ({
             id: c.id,
             child1: c.child1_name,
             child2: c.child2_name,
@@ -2637,24 +2647,32 @@ app.get('/api/connections', authenticateToken, async (req, res) => {
 // Connection endpoints
 app.get('/api/connections/requests', authenticateToken, async (req, res) => {
     try {
-        console.log(`🔍 GET /api/connections/requests - User ID: ${req.user.id}, Email: ${req.user.email}`);
+        console.log(`🔍 GET /api/connections/requests - User: ${req.user.email} (UUID: ${req.user.uuid})`);
+        
+        // Resolve the account user ID (handles both primary and additional parents)
+        const accountUserId = await resolveAccountUserId(req.user.uuid);
+        console.log(`📋 Resolved account user ID for connection requests: ${accountUserId}`);
+        
+        if (!accountUserId) {
+            return res.status(404).json({ success: false, error: 'Account not found' });
+        }
         
         const client = await pool.connect();
         
-        // First, check all connection requests for this user (debug)
+        // First, check all connection requests for this account (debug)
         const allRequestsResult = await client.query(
             `SELECT cr.*, u.username as requester_name 
              FROM connection_requests cr 
              LEFT JOIN users u ON cr.requester_id = u.id 
              WHERE cr.target_parent_id = $1`,
-            [req.user.id]
+            [accountUserId]
         );
-        console.log(`📋 All connection requests for user ${req.user.id}:`, allRequestsResult.rows);
+        console.log(`📋 All connection requests for account user ${accountUserId}:`, allRequestsResult.rows);
         
         // Check for any requests with NULL child_uuid
         const nullChildRequests = await client.query(
             `SELECT * FROM connection_requests WHERE target_parent_id = $1 AND child_uuid IS NULL`,
-            [req.user.id]
+            [accountUserId]
         );
         console.log(`⚠️ Requests with NULL child_uuid:`, nullChildRequests.rows);
         
@@ -2681,7 +2699,7 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
              LEFT JOIN children c2 ON cr.target_child_uuid = c2.uuid
              WHERE cr.target_parent_id = $1 AND cr.status = 'pending'
              ORDER BY cr.created_at DESC`,
-            [req.user.id]
+            [accountUserId]
         );
         console.log(`✅ Final filtered results:`, result.rows);
         
@@ -2704,7 +2722,15 @@ app.get('/api/connections/requests', authenticateToken, async (req, res) => {
 // Get sent connection requests (for the requester to track their pending requests)
 app.get('/api/connections/sent-requests', authenticateToken, async (req, res) => {
     try {
-        console.log(`📤 GET /api/connections/sent-requests - User ID: ${req.user.id}, Email: ${req.user.email}`);
+        console.log(`📤 GET /api/connections/sent-requests - User: ${req.user.email} (UUID: ${req.user.uuid})`);
+        
+        // Resolve the account user ID (handles both primary and additional parents)
+        const accountUserId = await resolveAccountUserId(req.user.uuid);
+        console.log(`📋 Resolved account user ID for sent requests: ${accountUserId}`);
+        
+        if (!accountUserId) {
+            return res.status(404).json({ success: false, error: 'Account not found' });
+        }
         
         const client = await pool.connect();
         // ✅ SECURITY: Only return necessary fields, NO email exposure  
@@ -2748,7 +2774,7 @@ app.get('/api/connections/sent-requests', authenticateToken, async (req, res) =>
              LEFT JOIN children c2 ON cr.target_child_uuid = c2.uuid
              WHERE cr.requester_id = $1 AND cr.status = 'pending'
              ORDER BY cr.created_at DESC`,
-            [req.user.id]
+            [accountUserId]
         );
         console.log(`📤 Found ${result.rows.length} sent requests:`, result.rows);
         
@@ -2825,6 +2851,14 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
             body: req.body
         });
         
+        // Resolve the account user ID (handles both primary and additional parents)
+        const accountUserId = await resolveAccountUserId(req.user.uuid);
+        console.log(`📋 Resolved account user ID for connection request: ${accountUserId}`);
+        
+        if (!accountUserId) {
+            return res.status(404).json({ success: false, error: 'Account not found' });
+        }
+        
         const { target_parent_id, child_uuid, target_child_uuid, message } = req.body;
 
         if (!target_parent_id || !child_uuid) {
@@ -2833,10 +2867,10 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
 
         const client = await pool.connect();
         
-        // Verify the child belongs to this user
+        // Verify the child belongs to this account
         const child = await client.query(
             'SELECT uuid FROM children WHERE uuid = $1 AND parent_id = $2',
-            [child_uuid, req.user.id]
+            [child_uuid, accountUserId]
         );
 
         if (child.rows.length === 0) {
@@ -2877,7 +2911,7 @@ app.post('/api/connections/request', authenticateToken, async (req, res) => {
         // ✅ SECURITY: Only return necessary fields, not RETURNING *
         const result = await client.query(
             'INSERT INTO connection_requests (requester_id, target_parent_id, child_uuid, target_child_uuid, message, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING uuid, message, status, created_at',
-            [req.user.id, targetParentDbId, child_uuid, target_child_uuid, message, 'pending']
+            [accountUserId, targetParentDbId, child_uuid, target_child_uuid, message, 'pending']
         );
         
         console.log('✅ Connection request created successfully:', result.rows[0]);
