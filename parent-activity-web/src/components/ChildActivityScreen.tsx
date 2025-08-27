@@ -1461,6 +1461,35 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       // Show template save prompt after successful activity creation
       const shouldShowTemplatePrompt = createdActivities.length > 0;
 
+      // Capture template data BEFORE resetting the form
+      let templateData = null;
+      if (shouldShowTemplatePrompt) {
+        // Calculate duration if both start and end times are provided
+        let durationHours = null;
+        if (newActivity.start_time && newActivity.end_time) {
+          const [startHour, startMin] = newActivity.start_time.split(':').map(Number);
+          const [endHour, endMin] = newActivity.end_time.split(':').map(Number);
+          
+          const startMinutes = startHour * 60 + startMin;
+          const endMinutes = endHour * 60 + endMin;
+          durationHours = (endMinutes - startMinutes) / 60;
+          if (durationHours < 0) durationHours += 24; // Handle overnight activities
+        }
+
+        templateData = {
+          name: newActivity.name,
+          description: newActivity.description || null,
+          location: newActivity.location || null,
+          website_url: newActivity.website_url || null,
+          activity_type: null, // Could be enhanced to detect or allow user to specify
+          cost: newActivity.cost ? parseFloat(newActivity.cost) : null,
+          max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : null,
+          typical_start_time: newActivity.start_time || null,
+          typical_duration_hours: durationHours,
+          auto_notify_new_connections: newActivity.auto_notify_new_connections || false
+        };
+      }
+
       // Reset form
       setNewActivity({
         name: '',
@@ -1488,31 +1517,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       await loadActivities();
       
       // Combine success message with template save option
-      if (shouldShowTemplatePrompt) {
-        // Calculate duration if both start and end times are provided
-        let durationHours = null;
-        if (newActivity.start_time && newActivity.end_time) {
-          const [startHour, startMin] = newActivity.start_time.split(':').map(Number);
-          const [endHour, endMin] = newActivity.end_time.split(':').map(Number);
-          
-          const startMinutes = startHour * 60 + startMin;
-          const endMinutes = endHour * 60 + endMin;
-          durationHours = (endMinutes - startMinutes) / 60;
-          if (durationHours < 0) durationHours += 24; // Handle overnight activities
-        }
-
-        const templateData = {
-          name: newActivity.name,
-          description: newActivity.description || null,
-          location: newActivity.location || null,
-          website_url: newActivity.website_url || null,
-          activity_type: null, // Could be enhanced to detect or allow user to specify
-          cost: newActivity.cost ? parseFloat(newActivity.cost) : null,
-          max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : null,
-          typical_duration_hours: durationHours,
-          typical_start_time: newActivity.start_time || null
-        };
-        
+      if (shouldShowTemplatePrompt && templateData) {
         const successMessage = createdActivities.length === 1 
           ? 'Activity created successfully!' 
           : `${createdActivities.length} activities created successfully!`;
