@@ -78,8 +78,44 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [pendingTemplateData, setPendingTemplateData] = useState<any>(null);
   const [templateConfirmationMessage, setTemplateConfirmationMessage] = useState<string>('');
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [templateDialogMessage, setTemplateDialogMessage] = useState('');
+  const [dialogTemplateData, setDialogTemplateData] = useState<any>(null);
   
   const apiService = ApiService.getInstance();
+
+  // Template dialog handlers  
+  const handleTemplateYes = async () => {
+    if (!dialogTemplateData) return;
+    
+    console.log('🎯 Attempting to save template:', dialogTemplateData);
+    try {
+      const templateResponse = await apiService.createActivityTemplate(dialogTemplateData);
+      console.log('📡 Template API response:', templateResponse);
+      if (templateResponse.success) {
+        console.log('✅ Template saved successfully:', templateResponse.data);
+        await loadActivityTemplates();
+      } else {
+        console.error('❌ Failed to save template:', templateResponse.error);
+        alert(`Failed to save template: ${templateResponse.error}`);
+      }
+    } catch (templateError: any) {
+      console.error('💥 Error saving template:', templateError);
+      alert(`Error saving template: ${templateError?.message || 'Unknown error'}`);
+    }
+    
+    // Close dialog
+    setShowTemplateDialog(false);
+    setTemplateDialogMessage('');
+    setDialogTemplateData(null);
+  };
+
+  const handleTemplateNo = () => {
+    // Close dialog
+    setShowTemplateDialog(false);
+    setTemplateDialogMessage('');
+    setDialogTemplateData(null);
+  };
 
   // Get user-specific draft key to prevent cross-user data leakage
   const getDraftKey = () => {
@@ -1485,33 +1521,15 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           ? 'Activity created successfully!' 
           : `${createdActivities.length} activities created successfully!`;
         
-        const shouldSaveTemplate = window.confirm(
+        // Show custom template dialog instead of window.confirm
+        setTemplateDialogMessage(
           `🎉 ${successMessage}\n\n` +
           `💾 SAVE AS TEMPLATE?\n\n` +
           `Would you like to save "${templateData.name}" as a reusable template?\n` +
-          `This will help you create similar activities faster in the future.\n\n` +
-          `• Click OK for YES (Save template)\n` +
-          `• Click Cancel for NO (Skip)`
+          `This will help you create similar activities faster in the future.`
         );
-        
-        if (shouldSaveTemplate) {
-          console.log('🎯 Attempting to save template:', templateData);
-          try {
-            const templateResponse = await apiService.createActivityTemplate(templateData);
-            console.log('📡 Template API response:', templateResponse);
-            if (templateResponse.success) {
-              console.log('✅ Template saved successfully:', templateResponse.data);
-              // Reload templates to include the new one
-              await loadActivityTemplates();
-            } else {
-              console.error('❌ Failed to save template:', templateResponse.error);
-              alert(`Failed to save template: ${templateResponse.error}`);
-            }
-          } catch (templateError: any) {
-            console.error('💥 Error saving template:', templateError);
-            alert(`Error saving template: ${templateError?.message || 'Unknown error'}`);
-          }
-        }
+        setDialogTemplateData(templateData);
+        setShowTemplateDialog(true);
       } else {
         // Just show success message if no template prompt needed
         const message = createdActivities.length === 1 
@@ -3544,6 +3562,78 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         );
         })()}
       </div>
+
+      {/* Custom Template Dialog with Yes/No buttons */}
+      {showTemplateDialog && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
+            maxWidth: '500px',
+            width: '90%',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              fontSize: '16px',
+              lineHeight: '1.5',
+              color: '#333',
+              marginBottom: '25px',
+              whiteSpace: 'pre-line'
+            }}>
+              {templateDialogMessage}
+            </div>
+            <div style={{
+              display: 'flex',
+              gap: '15px',
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={handleTemplateYes}
+                style={{
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  padding: '12px 30px',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Yes
+              </button>
+              <button
+                onClick={handleTemplateNo}
+                style={{
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  padding: '12px 30px',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
