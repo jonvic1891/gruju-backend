@@ -2596,6 +2596,69 @@ app.delete('/api/activities/delete/:activityId', authenticateToken, async (req, 
     }
 });
 
+// Delete activity series (recurring activities with same name)
+app.delete('/api/activities/delete-series', authenticateToken, async (req, res) => {
+    try {
+        const { activity_name, child_uuid } = req.body;
+        
+        if (!activity_name || !child_uuid) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'activity_name and child_uuid are required' 
+            });
+        }
+        
+        const client = await pool.connect();
+        
+        // ✅ SECURITY: Verify the child belongs to this user and get child_id
+        const childCheck = await client.query(
+            'SELECT id FROM children WHERE uuid = $1 AND parent_id = $2',
+            [child_uuid, req.user.id]
+        );
+        
+        if (childCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Child not found or not owned by user' });
+        }
+        
+        const childId = childCheck.rows[0].id;
+        
+        // Find all activities with the same name for this child
+        const seriesCheck = await client.query(
+            'SELECT uuid, name, start_date FROM activities WHERE name = $1 AND child_id = $2 ORDER BY start_date',
+            [activity_name, childId]
+        );
+        
+        if (seriesCheck.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'No activities found with that name' });
+        }
+        
+        console.log(`🗑️ Deleting series "${activity_name}" for child ${child_uuid}: ${seriesCheck.rows.length} activities`);
+        console.log('Activities to delete:', seriesCheck.rows.map(r => ({ uuid: r.uuid, date: r.start_date })));
+        
+        // ✅ SECURITY: Delete using child ownership verification
+        const deleteResult = await client.query(
+            'DELETE FROM activities WHERE name = $1 AND child_id = $2',
+            [activity_name, childId]
+        );
+        
+        client.release();
+        
+        const deletedCount = deleteResult.rowCount;
+        console.log(`✅ Successfully deleted ${deletedCount} activities from series "${activity_name}"`);
+        
+        res.json({ 
+            success: true, 
+            message: `Deleted ${deletedCount} activities from series "${activity_name}"`,
+            deleted_count: deletedCount
+        });
+    } catch (error) {
+        console.error('Delete activity series error:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete activity series' });
+    }
+});
+
 
 // Get connections (all for parent - legacy endpoint)
 app.get('/api/connections', authenticateToken, async (req, res) => {
