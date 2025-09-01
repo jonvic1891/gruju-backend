@@ -438,6 +438,48 @@ async function runMigrations() {
                 throw error;
             }
         }
+
+        // Migration 17: Assign series_id to existing recurring activities (grouped by name and host)
+        try {
+            const recurringActivities = await client.query(`
+                SELECT name, child_id, COUNT(*) as activity_count, 
+                       MIN(start_date) as first_date,
+                       array_agg(id ORDER BY start_date) as activity_ids
+                FROM activities 
+                WHERE series_id IS NULL 
+                  AND name IN (
+                      SELECT name 
+                      FROM activities 
+                      WHERE series_id IS NULL 
+                      GROUP BY name, child_id 
+                      HAVING COUNT(*) > 1
+                  )
+                GROUP BY name, child_id
+                HAVING COUNT(*) > 1
+                ORDER BY name, child_id
+            `);
+            
+            console.log(`🔄 Migration 17: Found ${recurringActivities.rows.length} recurring activity groups to assign series_id`);
+            
+            for (const group of recurringActivities.rows) {
+                // Generate a series_id for this group
+                const seriesId = `migrated_${Date.now()}_${group.name.replace(/[^a-zA-Z0-9]/g, '_')}_${group.child_id}`;
+                
+                // Update all activities in this group with the same series_id
+                const updateResult = await client.query(`
+                    UPDATE activities 
+                    SET series_id = $1, 
+                        is_recurring = true,
+                        series_start_date = $2
+                    WHERE id = ANY($3)
+                `, [seriesId, group.first_date, group.activity_ids]);
+                
+                console.log(`✅ Migration 17: Assigned series_id "${seriesId}" to ${updateResult.rowCount} "${group.name}" activities`);
+            }
+            
+        } catch (error) {
+            console.log('ℹ️ Migration 17: Recurring activities series_id assignment issue:', error.message);
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -4355,7 +4397,7 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
         const query = `
             SELECT DISTINCT a.uuid as activity_uuid, a.name as activity_name, a.start_date, a.end_date, a.start_time, a.end_time, 
                     a.website_url, a.created_at, a.updated_at, a.description as activity_description, 
-                    a.location, a.cost,
+                    a.location, a.cost, a.series_id, a.is_recurring, a.recurring_days, a.series_start_date,
                     c.name as child_name, c.uuid as child_uuid,
                     u.username as host_parent_username,
                     ai.message as invitation_message,
