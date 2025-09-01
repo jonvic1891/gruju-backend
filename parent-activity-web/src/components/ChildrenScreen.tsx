@@ -391,8 +391,13 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 invited_child_uuid: targetChild.uuid,
                 invited_child_name: invitation.invited_child_name,
                 message: invitation.invitation_message,
-                created_at: invitation.created_at || new Date().toISOString()
-              });
+                created_at: invitation.created_at || new Date().toISOString(),
+                // Add series_id and recurring fields from API response
+                series_id: invitation.series_id,
+                is_recurring: invitation.is_recurring,
+                recurring_days: invitation.recurring_days,
+                series_start_date: invitation.series_start_date
+              } as any);
             }
           }
         });
