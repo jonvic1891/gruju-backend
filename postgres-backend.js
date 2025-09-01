@@ -420,6 +420,24 @@ async function runMigrations() {
         } catch (error) {
             console.log('ℹ️ Migration 15: Connection requests UUID conversion issue:', error.message);
         }
+
+        // Migration 16: Add series_id and other recurring activity fields to activities table
+        try {
+            await client.query(`
+                ALTER TABLE activities 
+                ADD COLUMN IF NOT EXISTS series_id VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN DEFAULT false,
+                ADD COLUMN IF NOT EXISTS recurring_days INTEGER[],
+                ADD COLUMN IF NOT EXISTS series_start_date DATE
+            `);
+            console.log('✅ Migration 16: Added series_id and recurring fields to activities table');
+        } catch (error) {
+            if (error.code === '42701') {
+                console.log('✅ Migration 16: Series_id and recurring fields already exist');
+            } else {
+                throw error;
+            }
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -2129,7 +2147,7 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
     try {
         // ✅ SECURITY: Expect UUID instead of sequential ID
         const childUuid = req.params.childId;
-        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, joint_host_children } = req.body;
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, joint_host_children, series_id, is_recurring, recurring_days, series_start_date } = req.body;
 
         if (!name || !name.trim() || !start_date) {
             return res.status(400).json({ success: false, error: 'Activity name and start date are required' });
@@ -2158,6 +2176,12 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         const processedEndDate = end_date && end_date.trim() ? end_date.trim() : null;
         const processedCost = cost !== null && cost !== undefined && cost !== '' ? parseFloat(cost) : null;
         const processedMaxParticipants = max_participants && max_participants.toString().trim() ? parseInt(max_participants) : null;
+        
+        // Process recurring fields
+        const processedSeriesId = series_id && series_id.trim() ? series_id.trim() : null;
+        const processedIsRecurring = is_recurring || false;
+        const processedRecurringDays = recurring_days && Array.isArray(recurring_days) ? recurring_days : null;
+        const processedSeriesStartDate = series_start_date && series_start_date.trim() ? series_start_date.trim() : null;
 
         // Determine if activity should be marked as shared
         // Activities are shared if explicitly marked as shared OR if they have auto_notify_new_connections enabled
@@ -2165,8 +2189,8 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
 
         // ✅ SECURITY: Only return necessary fields with UUID
         const result = await client.query(
-            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at',
-            [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared]
+            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, created_at, updated_at',
+            [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared, processedSeriesId, processedIsRecurring, processedRecurringDays, processedSeriesStartDate]
         );
 
         console.log('🎯 Primary activity created:', result.rows[0].uuid);
@@ -2193,8 +2217,8 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
 
                     // Create activity for joint host child
                     const jointResult = await client.query(
-                        'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at',
-                        [jointChildId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared]
+                        'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, created_at, updated_at',
+                        [jointChildId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared, processedSeriesId, processedIsRecurring, processedRecurringDays, processedSeriesStartDate]
                     );
 
                     console.log('✅ Joint host activity created:', jointResult.rows[0].uuid, 'for child:', jointChildUuid);

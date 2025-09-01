@@ -678,6 +678,9 @@
 .delete-btn {
   background: #e53e3e;
   color: black;
+  padding: 12px 20px;
+  min-width: 120px;
+  border-radius: 8px;
 }
 
 .delete-btn:hover {

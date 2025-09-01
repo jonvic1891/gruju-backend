@@ -40,9 +40,18 @@
   background: #f8f9fa;
 }
 
-.hour-select, .minute-select {
-  width: 50px;
+.hour-select {
+  width: 120px;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.minute-select {
+  width: 120px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .period-select {
@@ -70,8 +79,14 @@
   text-align: center;
 }
 
-/* Custom arrow for selects */
-.time-select {
+/* Custom dropdown styles */
+.hour-dropdown-container, .minute-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+/* Both dropdowns inherit from time-select and add dropdown arrow */
+.hour-select, .minute-select {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
@@ -82,9 +97,69 @@
   padding-right: 20px;
 }
 
+.dropdown-arrow {
+  display: none; /* Hide custom arrow, use CSS background arrow instead */
+}
+
+.hour-dropdown-list, .minute-dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #3a3a3a;
+  border: 1px solid #666;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.hour-option-placeholder, .minute-option-placeholder {
+  padding: 8px 12px;
+  font-size: 14px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  color: #ccc;
+  background: #2a2a2a;
+  font-weight: 500;
+  border-bottom: 1px solid #555;
+}
+
+.hour-option, .minute-option {
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 14px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  color: #fff;
+  background: #3a3a3a;
+  border-bottom: 1px solid #555;
+}
+
+.hour-option:hover, .minute-option:hover {
+  background: #4a4a4a;
+}
+
+.hour-option.selected, .minute-option.selected {
+  background: #007bff;
+  color: white;
+}
+
+.hour-option:last-child, .minute-option:last-child {
+  border-bottom: none;
+}
+
+/* Both dropdowns now use custom styling */
+
 .time-select option {
   padding: 4px 8px;
 }
+
 
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
@@ -93,18 +168,45 @@
     border-color: #4a5568;
   }
   
-  .time-select {
+  .time-select, .hour-select {
     color: #e2e8f0;
   }
   
   .time-select:focus,
-  .time-select:hover {
+  .time-select:hover,
+  .hour-select:focus,
+  .hour-select:hover {
     background: #4a5568;
   }
   
   .time-separator {
     color: #a0aec0;
   }
+  
+  .hour-dropdown-list {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+  
+  .hour-option {
+    color: #e2e8f0;
+  }
+  
+  .hour-option:hover {
+    background: #4a5568;
+  }
+  
+  .hour-option.selected {
+    background: #3182ce;
+    color: white;
+  }
+  
+  .hour-option-placeholder {
+    color: #a0aec0;
+    background: #4a5568;
+    border-bottom-color: #4a5568;
+  }
+  
 }
 
 /* Mobile responsive */
@@ -118,8 +220,64 @@
     padding: 6px 8px;
   }
   
-  .hour-select, .minute-select {
-    width: 55px;
+  .hour-select {
+    width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  
+  .minute-select {
+    width: 140px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  
+  .hour-dropdown-list, .minute-dropdown-list {
+    max-height: 350px;
+    background: #3a3a3a;
+    border: 1px solid #666;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+  }
+  
+  .hour-option, .minute-option {
+    font-size: 16px;
+    padding: 12px 16px;
+    height: auto;
+    min-height: 44px;
+    background: #3a3a3a;
+    border-bottom: 1px solid #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+  }
+  
+  .hour-option:last-child, .minute-option:last-child {
+    border-bottom: none;
+  }
+  
+  .hour-option:hover, .minute-option:hover {
+    background: #4a4a4a;
+  }
+  
+  .hour-option.selected, .minute-option.selected {
+    background: #007bff;
+    color: white;
+  }
+  
+  .hour-option-placeholder, .minute-option-placeholder {
+    font-size: 16px;
+    padding: 12px 16px;
+    height: auto;
+    min-height: 44px;
+    color: #ccc;
+    background: #2a2a2a;
+    border-bottom: 2px solid #555;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   
   .period-select {

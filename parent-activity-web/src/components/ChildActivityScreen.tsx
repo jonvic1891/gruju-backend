@@ -28,6 +28,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [activities, setActivities] = useState<Activity[]>([]);
   const [invitedActivities, setInvitedActivities] = useState<any[]>([]);
   const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
+  const [currentDateRange, setCurrentDateRange] = useState<{startDate: string, endDate: string} | null>(null);
   const [declinedInvitations, setDeclinedInvitations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<'main' | 'add-activity' | 'activity-detail' | 'edit-activity' | 'invite-activity'>('main');
@@ -44,6 +45,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [connectedFamilies, setConnectedFamilies] = useState<any[]>([]);
   const [invitationMessage, setInvitationMessage] = useState('');
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [isRecurringActivity, setIsRecurringActivity] = useState(false);
+  const [recurringDaysOfWeek, setRecurringDaysOfWeek] = useState<number[]>([]);
+  const [recurringStartDate, setRecurringStartDate] = useState('');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteDialogActivity, setDeleteDialogActivity] = useState<Activity | null>(null);
   const [isSharedActivity, setIsSharedActivity] = useState(false);
   const [autoNotifyNewConnections, setAutoNotifyNewConnections] = useState(false);
   const [selectedConnectedChildren, setSelectedConnectedChildren] = useState<(number | string)[]>([]);
@@ -108,6 +114,18 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setShowTemplateDialog(false);
     setTemplateDialogMessage('');
     setDialogTemplateData(null);
+    
+    // Navigate back to activities list after template saved
+    console.log('🏠 Template dialog completed (Yes), navigating back to main activities list');
+    // Force refresh when returning to calendar
+    setCurrentDateRange(null);
+    if (onBack) {
+      console.log('🔙 Using onBack to return to main activities URL');
+      onBack();
+    } else {
+      console.log('📝 Using navigateToPage as fallback');
+      navigateToPage('main');
+    }
   };
 
   const handleTemplateNo = () => {
@@ -115,6 +133,18 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setShowTemplateDialog(false);
     setTemplateDialogMessage('');
     setDialogTemplateData(null);
+    
+    // Navigate back to activities list after declining template
+    console.log('🏠 Template dialog completed (No), navigating back to main activities list');
+    // Force refresh when returning to calendar
+    setCurrentDateRange(null);
+    if (onBack) {
+      console.log('🔙 Using onBack to return to main activities URL');
+      onBack();
+    } else {
+      console.log('📝 Using navigateToPage as fallback');
+      navigateToPage('main');
+    }
   };
 
   // Get user-specific draft key to prevent cross-user data leakage
@@ -239,7 +269,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     // Clean up any old non-user-specific drafts (security fix)
     localStorage.removeItem('activityDraft');
     
-    loadActivities();
+    loadActivities(true); // Force refresh on component mount
     loadConnectionsData();
     loadActivityTemplates();
     loadActivityTypes();
@@ -248,6 +278,31 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     // Check if there's a saved draft to restore
     restoreActivityDraft();
   }, [child.uuid]);
+
+  // Check for month changes when user navigates or toggles calendar
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && activities.length > 0) {
+        console.log('📅 ChildActivityScreen - Visibility change detected, checking for month change');
+        loadActivities(); // This will check for month change internally
+      }
+    };
+
+    const handleFocusChange = () => {
+      if (activities.length > 0) {
+        console.log('📅 ChildActivityScreen - Window focus change detected, checking for month change');
+        loadActivities(); // This will check for month change internally
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocusChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocusChange);
+    };
+  }, [activities.length, currentDateRange]);
 
   // Load connections when shared activity is enabled
   useEffect(() => {
@@ -394,21 +449,53 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
   }, [currentPage, selectedActivity]);
 
-  const loadActivities = async () => {
+  // Generate current date range
+  const getCurrentDateRange = () => {
+    const now = new Date();
+    const oneYearLater = new Date();
+    oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+    const startDate = now.toISOString().split('T')[0];
+    const endDate = oneYearLater.toISOString().split('T')[0];
+    return { startDate, endDate };
+  };
+
+  // Check if we need to refresh activities due to month change
+  const shouldRefreshForDateChange = () => {
+    if (!currentDateRange) return true; // First load
+    
+    const newRange = getCurrentDateRange();
+    const currentMonth = currentDateRange.startDate.substring(0, 7); // YYYY-MM
+    const newMonth = newRange.startDate.substring(0, 7); // YYYY-MM
+    
+    const monthChanged = currentMonth !== newMonth;
+    if (monthChanged) {
+      console.log(`📅 ChildActivityScreen - Month changed detected! ${currentMonth} -> ${newMonth}, refreshing activities`);
+    }
+    
+    return monthChanged;
+  };
+
+  const loadActivities = async (forceRefresh = false) => {
     try {
+      // Check if we need to refresh due to month change
+      if (!forceRefresh && !shouldRefreshForDateChange()) {
+        console.log('📅 ChildActivityScreen - No month change detected, using cached activities');
+        return;
+      }
+      
       setLoading(true);
       
       console.log('🚀 ChildActivityScreen v2.0 - NEW VERSION WITH UNIFIED ACTIVITIES ENDPOINT');
       
       // Load child's own activities using calendar endpoint to get status change notifications
-      // Get date range for current month to load all relevant activities
-      const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-      const startDate = startOfMonth.toISOString().split('T')[0];
-      const endDate = endOfMonth.toISOString().split('T')[0];
+      // Get wider date range to include future activities (current date to 1 year ahead)
+      const dateRange = getCurrentDateRange();
+      const { startDate, endDate } = dateRange;
       
-      console.log(`📅 ChildActivityScreen - Loading activities for date range: ${startDate} to ${endDate}`);
+      // Update the current date range state
+      setCurrentDateRange(dateRange);
+      
+      console.log(`📅 ChildActivityScreen - Loading activities for EXTENDED date range: ${startDate} to ${endDate} (to include future activities like 'not test 1' on Sept 1st)`);
       
       // Load all activities (owned + invited) using the unified activities endpoint
       const activitiesResponse = await apiService.getCalendarActivities(startDate, endDate);
@@ -496,9 +583,31 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           console.log(`✅ Total activities including rejected: ${allActivitiesWithRejected.length}`);
           
           setActivities(allActivitiesWithRejected);
+          
+          // Debug: Log the final activities state with recurring activity details
+          console.log('🎯 FINAL ACTIVITIES STATE SET:', allActivitiesWithRejected.length);
+          const recurringActivities = allActivitiesWithRejected.filter(a => a.name && (a.name.includes('rec') || a.is_recurring));
+          console.log('🔄 RECURRING ACTIVITIES IN FINAL STATE:', recurringActivities.length, recurringActivities.map(a => ({
+            name: a.name,
+            start_date: a.start_date,
+            uuid: a.uuid || a.activity_uuid,
+            series_id: a.series_id,
+            is_recurring: a.is_recurring
+          })));
         } else {
           console.log('No invitations data or failed to load invitations');
           setActivities(childActivities);
+          
+          // Debug: Log the final activities state with recurring activity details
+          console.log('🎯 FINAL ACTIVITIES STATE SET (childActivities only):', childActivities.length);
+          const recurringActivities = childActivities.filter(a => a.name && (a.name.includes('rec') || a.is_recurring));
+          console.log('🔄 RECURRING ACTIVITIES IN FINAL STATE:', recurringActivities.length, recurringActivities.map(a => ({
+            name: a.name,
+            start_date: a.start_date,
+            uuid: a.uuid || a.activity_uuid,
+            series_id: a.series_id,
+            is_recurring: a.is_recurring
+          })));
         }
       } else {
         console.error('Failed to load activities:', activitiesResponse.error);
@@ -515,6 +624,75 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   const handleInvitationResponse = async (invitationUuid: string, action: 'accept' | 'reject') => {
     try {
+      // Find the current invitation
+      const currentInvitation = activities.find(activity => 
+        activity.invitationUuid === invitationUuid || 
+        (activity as any).invitation_uuid === invitationUuid
+      );
+      
+      if (currentInvitation) {
+        // Check if this is part of a recurring series using series_id (safer than name matching)
+        const currentSeriesId = (currentInvitation as any).series_id;
+        
+        // Check if series_id is valid (not null, undefined, or the string "undefined")
+        const seriesInvitations = currentSeriesId && currentSeriesId !== 'undefined'
+          ? activities.filter(activity => 
+              (activity as any).series_id === currentSeriesId &&
+              activity.is_host === false
+            )
+          : activities.filter(activity => 
+              activity.name === currentInvitation.name &&
+              activity.is_host === false &&
+              (activity as any).host_parent_name === (currentInvitation as any).host_parent_name
+            );
+        
+        if (seriesInvitations.length > 1) {
+          // This is a recurring series - ask user if they want to accept/decline the whole series
+          const actionText = action === 'accept' ? 'accept' : 'decline';
+          const seriesMessage = `This is a recurring activity "${currentInvitation.name}" with ${seriesInvitations.length} sessions. Do you want to ${actionText} the entire series?`;
+          
+          const acceptSeries = window.confirm(seriesMessage + '\n\nClick OK for entire series, Cancel for just this activity.');
+          
+          if (acceptSeries) {
+            // Accept/decline the entire series
+            console.log(`📧 ${action === 'accept' ? 'Accepting' : 'Declining'} entire series:`, seriesInvitations.map(act => ({
+              uuid: (act as any).invitationUuid || (act as any).invitation_uuid,
+              name: act.name,
+              date: (act as any).start_date || (act as any).date
+            })));
+            
+            const seriesPromises = seriesInvitations.map(act => 
+              apiService.respondToActivityInvitation(
+                (act as any).invitationUuid || (act as any).invitation_uuid, 
+                action
+              )
+            );
+            
+            const results = await Promise.all(seriesPromises);
+            const successCount = results.filter(r => r?.success).length;
+            
+            if (successCount > 0) {
+              const message = action === 'accept' 
+                ? `Series accepted! ${successCount} recurring activities will appear in your calendar.`
+                : `Series declined. ${successCount} invitations removed.`;
+              alert(message);
+              
+              // Reload activities to update the display
+              loadActivities();
+              
+              // Close the detail modal and refresh parent data
+              goBack();
+              onDataChanged?.();
+            } else {
+              alert(`Error: Failed to ${action} series invitations`);
+            }
+            
+            return;
+          }
+        }
+      }
+      
+      // Handle single invitation (either non-recurring or user chose single)
       const response = await apiService.respondToActivityInvitation(invitationUuid, action);
       
       if (response.success) {
@@ -1124,7 +1302,75 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       return { success: true, count: 0 };
     }
 
-    // Send invitations to selected children
+    // ✅ RECURRING ACTIVITIES: Check if this is a recurring activity and get all instances
+    console.log('🔍 INVITATION DEBUG: Checking for recurring activity:', {
+      activityName: selectedActivity.name,
+      selectedActivityUuid: selectedActivity.uuid || selectedActivity.activity_uuid,
+      selectedActivityChildId: selectedActivity.child_id,
+      selectedActivityChildUuid: selectedActivity.child_uuid,
+      currentChildId: child.id,
+      currentChildUuid: child.uuid,
+      totalActivitiesLoaded: activities.length,
+      seriesId: (selectedActivity as any).series_id,
+      isRecurring: (selectedActivity as any).is_recurring
+    });
+    
+    // Debug all activities with the same name
+    const sameNameActivities = activities.filter(a => a.name === selectedActivity.name);
+    console.log(`🔍 FOUND ${sameNameActivities.length} ACTIVITIES WITH NAME "${selectedActivity.name}":`, 
+      sameNameActivities.map(a => ({
+        uuid: a.uuid || a.activity_uuid,
+        child_id: a.child_id,
+        child_uuid: a.child_uuid,
+        start_date: a.start_date
+      }))
+    );
+    
+    // Find all activities with the same name for this child (more robust matching)
+    const currentChildId = selectedActivity.child_id || child.id;
+    const currentChildUuid = selectedActivity.child_uuid || child.uuid;
+    
+    const potentialSeriesActivities = activities.filter(a => {
+      // Match by name first
+      if (a.name !== selectedActivity.name) return false;
+      
+      // Match by child - try multiple field combinations for robustness
+      const matchByChildId = (a.child_id && currentChildId && a.child_id === currentChildId);
+      const matchByChildUuid = (a.child_uuid && currentChildUuid && a.child_uuid === currentChildUuid);
+      const matchByDirectChildUuid = (a.child_uuid && child.uuid && a.child_uuid === child.uuid);
+      
+      return matchByChildId || matchByChildUuid || matchByDirectChildUuid;
+    });
+    
+    console.log('🔍 POTENTIAL SERIES ACTIVITIES:', potentialSeriesActivities.length, potentialSeriesActivities.map(a => ({
+      uuid: a.uuid || a.activity_uuid,
+      name: a.name,
+      start_date: a.start_date,
+      child_id: a.child_id,
+      child_uuid: a.child_uuid
+    })));
+    
+    const isRecurringActivity = selectedActivity.name && (
+      (selectedActivity as any).series_id || 
+      (selectedActivity as any).is_recurring ||
+      potentialSeriesActivities.length > 1
+    );
+    
+    console.log('🔍 IS RECURRING ACTIVITY:', isRecurringActivity);
+
+    let activitiesToInvite = [selectedActivity];
+    
+    if (isRecurringActivity) {
+      activitiesToInvite = potentialSeriesActivities;
+      console.log(`🔄 RECURRING INVITATION: Found ${activitiesToInvite.length} activities in series for "${selectedActivity.name}"`);
+      console.log('🔄 ACTIVITIES TO INVITE:', activitiesToInvite.map(a => ({
+        uuid: a.uuid || a.activity_uuid,
+        name: a.name,
+        start_date: a.start_date
+      })));
+    }
+
+    // Send invitations to selected children for all activities in the series
     const invitationPromises = selectedConnectedChildren.map(async (childId) => {
       const childIdStr = String(childId);
       console.log('🔍 Processing invitation for childId:', childIdStr);
@@ -1132,7 +1378,17 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       if (childIdStr.startsWith('pending-child-')) {
         console.log('📝 Pending child invitation:', childIdStr);
         const pendingId = childIdStr.replace('pending-child-', '');
-        return apiService.createPendingInvitations(selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id), [pendingId]);
+        
+        if (isRecurringActivity) {
+          // Send invitations to all activities in the series for pending children
+          const pendingInvitePromises = activitiesToInvite.map(activity =>
+            apiService.createPendingInvitations(activity.uuid || activity.activity_uuid || String(activity.id), [pendingId])
+          );
+          const results = await Promise.all(pendingInvitePromises);
+          return { success: results.some(r => r?.success), series: true, count: results.filter(r => r?.success).length };
+        } else {
+          return apiService.createPendingInvitations(selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id), [pendingId]);
+        }
       } else {
         console.log('👥 Looking for connected child with UUID:', childIdStr);
         console.log('👥 Available connectedChildren:', connectedChildren);
@@ -1140,17 +1396,45 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         console.log('🔍 Found connectedChild:', connectedChild);
         
         if (connectedChild) {
-          console.log('📧 Attempting to send invitation:', {
-            activityId: selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id),
-            parentId: connectedChild.parent_id || connectedChild.parentUuid,
-            childId: childIdStr,
-            hasParentId: !!connectedChild.parent_id,
-            hasParentUuid: !!connectedChild.parentUuid
-          });
-          
           const parentId = connectedChild.parent_id || connectedChild.parentUuid;
+          
           if (parentId) {
-            return apiService.sendActivityInvitation(selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id), parentId, childIdStr);
+            if (isRecurringActivity) {
+              // Send invitations to all activities in the series
+              console.log(`📧 Sending ${activitiesToInvite.length} recurring invitations to parent ${parentId} for child ${childIdStr}`);
+              
+              const recurringInvitePromises = activitiesToInvite.map((activity, index) => {
+                const activityUuid = activity.uuid || activity.activity_uuid || String(activity.id);
+                console.log(`📧 Sending invitation ${index + 1}/${activitiesToInvite.length}:`, {
+                  activityUuid,
+                  activityName: activity.name,
+                  startDate: activity.start_date,
+                  parentId,
+                  childIdStr
+                });
+                return apiService.sendActivityInvitation(activityUuid, parentId, childIdStr);
+              });
+              
+              console.log(`📧 About to send ${recurringInvitePromises.length} invitation requests...`);
+              const results = await Promise.all(recurringInvitePromises);
+              const successCount = results.filter(r => r?.success).length;
+              const failedCount = results.length - successCount;
+              
+              console.log(`✅ Recurring invitations result: ${successCount}/${activitiesToInvite.length} sent successfully, ${failedCount} failed`);
+              if (failedCount > 0) {
+                console.log('❌ Failed invitation responses:', results.filter(r => !r?.success));
+              }
+              
+              return { success: successCount > 0, series: true, count: successCount };
+            } else {
+              console.log('📧 Attempting to send single invitation:', {
+                activityId: selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id),
+                parentId,
+                childId: childIdStr
+              });
+              
+              return apiService.sendActivityInvitation(selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id), parentId, childIdStr);
+            }
           } else {
             console.error('❌ No parent ID found for connectedChild:', connectedChild);
           }
@@ -1162,8 +1446,27 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
     try {
       const results = await Promise.all(invitationPromises);
+      
+      // Count successes, including series invitations
       const successful = results.filter(r => r?.success).length;
-      return { success: true, count: successful };
+      const totalInvitations = results.reduce((total, r) => {
+        if ((r as any)?.series && (r as any)?.count) {
+          return total + (r as any).count;
+        }
+        return total + (r?.success ? 1 : 0);
+      }, 0);
+      
+      const hasSeriesInvitations = results.some(r => (r as any)?.series);
+      
+      console.log(`📧 Invitation results: ${successful} children invited${hasSeriesInvitations ? ` to series (${totalInvitations} total invitations)` : ''}`);
+      
+      return { 
+        success: true, 
+        count: successful, 
+        totalInvitations,
+        isRecurring: isRecurringActivity,
+        seriesCount: isRecurringActivity ? activitiesToInvite.length : 1
+      };
     } catch (error) {
       console.error('Failed to send invitations:', error);
       return { success: false, count: 0 };
@@ -1273,7 +1576,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         const invitationResult = await sendInvitations();
         console.log('📧 Invitation result:', invitationResult);
         if (invitationResult.count > 0) {
-          successMessage += ` ${invitationResult.count} invitation${invitationResult.count > 1 ? 's' : ''} sent!`;
+          if (invitationResult.isRecurring) {
+            successMessage += ` ${invitationResult.count} invitation${invitationResult.count > 1 ? 's' : ''} sent for recurring series (${invitationResult.seriesCount} activities each)!`;
+          } else {
+            successMessage += ` ${invitationResult.count} invitation${invitationResult.count > 1 ? 's' : ''} sent!`;
+          }
           setSelectedConnectedChildren([]);
           loadActivityParticipants(selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id));
         }
@@ -1293,21 +1600,162 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   };
 
   const handleDeleteActivity = async (activity: Activity) => {
-    if (window.confirm(`Are you sure you want to delete "${activity.name}"?`)) {
-      try {
-        const response = await apiService.deleteActivity(activity.uuid || activity.activity_uuid || String(activity.id));
-        if (response.success) {
-          goBack();
-          loadActivities();
-          alert('Activity deleted successfully');
-        } else {
-          alert(`Error: ${response.error || 'Failed to delete activity'}`);
-        }
-      } catch (error) {
-        alert('Failed to delete activity');
-        console.error('Delete activity error:', error);
+    // Since backend doesn't return series_id/is_recurring, detect recurring activities by finding
+    // other activities with the same name
+    const activityName = (activity as any).name;
+    const currentStartDate = (activity as any).start_date;
+    
+    // Find all activities with the same name (potential series)
+    const sameNameActivities = activities.filter(act => (act as any).name === activityName);
+    const isPartOfSeries = sameNameActivities.length > 1;
+    
+    console.log(`🔍 Delete check for activity "${activityName}":`, {
+      currentStartDate,
+      sameNameActivities: sameNameActivities.length,
+      isPartOfSeries,
+      allSameNameDates: sameNameActivities.map(act => (act as any).start_date).sort(),
+      allFields: Object.keys(activity),
+      sampleFieldValues: {
+        name: (activity as any).name,
+        start_date: (activity as any).start_date,
+        series_id: (activity as any).series_id,
+        is_recurring: (activity as any).is_recurring,
+        recurring_days: (activity as any).recurring_days
+      }
+    });
+    
+    if (isPartOfSeries) {
+      // Show custom dialog for recurring activity deletion
+      console.log(`🗑️ Showing delete dialog for recurring activity (${sameNameActivities.length} total activities with name "${activityName}")`);
+      setDeleteDialogActivity(activity);
+      setShowDeleteDialog(true);
+      console.log('🔧 Dialog state after setting:', { 
+        showDeleteDialog: true, 
+        deleteDialogActivity: activity?.name,
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      // Regular single activity deletion
+      console.log('🗑️ Showing single activity delete confirmation');
+      if (window.confirm(`Are you sure you want to delete "${activity.name}"?`)) {
+        await deleteActivity(activity, false);
       }
     }
+  };
+
+  const deleteActivity = async (activity: Activity, deleteWholeSeries: boolean = false) => {
+    try {
+      let response;
+      const activityName = (activity as any).name;
+      
+      if (deleteWholeSeries) {
+        // Try to delete entire series using the optimized API endpoint first
+        console.log(`🗑️ Attempting to delete entire series with name: "${activityName}" using series API`);
+        
+        try {
+          // Use the new series deletion API endpoint
+          response = await apiService.deleteActivitySeries(activityName, child.uuid);
+          
+          if (response.success) {
+            console.log(`✅ Series deletion successful via API endpoint`);
+          } else {
+            console.log(`⚠️ Series deletion API failed, falling back to individual deletion`);
+            throw new Error('Series API failed, using fallback');
+          }
+        } catch (seriesApiError) {
+          // Fallback to individual deletion if series API doesn't exist or fails
+          console.log(`🔄 Falling back to individual activity deletion for series "${activityName}"`);
+          
+          // Find all activities in the current state that are part of the same series
+          const currentSeriesId = (deleteDialogActivity as any).series_id;
+          const seriesActivities = currentSeriesId
+            ? activities.filter(act => (act as any).series_id === currentSeriesId)
+            : activities.filter(act => (act as any).name === activityName);
+          console.log(`🗑️ Found ${seriesActivities.length} activities in series to delete individually:`, 
+            seriesActivities.map(act => ({ name: (act as any).name, date: (act as any).start_date }))
+          );
+          
+          // Delete each activity in the series
+          const deletePromises = seriesActivities.map(act => 
+            apiService.deleteActivity(act.uuid || act.activity_uuid || String((act as any).id))
+          );
+          
+          const results = await Promise.allSettled(deletePromises);
+          const successCount = results.filter(result => result.status === 'fulfilled').length;
+          const failedCount = results.length - successCount;
+          
+          if (failedCount === 0) {
+            response = { success: true, message: `All ${successCount} activities in the series deleted successfully` };
+          } else {
+            response = { success: false, error: `${successCount} activities deleted, ${failedCount} failed` };
+          }
+        }
+      } else {
+        // Delete single activity
+        console.log(`🗑️ Deleting single activity: ${activityName}`);
+        response = await apiService.deleteActivity(activity.uuid || activity.activity_uuid || String(activity.id));
+      }
+      
+      if (response.success) {
+        goBack();
+        loadActivities();
+        const message = deleteWholeSeries 
+          ? `Recurring activity series "${activityName}" deleted successfully`
+          : `Activity "${activityName}" deleted successfully`;
+        alert(message);
+      } else {
+        alert(`Error: ${response.error || 'Failed to delete activity'}`);
+      }
+    } catch (error) {
+      alert('Failed to delete activity');
+      console.error('Delete activity error:', error);
+    }
+  };
+
+  const handleDeleteDialogClose = () => {
+    setShowDeleteDialog(false);
+    setDeleteDialogActivity(null);
+  };
+
+  // Function to generate recurring dates for the next 2 months
+  const generateRecurringDates = (startDate: string, daysOfWeek: number[]): string[] => {
+    console.log(`🗓️ Generating recurring dates for days: ${daysOfWeek} (${daysOfWeek.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')})`);
+    
+    const dates: string[] = [];
+    const start = new Date(startDate);
+    const endDate = new Date(start);
+    endDate.setMonth(endDate.getMonth() + 2); // 2 months from start date
+    
+    const current = new Date(start);
+    
+    while (current <= endDate) {
+      // Check if current day of week is in the selected days
+      const dayOfWeek = current.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      
+      if (daysOfWeek.includes(dayOfWeek)) {
+        // Only add dates that are today or in the future
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        current.setHours(0, 0, 0, 0);
+        
+        if (current >= today) {
+          // ✅ FIX: Use local date formatting to avoid timezone offset issues
+          const year = current.getFullYear();
+          const month = String(current.getMonth() + 1).padStart(2, '0');
+          const day = String(current.getDate()).padStart(2, '0');
+          const localDateString = `${year}-${month}-${day}`;
+          
+          console.log(`📅 Adding ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek]} ${localDateString} (dayOfWeek: ${dayOfWeek})`);
+          dates.push(localDateString);
+        }
+      }
+      
+      // Move to next day
+      current.setDate(current.getDate() + 1);
+    }
+    
+    console.log(`✅ Generated ${dates.length} recurring dates:`, dates);
+    return dates.sort();
   };
 
   const handleCreateActivity = async () => {
@@ -1316,16 +1764,49 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       return;
     }
 
-    if (selectedDates.length === 0) {
-      alert('Please select at least one date from the calendar');
-      return;
-    }
+    let datesToCreate: string[] = [];
     
-    const datesToCreate = selectedDates;
+    if (isRecurringActivity) {
+      // Validate recurring activity inputs
+      if (!recurringStartDate) {
+        alert('Please select a start date for the recurring activity');
+        return;
+      }
+      if (recurringDaysOfWeek.length === 0) {
+        alert('Please select at least one day of the week for the recurring activity');
+        return;
+      }
+      
+      // Generate dates for the next 2 months based on selected days of week
+      datesToCreate = generateRecurringDates(recurringStartDate, recurringDaysOfWeek);
+      
+      if (datesToCreate.length === 0) {
+        alert('No valid dates generated for the recurring activity');
+        return;
+      }
+      
+      console.log(`🔄 Generated ${datesToCreate.length} recurring activity dates:`, datesToCreate);
+      console.log('🔄 Recurring configuration:', {
+        startDate: recurringStartDate,
+        daysOfWeek: recurringDaysOfWeek,
+        daysNames: recurringDaysOfWeek.map(day => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day])
+      });
+    } else {
+      // Regular single date activity validation
+      if (selectedDates.length === 0) {
+        alert('Please select at least one date from the calendar');
+        return;
+      }
+      datesToCreate = selectedDates;
+      console.log(`📅 Creating single activity for ${datesToCreate.length} date(s):`, datesToCreate);
+    }
 
     setAddingActivity(true);
     try {
       const createdActivities: any[] = [];
+      
+      // Generate a unique series ID for recurring activities
+      const seriesId = isRecurringActivity ? `series_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : null;
       
       // Create activity for each selected date
       for (const date of datesToCreate) {
@@ -1337,17 +1818,47 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : undefined,
           auto_notify_new_connections: isSharedActivity ? autoNotifyNewConnections : false,
           is_shared: isSharedActivity, // Explicitly set is_shared when user creates shared activity
-          joint_host_children: jointHostChildren.length > 0 ? jointHostChildren : undefined // Add joint host children
+          joint_host_children: jointHostChildren.length > 0 ? jointHostChildren : undefined, // Add joint host children
+          series_id: seriesId, // Add series ID for recurring activities
+          is_recurring: isRecurringActivity, // Flag to indicate this is part of a recurring series
+          recurring_days: isRecurringActivity ? recurringDaysOfWeek : undefined, // Store the days of week for reference
+          series_start_date: isRecurringActivity ? recurringStartDate : undefined // Store the series start date
         };
+
+        console.log(`🔄 Creating ${isRecurringActivity ? 'recurring' : 'single'} activity for date ${date}:`, activityData);
 
         const response = await apiService.createActivity(child.uuid, activityData);
         
+        console.log(`📡 API response for activity on ${date}:`, response);
+        console.log(`📊 Response data structure:`, {
+          success: response.success,
+          hasData: !!response.data,
+          dataKeys: response.data ? Object.keys(response.data) : 'no data',
+          activityId: response.data?.id,
+          activityUuid: response.data?.uuid || response.data?.activity_uuid,
+          seriesIdReturned: response.data?.series_id,
+          isRecurringReturned: response.data?.is_recurring,
+          recurringDaysReturned: response.data?.recurring_days
+        });
+        
+        console.log(`🔍 FULL RESPONSE DATA for ${date}:`, response.data);
+        
         if (response.success) {
           createdActivities.push(response.data);
+          console.log(`✅ Successfully created activity ${response.data?.name} for ${date} with UUID: ${response.data?.uuid || response.data?.activity_uuid}`);
         } else {
-          console.error(`Failed to create activity for ${date}:`, response.error);
+          console.error(`❌ Failed to create activity for ${date}:`, response.error);
         }
       }
+
+      console.log(`✅ Activity creation summary:`, {
+        totalRequested: datesToCreate.length,
+        totalCreated: createdActivities.length,
+        isRecurring: isRecurringActivity,
+        seriesId: seriesId,
+        createdActivityUuids: createdActivities.map(a => a.uuid || a.activity_uuid),
+        createdActivityNames: createdActivities.map(a => a.name)
+      });
 
       // Track pending connections for each created activity
       if (isSharedActivity && createdActivities.length > 0) {
@@ -1440,13 +1951,18 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   });
                 }
                 
-                await apiService.sendActivityInvitation(
-                  hostActivity.uuid || String(hostActivity.id),
-                  connectedChild.parentUuid || connectedChild.parent_id,
-                  actualChildId,
-                  `${hostChild.name} would like to invite your child to join: ${hostActivity.name}`
-                );
-                console.log(`✅ Invitation sent successfully from ${hostChild.name}`);
+                // Send invitations for ALL activities in the series (not just hostActivity)
+                console.log(`📧 Sending invitations for ${createdActivities.length} activities to ${connectedChild.name}`);
+                for (const activity of createdActivities) {
+                  await apiService.sendActivityInvitation(
+                    activity.uuid || String(activity.id),
+                    connectedChild.parentUuid || connectedChild.parent_id,
+                    actualChildId,
+                    `${hostChild.name} would like to invite your child to join: ${activity.name}`
+                  );
+                  console.log(`✅ Invitation sent for activity "${activity.name}" on ${activity.start_date} from ${hostChild.name}`);
+                }
+                console.log(`✅ All ${createdActivities.length} invitations sent successfully from ${hostChild.name}`);
               } else {
                 console.error(`❌ Could not find connected child with ID: ${actualChildId}`);
               }
@@ -1459,9 +1975,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
       // Show template save prompt after successful activity creation
       const shouldShowTemplatePrompt = createdActivities.length > 0;
+      console.log('🎯 Template prompt check:', { 
+        shouldShowTemplatePrompt, 
+        createdActivitiesLength: createdActivities.length,
+        activityName: newActivity.name 
+      });
 
       // Capture template data BEFORE resetting the form
-      let templateData = null;
+      let templateData: any = null;
       if (shouldShowTemplatePrompt) {
         // Calculate duration if both start and end times are provided
         let durationHours = null;
@@ -1487,6 +2008,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           typical_duration_hours: durationHours,
           auto_notify_new_connections: newActivity.auto_notify_new_connections || false
         };
+        console.log('🎯 Template data created:', templateData);
       }
 
       // Reset form
@@ -1513,39 +2035,62 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       clearActivityDraft(); // Clear the saved draft after successful creation
       
       // Reload activities to include the newly created activity
-      await loadActivities();
+      console.log('🎯 About to reload activities - FORCE RELOAD after activity creation');
+      console.log('🎯 Just created these activity UUIDs:', createdActivities.map(a => a.uuid || a.activity_uuid));
+      // Force reload by clearing the cache date range first AND using forceRefresh=true
+      setCurrentDateRange(null);
+      await loadActivities(true); // FORCE refresh regardless of month change
+      console.log('🎯 After reloading activities - forced cache clear');
       
-      // Combine success message with template save option
+      // Show template dialog AFTER everything else is done, using setTimeout to ensure it renders
+      console.log('🎯 Template dialog decision:', { 
+        shouldShowTemplatePrompt, 
+        templateData, 
+        hasTemplateData: !!templateData,
+        willShowDialog: shouldShowTemplatePrompt && !!templateData
+      });
+      
       if (shouldShowTemplatePrompt && templateData) {
-        const successMessage = createdActivities.length === 1 
-          ? 'Activity created successfully!' 
-          : `${createdActivities.length} activities created successfully!`;
+        console.log('🎯 Setting up template dialog with timeout...');
+        const successMessage = isRecurringActivity && createdActivities.length > 1
+          ? `🔄 Recurring activity series created! ${createdActivities.length} activities scheduled over the next 2 months.`
+          : createdActivities.length === 1 
+            ? 'Activity created successfully!' 
+            : `${createdActivities.length} activities created successfully!`;
         
-        // Show custom template dialog instead of window.confirm
-        setTemplateDialogMessage(
-          `🎉 ${successMessage}\n\n` +
-          `💾 SAVE AS TEMPLATE?\n\n` +
-          `Would you like to save "${templateData.name}" as a reusable template?\n` +
-          `This will help you create similar activities faster in the future.`
-        );
-        setDialogTemplateData(templateData);
-        setShowTemplateDialog(true);
+        // Use setTimeout to ensure dialog shows after re-render
+        setTimeout(() => {
+          console.log('🎯 Timeout executed, setting template dialog state');
+          setTemplateDialogMessage(
+            `🎉 ${successMessage}\n\n` +
+            `💾 SAVE AS TEMPLATE?\n\n` +
+            `Would you like to save "${templateData.name}" as a reusable template?\n` +
+            `This will help you create similar activities faster in the future.`
+          );
+          setDialogTemplateData(templateData);
+          setShowTemplateDialog(true);
+          console.log('🎯 Template dialog should now be visible via timeout');
+        }, 100);
       } else {
-        // Just show success message if no template prompt needed
-        const message = createdActivities.length === 1 
-          ? 'Activity created successfully!' 
-          : `${createdActivities.length} activities created successfully!`;
+        // Just show success message if no template prompt needed, then navigate
+        const message = isRecurringActivity && createdActivities.length > 1
+          ? `🔄 Recurring activity series created! ${createdActivities.length} activities scheduled over the next 2 months.`
+          : createdActivities.length === 1 
+            ? 'Activity created successfully!' 
+            : `${createdActivities.length} activities created successfully!`;
         alert(message);
-      }
-      
-      // Navigate back to activities list
-      console.log('🏠 Activity created successfully, navigating back to main activities list');
-      if (onBack) {
-        console.log('🔙 Using onBack to return to main activities URL');
-        onBack();
-      } else {
-        console.log('📝 Using navigateToPage as fallback');
-        navigateToPage('main');
+        
+        // Navigate back to activities list (only when no template dialog)
+        console.log('🏠 Activity created successfully, navigating back to main activities list');
+        // Force refresh when returning to calendar
+        setCurrentDateRange(null);
+        if (onBack) {
+          console.log('🔙 Using onBack to return to main activities URL');
+          onBack();
+        } else {
+          console.log('📝 Using navigateToPage as fallback');
+          navigateToPage('main');
+        }
       }
       
     } catch (error) {
@@ -1857,6 +2402,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     const newWeek = new Date(currentWeek);
     newWeek.setDate(newWeek.getDate() + (direction === 'next' ? 7 : -7));
     setCurrentWeek(newWeek);
+    
+    // Check for month change when navigating weeks
+    console.log(`📅 ChildActivityScreen - Week navigated ${direction}, checking for month change`);
+    setTimeout(() => loadActivities(), 100); // Small delay to ensure state is updated
   };
 
   const getWeekRange = () => {
@@ -2001,6 +2550,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                       value={newActivity.start_time}
                       onChange={(time) => setNewActivity({...newActivity, start_time: time})}
                       placeholder="Start time"
+                      defaultScrollPosition="start"
                     />
                   ) : (
                     <span className="readonly-value">🕐 {selectedActivity.start_time ? formatTime(selectedActivity.start_time) : 'All day'}</span>
@@ -2014,6 +2564,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                       value={newActivity.end_time}
                       onChange={(time) => setNewActivity({...newActivity, end_time: time})}
                       placeholder="End time"
+                      defaultScrollPosition="end"
                     />
                   ) : (
                     <span className="readonly-value">{selectedActivity.end_time ? formatTime(selectedActivity.end_time) : 'Not set'}</span>
@@ -2330,7 +2881,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     console.log('🎯 Declining invitation with UUID:', invitationUuid);
                     handleInvitationResponse(invitationUuid, 'reject');
                   }}
-                  className="delete-btn"
+                  className="cancel-btn"
+                  style={{ background: 'linear-gradient(135deg, #e53e3e, #fc8181)', color: 'white' }}
                 >
                   ❌ Decline Invitation
                 </button>
@@ -2341,7 +2893,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             {(selectedActivity as any).isAcceptedInvitation && (selectedActivity as any).invitationUuid && (
               <button
                 onClick={() => handleInvitationResponse((selectedActivity as any).invitationUuid!, 'reject')}
-                className="delete-btn"
+                className="cancel-btn"
                 style={{ background: 'linear-gradient(135deg, #e53e3e, #fc8181)', color: 'white' }}
               >
                 ❌ Change to Declined
@@ -2371,10 +2923,17 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 </button>
                 <button
                   onClick={() => handleHostCantAttend(selectedActivity)}
-                  className="delete-btn"
-                  style={{ background: 'linear-gradient(135deg, #ff8c00, #ffa500)' }}
+                  className="cancel-btn"
+                  style={{ background: 'linear-gradient(135deg, #ff8c00, #ffa500)', color: 'white' }}
                 >
                   😞 Can't Attend
+                </button>
+                <button
+                  onClick={() => handleDeleteActivity(selectedActivity)}
+                  className="cancel-btn"
+                  style={{ background: 'linear-gradient(135deg, #e53e3e, #fc8181)', color: 'white' }}
+                >
+                  🗑️ Delete Activity
                 </button>
               </>
             )}
@@ -2400,6 +2959,117 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             )}
           </div>
         </div>
+        
+        {/* Delete Activity Dialog for Recurring Activities */}
+        {(() => {
+          console.log('🎭 Dialog render check (ACTIVITY-DETAIL):', { showDeleteDialog, deleteDialogActivity: deleteDialogActivity?.name, shouldRender: showDeleteDialog && deleteDialogActivity });
+          return null;
+        })()}
+        {showDeleteDialog && deleteDialogActivity && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000
+          }}>
+            <div style={{
+              background: 'white',
+              padding: '24px',
+              borderRadius: '12px',
+              maxWidth: '400px',
+              margin: '20px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
+            }}>
+              <h3 style={{ 
+                marginTop: 0, 
+                marginBottom: '16px', 
+                color: '#e53e3e', 
+                fontWeight: '600',
+                fontSize: '18px' 
+              }}>
+                🗑️ Delete Recurring Activity
+              </h3>
+              <p style={{ 
+                marginBottom: '20px', 
+                lineHeight: '1.6',
+                color: '#4a5568'
+              }}>
+                This activity "<strong>{deleteDialogActivity.name}</strong>" is part of a recurring series.
+              </p>
+              <p style={{ 
+                marginBottom: '24px', 
+                lineHeight: '1.6',
+                color: '#4a5568' 
+              }}>
+                What would you like to delete?
+              </p>
+              <div style={{ 
+                display: 'flex', 
+                gap: '12px',
+                flexDirection: 'column'
+              }}>
+                <button
+                  onClick={() => {
+                    handleDeleteDialogClose();
+                    deleteActivity(deleteDialogActivity, false);
+                  }}
+                  style={{
+                    padding: '12px 16px',
+                    background: 'linear-gradient(135deg, #fd7e14, #fd7e14)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  Delete just this occurrence
+                </button>
+                <button
+                  onClick={() => {
+                    handleDeleteDialogClose();
+                    deleteActivity(deleteDialogActivity, true);
+                  }}
+                  style={{
+                    padding: '12px 16px',
+                    background: 'linear-gradient(135deg, #e53e3e, #fc8181)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  Delete entire series
+                </button>
+                <button
+                  onClick={handleDeleteDialogClose}
+                  style={{
+                    padding: '12px 16px',
+                    background: 'linear-gradient(135deg, #6c757d, #6c757d)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
       </div>
     );
   }
@@ -2602,13 +3272,159 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             )}
             
             <div className="date-selection-section">
-              <label className="section-label">Select Activity Dates</label>
-              <p className="section-description">Click dates to select/deselect them. You can choose multiple dates for recurring activities.</p>
-              <CalendarDatePicker
-                selectedDates={selectedDates}
-                onChange={setSelectedDates}
-                minDate={new Date().toISOString().split('T')[0]}
-              />
+              <label className="section-label">Activity Schedule</label>
+              <div className="recurring-toggle" style={{ marginBottom: '16px' }}>
+                <div className="toggle-options">
+                  <label className="radio-option" style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    padding: '12px 16px', 
+                    margin: '8px 0',
+                    background: !isRecurringActivity ? '#e6f3ff' : '#f8f9fa',
+                    borderRadius: '8px',
+                    border: !isRecurringActivity ? '2px solid #0066cc' : '1px solid #e2e8f0',
+                    cursor: 'pointer'
+                  }}>
+                    <input
+                      type="radio"
+                      name="activityType"
+                      checked={!isRecurringActivity}
+                      onChange={() => {
+                        setIsRecurringActivity(false);
+                        // Clear recurring-specific state when switching to single activity
+                        setRecurringDaysOfWeek([]);
+                        setRecurringStartDate('');
+                      }}
+                      style={{ marginRight: '8px' }}
+                    />
+                    <span>📅 Single Date Activity</span>
+                  </label>
+                  <label className="radio-option" style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    padding: '12px 16px', 
+                    margin: '8px 0',
+                    background: isRecurringActivity ? '#e6f3ff' : '#f8f9fa',
+                    borderRadius: '8px',
+                    border: isRecurringActivity ? '2px solid #0066cc' : '1px solid #e2e8f0',
+                    cursor: 'pointer'
+                  }}>
+                    <input
+                      type="radio"
+                      name="activityType"
+                      checked={isRecurringActivity}
+                      onChange={() => {
+                        setIsRecurringActivity(true);
+                        // Clear single activity state when switching to recurring
+                        setSelectedDates([]);
+                        // Set default start date to today if not already set
+                        if (!recurringStartDate) {
+                          setRecurringStartDate(new Date().toISOString().split('T')[0]);
+                        }
+                      }}
+                      style={{ marginRight: '8px' }}
+                    />
+                    <span>🔄 Recurring Activity (2 months)</span>
+                  </label>
+                </div>
+              </div>
+
+              {!isRecurringActivity ? (
+                <div>
+                  <p className="section-description">Click dates to select/deselect them. You can choose multiple dates.</p>
+                  <CalendarDatePicker
+                    selectedDates={selectedDates}
+                    onChange={setSelectedDates}
+                    minDate={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+              ) : (
+                <div className="recurring-options">
+                  <p className="section-description">Select which days of the week this activity will repeat. It will run for 2 months starting from your chosen date.</p>
+                  
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>Start Date:</label>
+                    <input
+                      type="date"
+                      value={recurringStartDate}
+                      onChange={(e) => setRecurringStartDate(e.target.value)}
+                      min={new Date().toISOString().split('T')[0]}
+                      style={{
+                        padding: '12px',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '16px',
+                        width: '100%',
+                        maxWidth: '200px'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '12px', fontWeight: '600' }}>Days of the Week:</label>
+                    <div className="days-of-week-selector" style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(7, 1fr)', 
+                      gap: '8px',
+                      marginBottom: '16px'
+                    }}>
+                      {[
+                        { day: 'Sun', value: 0, emoji: '🌅' },
+                        { day: 'Mon', value: 1, emoji: '💼' },
+                        { day: 'Tue', value: 2, emoji: '📅' },
+                        { day: 'Wed', value: 3, emoji: '🎯' },
+                        { day: 'Thu', value: 4, emoji: '⚡' },
+                        { day: 'Fri', value: 5, emoji: '🎉' },
+                        { day: 'Sat', value: 6, emoji: '🌟' }
+                      ].map((dayOption) => (
+                        <label key={dayOption.value} style={{ 
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          padding: '12px 8px',
+                          background: recurringDaysOfWeek.includes(dayOption.value) ? '#e6f3ff' : '#f8f9fa',
+                          borderRadius: '8px',
+                          border: recurringDaysOfWeek.includes(dayOption.value) ? '2px solid #0066cc' : '1px solid #e2e8f0',
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          fontSize: '12px'
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={recurringDaysOfWeek.includes(dayOption.value)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setRecurringDaysOfWeek([...recurringDaysOfWeek, dayOption.value]);
+                              } else {
+                                setRecurringDaysOfWeek(recurringDaysOfWeek.filter(d => d !== dayOption.value));
+                              }
+                            }}
+                            style={{ display: 'none' }}
+                          />
+                          <span style={{ fontSize: '16px', marginBottom: '4px' }}>{dayOption.emoji}</span>
+                          <span style={{ fontWeight: '600' }}>{dayOption.day}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {recurringDaysOfWeek.length > 0 && (
+                      <div style={{
+                        padding: '12px',
+                        background: '#d4edda',
+                        color: '#155724',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        marginTop: '12px'
+                      }}>
+                        📋 This will create activities every{' '}
+                        {recurringDaysOfWeek.map(day => 
+                          ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day]
+                        ).join(', ')}{' '}
+                        for 2 months starting from {recurringStartDate || 'selected date'}.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="time-row">
               <div className="time-field">
@@ -2617,6 +3433,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   value={newActivity.start_time}
                   onChange={(time) => setNewActivity({...newActivity, start_time: time})}
                   placeholder="Start time"
+                  defaultScrollPosition="start"
                 />
               </div>
               <div className="time-field">
@@ -2625,6 +3442,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   value={newActivity.end_time}
                   onChange={(time) => setNewActivity({...newActivity, end_time: time})}
                   placeholder="End time"
+                  defaultScrollPosition="end"
                 />
               </div>
             </div>
@@ -3034,6 +3852,87 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             </div>
           </div>
         </div>
+
+        {/* Custom Template Dialog with Yes/No buttons */}
+        {(() => {
+          const shouldShow = showTemplateDialog;
+          console.log('🎯 Dialog render check (ADD-ACTIVITY):', { 
+            showTemplateDialog, 
+            shouldShow,
+            templateDialogMessage,
+            currentPage,
+            timestamp: new Date().toISOString()
+          });
+          return shouldShow;
+        })() && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}>
+            <div style={{
+              backgroundColor: 'white',
+              padding: '30px',
+              borderRadius: '12px',
+              maxWidth: '500px',
+              width: '90%',
+              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)'
+            }}>
+              <div style={{
+                fontSize: '16px',
+                lineHeight: '1.5',
+                color: '#333',
+                marginBottom: '25px',
+                whiteSpace: 'pre-line'
+              }}>
+                {templateDialogMessage}
+              </div>
+              <div style={{
+                display: 'flex',
+                gap: '15px',
+                justifyContent: 'center'
+              }}>
+                <button
+                  onClick={handleTemplateYes}
+                  style={{
+                    backgroundColor: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px 30px',
+                    borderRadius: '8px',
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Yes
+                </button>
+                <button
+                  onClick={handleTemplateNo}
+                  style={{
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    padding: '12px 30px',
+                    borderRadius: '8px',
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    cursor: 'pointer'
+                  }}
+                >
+                  No
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -3081,6 +3980,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   value={newActivity.start_time}
                   onChange={(time) => setNewActivity({...newActivity, start_time: time})}
                   placeholder="Start time"
+                  defaultScrollPosition="start"
                 />
               </div>
               <div className="time-field">
@@ -3089,6 +3989,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   value={newActivity.end_time}
                   onChange={(time) => setNewActivity({...newActivity, end_time: time})}
                   placeholder="End time"
+                  defaultScrollPosition="end"
                 />
               </div>
             </div>
@@ -3356,13 +4257,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         <div className="header-actions">
           <div className="view-toggle">
             <button
-              onClick={() => setCalendarView('5day')}
+              onClick={() => {
+                setCalendarView('5day');
+                console.log('📅 ChildActivityScreen - Calendar view changed to 5-day, checking for month change');
+                setTimeout(() => loadActivities(), 100); // Small delay to ensure state is updated
+              }}
               className={`toggle-btn ${calendarView === '5day' ? 'active' : ''}`}
             >
               5 Day
             </button>
             <button
-              onClick={() => setCalendarView('7day')}
+              onClick={() => {
+                setCalendarView('7day');
+                console.log('📅 ChildActivityScreen - Calendar view changed to 7-day, checking for month change');
+                setTimeout(() => loadActivities(), 100); // Small delay to ensure state is updated
+              }}
               className={`toggle-btn ${calendarView === '7day' ? 'active' : ''}`}
             >
               7 Day
@@ -3505,7 +4414,27 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     }}
                   >
                     <div className="activity-card-header">
-                      <h4 className="activity-name">{activity.name}</h4>
+                      <h4 className="activity-name">
+                        {activity.name}
+                        {/* Show recurring series indicator */}
+                        {((activity as any).series_id || (activity as any).is_recurring) && (
+                          <span 
+                            className="series-indicator"
+                            style={{
+                              marginLeft: '8px',
+                              fontSize: '12px',
+                              background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                              color: 'white',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontWeight: '500'
+                            }}
+                            title="This is part of a recurring activity series"
+                          >
+                            🔄 Series
+                          </span>
+                        )}
+                      </h4>
                       {(activity.isPendingInvitation || activity.isAcceptedInvitation || activity.isDeclinedInvitation || (activity as any).unviewed_status_changes > 0) && (
                         <div className="activity-status">
                           {activity.isPendingInvitation && activity.showEnvelope !== false && <span className="status-icon">📩</span>}
@@ -3563,8 +4492,19 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         })()}
       </div>
 
-      {/* Custom Template Dialog with Yes/No buttons */}
-      {showTemplateDialog && (
+
+      {/* Custom Template Dialog with Yes/No buttons - Available on all pages */}
+      {(() => {
+        const shouldShow = showTemplateDialog;
+        console.log('🎯 Dialog render check (GLOBAL):', { 
+          showTemplateDialog, 
+          shouldShow,
+          templateDialogMessage,
+          currentPage,
+          timestamp: new Date().toISOString()
+        });
+        return shouldShow;
+      })() && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -3581,10 +4521,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             backgroundColor: 'white',
             padding: '30px',
             borderRadius: '12px',
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
             maxWidth: '500px',
             width: '90%',
-            textAlign: 'center'
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)'
           }}>
             <div style={{
               fontSize: '16px',
@@ -3635,6 +4574,115 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         </div>
       )}
 
+      {/* Delete Activity Dialog for Recurring Activities */}
+      {(() => {
+        console.log('🎭 Dialog render check:', { showDeleteDialog, deleteDialogActivity: deleteDialogActivity?.name, shouldRender: showDeleteDialog && deleteDialogActivity });
+        return null;
+      })()}
+      {showDeleteDialog && deleteDialogActivity && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '24px',
+            borderRadius: '12px',
+            maxWidth: '400px',
+            margin: '20px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
+          }}>
+            <h3 style={{ 
+              marginTop: 0, 
+              marginBottom: '16px', 
+              color: '#e53e3e', 
+              fontWeight: '600',
+              fontSize: '18px' 
+            }}>
+              🗑️ Delete Recurring Activity
+            </h3>
+            <p style={{ 
+              marginBottom: '20px', 
+              lineHeight: '1.6',
+              color: '#4a5568'
+            }}>
+              This activity "<strong>{deleteDialogActivity.name}</strong>" is part of a recurring series.
+            </p>
+            <p style={{ 
+              marginBottom: '24px', 
+              lineHeight: '1.6',
+              color: '#4a5568' 
+            }}>
+              What would you like to delete?
+            </p>
+            <div style={{ 
+              display: 'flex', 
+              gap: '12px',
+              flexDirection: 'column'
+            }}>
+              <button
+                onClick={() => {
+                  handleDeleteDialogClose();
+                  deleteActivity(deleteDialogActivity, false);
+                }}
+                style={{
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, #fd7e14, #fd7e14)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                📅 Just This Activity
+              </button>
+              <button
+                onClick={() => {
+                  handleDeleteDialogClose();
+                  deleteActivity(deleteDialogActivity, true);
+                }}
+                style={{
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, #e53e3e, #fc8181)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                🔄 Entire Series (All Activities)
+              </button>
+              <button
+                onClick={handleDeleteDialogClose}
+                style={{
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, #6c757d, #6c757d)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                ❌ Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -183,7 +183,7 @@ class ApiService {
   }
 
   async getCalendarActivities(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
-    return this.request('get', `/api/calendar/activities?start=${startDate}&end=${endDate}`);
+    return this.request('get', `/api/calendar/activities?start=${startDate}&end=${endDate}&_t=${Date.now()}`);
   }
 
   async createActivity(childUuid: string, activityData: any): Promise<ApiResponse<any>> {
@@ -196,6 +196,15 @@ class ApiService {
 
   async deleteActivity(activityUuid: string): Promise<ApiResponse<any>> {
     return this.request('delete', `/api/activities/delete/${activityUuid}`);
+  }
+
+  async deleteActivitySeries(activityName: string, childUuid: string): Promise<ApiResponse<any>> {
+    // Try to delete entire series by activity name and child UUID
+    // This will delete all activities with the same name for the specific child
+    return this.request('delete', `/api/activities/delete-series`, {
+      activity_name: activityName,
+      child_uuid: childUuid
+    });
   }
 
   async duplicateActivity(activityUuid: string, newStartDate: string, newEndDate: string): Promise<ApiResponse<any>> {

@@ -189,31 +189,139 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     try {
       const counts: Record<string, number> = {};
       
-      // Get date range for accepted invitations
-      const today = new Date();
-      const oneYearLater = new Date();
-      oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
-      const startDate = today.toISOString().split('T')[0];
-      const endDate = oneYearLater.toISOString().split('T')[0];
+      // Use current week date range (Aug 24-30, 2024)
+      const now = new Date();
+      const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert Sunday to 6, others to dayOfWeek - 1
       
-      // Load activity count for each child using secure UUID-based filtering
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - daysFromMonday);
+      
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      
+      const startDate = startOfWeek.toISOString().split('T')[0];
+      const endDate = endOfWeek.toISOString().split('T')[0];
+      
+      console.log(`📅 ChildrenScreen - Using CURRENT WEEK date range: ${startDate} to ${endDate} (${startOfWeek.toDateString()} to ${endOfWeek.toDateString()})`);
+      
+      // Load activity count for each child using the SAME logic as ChildActivityScreen
+      console.log(`📡 ChildrenScreen - Loading owned activities...`);
       const calendarActivitiesResponse = await apiService.getCalendarActivities(startDate, endDate);
+      console.log(`🔍 ChildrenScreen - Calendar activities API response:`, calendarActivitiesResponse);
+      
+      console.log(`📡 ChildrenScreen - Loading invited activities...`);
+      const invitationsResponse = await apiService.getAllInvitations(startDate, endDate);
+      console.log(`🔍 ChildrenScreen - Invitations API response:`, invitationsResponse);
+      
+      console.log(`📡 ChildrenScreen - Loading pending invitations (using getAllInvitations directly)...`);
+      // Use the same API call as NotificationBell to ensure we get series_id data
+      const allInvitationsResponse = await apiService.getAllInvitations(startDate, endDate);
+      const pendingResponse = {
+        success: allInvitationsResponse.success,
+        data: allInvitationsResponse.success && allInvitationsResponse.data 
+          ? allInvitationsResponse.data.filter((inv: any) => inv.status === 'pending')
+          : [],
+        error: allInvitationsResponse.error
+      };
+      console.log(`🔍 ChildrenScreen - Pending invitations API response:`, pendingResponse);
+      
+      // Debug series_id data
+      if (pendingResponse.success && pendingResponse.data && pendingResponse.data.length > 0) {
+        console.log(`🔍 ChildrenScreen - Found ${pendingResponse.data.length} pending invitations`);
+        pendingResponse.data.forEach((inv: any, index: number) => {
+          console.log(`🔍 Pending inv ${index + 1}: activity_name="${inv.activity_name}", series_id="${inv.series_id}"`);
+        });
+      }
+      
       if (calendarActivitiesResponse.success && calendarActivitiesResponse.data) {
-        const allActivities = Array.isArray(calendarActivitiesResponse.data) ? calendarActivitiesResponse.data : [];
+        const ownedActivities = Array.isArray(calendarActivitiesResponse.data) ? calendarActivitiesResponse.data : [];
+        console.log(`📅 ChildrenScreen - Owned activities from API: ${ownedActivities.length}`);
+        
+        // Process invited activities (same as ChildActivityScreen)
+        const invitedActivities: any[] = [];
+        if (invitationsResponse.success && invitationsResponse.data) {
+          const invitations = Array.isArray(invitationsResponse.data) ? invitationsResponse.data : [];
+          console.log(`📅 ChildrenScreen - Invitations from API: ${invitations.length}`);
+          
+          invitations.forEach(invitation => {
+            invitedActivities.push({
+              ...invitation,
+              name: invitation.activity_name,
+              start_time: invitation.start_time,
+              end_time: invitation.end_time,
+              date: invitation.start_date.split('T')[0],
+              child_uuid: invitation.invited_child_uuid,
+              is_host: false,
+              is_shared: true,
+              invitation_status: invitation.status,
+              invited_child_uuid: invitation.invited_child_uuid,
+              invitationUuid: invitation.invitation_uuid,
+              host_parent_name: invitation.host_parent_username
+            });
+          });
+        }
+        
+        // Process pending invitations (same as ChildActivityScreen)
+        const pendingInvitations: any[] = [];
+        if (pendingResponse.success && pendingResponse.data) {
+          const pending = Array.isArray(pendingResponse.data) ? pendingResponse.data : [];
+          console.log(`📅 ChildrenScreen - Pending invitations from API: ${pending.length}`);
+          
+          pending.forEach((invitation, index) => {
+            const transformedInvitation = {
+              ...invitation,
+              name: invitation.activity_name,
+              start_time: invitation.start_time,
+              end_time: invitation.end_time,
+              date: invitation.start_date.split('T')[0],
+              child_uuid: invitation.invited_child_uuid,
+              is_host: false,
+              is_shared: true,
+              invitation_status: 'pending',
+              invited_child_uuid: invitation.invited_child_uuid,
+              invitationUuid: invitation.invitation_uuid,
+              host_parent_name: invitation.host_parent_username
+            };
+            // console.log(`🔍 Transformed invitation ${index + 1}: activity_name="${transformedInvitation.name}", series_id="${(transformedInvitation as any).series_id}"`);
+            pendingInvitations.push(transformedInvitation);
+          });
+        }
+        
+        // Combine all activities (owned + invited + pending)
+        const allActivities = [...ownedActivities, ...invitedActivities, ...pendingInvitations];
+        console.log(`📅 ChildrenScreen - Total combined activities: ${allActivities.length} (${ownedActivities.length} owned + ${invitedActivities.length} invited + ${pendingInvitations.length} pending)`);
         
         for (const child of childrenData) {
+          console.log(`\n🔍 Processing activities for ${child.name} (UUID: ${child.uuid})...`);
           try {
-            // Filter activities for this specific child using UUIDs (same logic as ChildActivityScreen)
+            // Filter activities for this specific child using EXACT same logic as ChildActivityScreen
             const childActivities = allActivities.filter(activity => {
               const ownsActivity = activity.child_uuid === child.uuid;
               const isInvited = activity.invited_child_uuid === child.uuid && 
                                activity.invitation_status && 
                                activity.invitation_status !== 'none';
-              return ownsActivity || isInvited;
+              const shouldInclude = ownsActivity || isInvited;
+              
+              // Enhanced debug logging to match ChildActivityScreen
+              if (shouldInclude) {
+                console.log(`🔍 ChildrenScreen - INCLUDING "${activity.name}" for ${child.name}:`);
+                console.log(`   - Type: ${ownsActivity ? 'PRIVATE (owned)' : 'SHARED (invited)'}`);
+                console.log(`   - Owns: ${ownsActivity} (${activity.child_uuid} === ${child.uuid})`);
+                console.log(`   - Invited: ${isInvited} (${activity.invited_child_uuid} === ${child.uuid}, status: ${activity.invitation_status})`);
+                console.log(`   - Date: ${activity.date}, Host: ${activity.host_parent_username || 'N/A'}`);
+              }
+              
+              return shouldInclude;
             });
             
+            // Count private vs shared activities for detailed breakdown
+            const privateCount = childActivities.filter(a => a.child_uuid === child.uuid).length;
+            const sharedCount = childActivities.filter(a => a.invited_child_uuid === child.uuid && a.invitation_status !== 'none').length;
+            
             counts[child.uuid] = childActivities.length;
-            console.log(`📊 Child ${child.name} (UUID: ${child.uuid}): ${childActivities.length} activities`);
+            console.log(`📊 Child ${child.name} (UUID: ${child.uuid}): ${childActivities.length} total activities`);
+            console.log(`   📈 Breakdown: ${privateCount} private + ${sharedCount} shared = ${privateCount + sharedCount} total`);
           } catch (error) {
             console.error(`Failed to load activity count for child ${child.uuid}:`, error);
             counts[child.uuid] = 0;
@@ -422,8 +530,102 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
   };
 
   const handleInvitationResponse = async (invitationUuid: string, action: 'accept' | 'reject') => {
+    const formatDate = (dateString: string) => {
+      return new Date(dateString).toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    };
+    
     try {
       setProcessingInvitation(parseInt(invitationUuid)); // Keep for UI state management
+      
+      // ✅ RECURRING ACTIVITIES: Find the invitation and check if it's part of a series
+      let currentInvitation: any = null;
+      let allInvitationsForChild: any[] = [];
+      
+      Object.keys(childInvitations).forEach(childId => {
+        const invitations = childInvitations[childId] || [];
+        const found = invitations.find(inv => inv.invitation_uuid === invitationUuid);
+        if (found) {
+          currentInvitation = found;
+          allInvitationsForChild = invitations;
+        }
+      });
+      
+      if (!currentInvitation) {
+        console.error('❌ Could not find invitation with UUID:', invitationUuid);
+        return;
+      }
+      
+      // Check if this is part of a recurring series using series_id (safer than name matching)
+      const currentSeriesId = (currentInvitation as any).series_id;
+      
+      // Check if series_id is valid (not null, undefined, or the string "undefined")
+      const seriesInvitations = currentSeriesId && currentSeriesId !== 'undefined'
+        ? allInvitationsForChild.filter(inv => (inv as any).series_id === currentSeriesId)
+        : allInvitationsForChild.filter(inv => 
+            inv.activity_name === currentInvitation.activity_name &&
+            inv.host_parent_name === currentInvitation.host_parent_name
+          );
+      
+      const isRecurringInvitation = seriesInvitations.length > 1;
+      
+      if (isRecurringInvitation) {
+        // Show confirmation dialog for series action
+        const actionWord = action === 'accept' ? 'accept' : 'decline';
+        const seriesMessage = `This is a recurring activity with ${seriesInvitations.length} instances. Do you want to ${actionWord}:\n\n` +
+          `• Just this activity (${formatDate(currentInvitation.start_date)})\n` +
+          `• The entire series (all ${seriesInvitations.length} activities)`;
+          
+        const acceptSeries = window.confirm(seriesMessage + '\n\nClick OK for entire series, Cancel for just this activity.');
+        
+        if (acceptSeries) {
+          // Accept/decline the entire series
+          console.log(`📧 ${action === 'accept' ? 'Accepting' : 'Declining'} entire series:`, seriesInvitations.map(inv => ({
+            uuid: inv.invitation_uuid,
+            name: inv.activity_name,
+            date: inv.start_date
+          })));
+          
+          const seriesPromises = seriesInvitations.map(inv => 
+            apiService.respondToActivityInvitation(inv.invitation_uuid, action)
+          );
+          
+          const results = await Promise.all(seriesPromises);
+          const successCount = results.filter(r => r?.success).length;
+          
+          if (successCount > 0) {
+            // Remove all series invitations from the child's list
+            setChildInvitations(prev => {
+              const updated = { ...prev };
+              Object.keys(updated).forEach(childId => {
+                updated[childId] = updated[childId].filter(inv => 
+                  !(inv.activity_name === currentInvitation.activity_name &&
+                    inv.host_parent_name === currentInvitation.host_parent_name)
+                );
+              });
+              return updated;
+            });
+            
+            const message = action === 'accept' 
+              ? `Series accepted! ${successCount} recurring activities will appear in your calendar.`
+              : `Series declined. ${successCount} invitations removed.`;
+            alert(message);
+            
+            // Refresh data to update notification bell and other UI components
+            loadChildren();
+          } else {
+            alert(`Error: Failed to ${action} series invitations`);
+          }
+          
+          return;
+        }
+      }
+      
+      // Handle single invitation (either non-recurring or user chose single)
       const response = await apiService.respondToActivityInvitation(invitationUuid, action);
       
       if (response.success) {
@@ -921,7 +1123,70 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                     })}
                     
                     {/* Activity Invitations */}
-                    {childInvitations[child.uuid] && childInvitations[child.uuid].map((invitation) => {
+                    {(() => {
+                      const childInvs = childInvitations[child.uuid];
+                      console.log(`🔍 CHILD CARD INVITATIONS for ${child.name}:`, childInvs);
+                      if (childInvs) {
+                        childInvs.forEach(inv => {
+                          console.log(`  - ${inv.activity_name} (series_id: ${(inv as any).series_id})`);
+                        });
+                      }
+                      return childInvs;
+                    })() && childInvitations[child.uuid]
+                      .filter((invitation, index, allInvitations) => {
+                        // For recurring activities, only show the first invitation of each series
+                        const currentSeriesId = (invitation as any).series_id;
+                        const activityName = invitation.activity_name;
+                        const hostParentName = (invitation as any).host_parent_name;
+                        
+                        console.log(`🔍 FILTERING invitation "${activityName}": series_id="${currentSeriesId}", host="${hostParentName}"`);
+                        
+                        // Check if series_id is valid (not null, undefined, or the string "undefined")
+                        if (currentSeriesId && currentSeriesId !== 'undefined') {
+                          console.log(`  ✅ Using series_id grouping for "${activityName}"`);
+                          // Use series_id for grouping (preferred method)
+                          const seriesInvitations = allInvitations.filter(other => 
+                            (other as any).series_id === currentSeriesId
+                          );
+                          
+                          if (seriesInvitations.length > 1) {
+                            // This is part of a recurring series - only show the earliest one
+                            const sortedSeries = seriesInvitations.sort((a, b) => 
+                              new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+                            );
+                            const shouldShow = invitation.id === sortedSeries[0].id;
+                            console.log(`  📅 Series of ${seriesInvitations.length}, showing first: ${shouldShow}`);
+                            return shouldShow;
+                          }
+                        } else {
+                          console.log(`  ⚠️ Using name-based fallback grouping for "${activityName}"`);
+                          // Fallback: Use name-based grouping when series_id is invalid
+                          
+                          // Find all invitations with same name and host
+                          const sameNameInvitations = allInvitations.filter(other => 
+                            other.activity_name === activityName &&
+                            (other as any).host_parent_name === hostParentName
+                          );
+                          
+                          console.log(`  🔍 Found ${sameNameInvitations.length} invitations with name "${activityName}" and host "${hostParentName}"`);
+                          
+                          if (sameNameInvitations.length > 1) {
+                            // This is part of a recurring series - only show the earliest one
+                            const sortedSeries = sameNameInvitations.sort((a, b) => 
+                              new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+                            );
+                            const shouldShow = invitation.id === sortedSeries[0].id;
+                            console.log(`  📅 Recurring series of ${sameNameInvitations.length}, showing first: ${shouldShow}`);
+                            console.log(`  📅 First invitation date: ${sortedSeries[0].start_date}, current: ${invitation.start_date}`);
+                            return shouldShow;
+                          }
+                        }
+                        
+                        console.log(`  ✅ Single activity, showing: true`);
+                        // Show all invitations that are single activities
+                        return true;
+                      })
+                      .map((invitation) => {
                       // Use just the host child's name (which should be their full name from the database)
                       const childFullName = invitation.host_child_name || 'Someone';
                       
@@ -939,10 +1204,31 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                         ? ` at ${invitation.start_time}`
                         : '';
 
+                      // ✅ RECURRING ACTIVITIES: Apply same logic as NotificationBell
+                      const currentChildInvitations = childInvitations[child.uuid] || [];
+                      
+                      // Check if this is part of a recurring series using series_id
+                      const currentSeriesId = (invitation as any).series_id;
+                      const seriesInvitations = currentSeriesId 
+                        ? currentChildInvitations.filter(inv => (inv as any).series_id === currentSeriesId)
+                        : [invitation]; // Single invitation if no series_id
+                      
+                      let displayMessage = '';
+                      if (seriesInvitations.length > 1) {
+                        // This is a recurring activity - show grouped message
+                        const firstInvitation = seriesInvitations[0];
+                        const startDate = new Date(firstInvitation.start_date);
+                        const dayOfWeek = startDate.toLocaleDateString('en-US', { weekday: 'long' });
+                        displayMessage = `${childFullName} invited you to "${invitation.activity_name}" - recurring every ${dayOfWeek} (${seriesInvitations.length} activities)${timeRange}`;
+                      } else {
+                        // Single activity
+                        displayMessage = `${childFullName} invited you to "${invitation.activity_name}" on ${formatDate(invitation.start_date)}${timeRange}`;
+                      }
+
                       return (
                         <div key={invitation.id} className="invitation-item" onClick={(e) => e.stopPropagation()}>
                           <div className="invitation-message">
-                            {childFullName} invited you to "{invitation.activity_name}" on {formatDate(invitation.start_date)}{timeRange}
+                            {displayMessage}
                           </div>
                           <div className="invitation-actions">
                             <button
@@ -1000,7 +1286,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                       if (notification.unviewed_responses && notification.unviewed_responses.length > 0) {
                         // Detailed message with names
                         responseMessage = notification.unviewed_responses
-                          .map((r: any) => `${r.parent_name || 'Someone'} ${r.status === 'accepted' ? 'accepted' : 'declined'}`)
+                          .map((r: any) => `${r.child_name || r.parent_name || 'Someone'} ${r.status === 'accepted' ? 'accepted' : 'declined'}`)
                           .join(', ');
                       } else {
                         // Fallback summary message
