@@ -373,9 +373,9 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
             if (targetChild) {
               // Convert the calendar invitation format to match ActivityInvitation interface
               invitationsByChild[targetChild.uuid].push({
-                id: invitation.invitation_id,
+                id: invitation.invitation_uuid || invitation.id, // Use invitation_uuid as primary ID
                 invitation_uuid: invitation.invitation_uuid,
-                activity_id: invitation.id,
+                activity_id: invitation.activity_uuid || invitation.id,
                 activity_name: invitation.activity_name,
                 activity_description: invitation.activity_description,
                 start_date: invitation.start_date,
@@ -1161,6 +1161,8 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                             );
                             const shouldShow = invitation.id === sortedSeries[0].id;
                             console.log(`  📅 Series of ${seriesInvitations.length}, showing first: ${shouldShow}`);
+                            console.log(`  📅 Current invitation ID: ${invitation.id}, date: ${invitation.start_date}`);
+                            console.log(`  📅 First invitation ID: ${sortedSeries[0].id}, date: ${sortedSeries[0].start_date}`);
                             return shouldShow;
                           }
                         } else {
