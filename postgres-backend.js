@@ -2235,12 +2235,8 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
             [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared, processedSeriesId, processedIsRecurring, processedRecurringDays, processedSeriesStartDate]
         );
 
-        // Get child_uuid separately
-        const childUuidResult = await client.query('SELECT uuid FROM children WHERE id = $1', [childId]);
-        const childUuid = childUuidResult.rows[0]?.uuid;
-
         console.log('🎯 Primary activity created:', result.rows[0].uuid);
-        // Add child_uuid to the activity object
+        // Add child_uuid to the activity object (use the childUuid parameter from the URL)
         const primaryActivity = { ...result.rows[0], child_uuid: childUuid };
         const createdActivities = [primaryActivity];
 
