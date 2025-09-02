@@ -2238,6 +2238,8 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         console.log('🎯 Primary activity created:', result.rows[0].uuid);
         // Add child_uuid to the activity object (use the childUuid parameter from the URL)
         const primaryActivity = { ...result.rows[0], child_uuid: childUuid };
+        console.log('🔍 DEBUG: childUuid parameter:', childUuid);
+        console.log('🔍 DEBUG: primaryActivity child_uuid:', primaryActivity.child_uuid);
         const createdActivities = [primaryActivity];
 
         // Create joint host activities if joint_host_children is provided
@@ -2268,6 +2270,8 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                     console.log('✅ Joint host activity created:', jointResult.rows[0].uuid, 'for child:', jointChildUuid);
                     // Add child_uuid to the joint activity object
                     const jointActivity = { ...jointResult.rows[0], child_uuid: jointChildUuid };
+                    console.log('🔍 DEBUG: jointChildUuid:', jointChildUuid);
+                    console.log('🔍 DEBUG: jointActivity child_uuid:', jointActivity.child_uuid);
                     createdActivities.push(jointActivity);
                 } catch (jointError) {
                     console.error(`❌ Failed to create joint activity for child ${jointChildUuid}:`, jointError);
@@ -2278,12 +2282,17 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
 
         client.release();
 
-        res.json({
+        const responseData = {
             success: true,
             data: createdActivities[0], // Return primary activity for compatibility
             joint_activities: createdActivities.length > 1 ? createdActivities : undefined, // Include all if joint hosting
             message: createdActivities.length > 1 ? `Activity created for ${createdActivities.length} children` : 'Activity created successfully'
-        });
+        };
+        
+        console.log('🔍 DEBUG: Final response being sent:', JSON.stringify(responseData, null, 2));
+        console.log('🔍 DEBUG: createdActivities array:', JSON.stringify(createdActivities.map(a => ({ uuid: a.uuid, name: a.name, child_uuid: a.child_uuid })), null, 2));
+
+        res.json(responseData);
     } catch (error) {
         console.error('Create activity error:', error);
         res.status(500).json({ success: false, error: 'Failed to create activity' });

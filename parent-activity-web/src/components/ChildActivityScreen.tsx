@@ -1900,8 +1900,20 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         console.log(`🔍 FULL RESPONSE DATA for ${date}:`, response.data);
         
         if (response.success) {
+          // Add the primary activity
           createdActivities.push(response.data);
           console.log(`✅ Successfully created activity ${response.data?.name} for ${date} with UUID: ${response.data?.uuid || response.data?.activity_uuid}`);
+          
+          // Also add joint activities if they exist (for multi-host scenarios)
+          const responseAny = response as any;
+          if (responseAny.joint_activities && Array.isArray(responseAny.joint_activities) && responseAny.joint_activities.length > 1) {
+            // joint_activities includes both primary and joint activities, so add the joint ones (skip the first which is the primary)
+            for (let i = 1; i < responseAny.joint_activities.length; i++) {
+              const jointActivity = responseAny.joint_activities[i];
+              createdActivities.push(jointActivity);
+              console.log(`✅ Also added joint activity ${jointActivity?.name} with UUID: ${jointActivity?.uuid} and child_uuid: ${jointActivity?.child_uuid}`);
+            }
+          }
         } else {
           console.error(`❌ Failed to create activity for ${date}:`, response.error);
         }
@@ -2038,6 +2050,17 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           // With child_uuid now included in the response, we can properly filter activities by host
           let hostActivities = [];
           
+          console.log('🔍 DEBUG: createdActivities:', createdActivities);
+          console.log('🔍 DEBUG: hostChildUuid:', hostChildUuid);
+          console.log('🔍 DEBUG: jointHostChildren:', jointHostChildren);
+          
+          // Before filtering
+          console.log('🔍 DEBUG: Activities before filter:', createdActivities.map(a => ({ 
+            uuid: a.uuid, 
+            name: a.name,
+            child_uuid: a.child_uuid 
+          })));
+          
           if (jointHostChildren.length === 0) {
             // No joint hosting - all activities belong to primary host
             hostActivities = createdActivities;
@@ -2045,6 +2068,13 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             // Filter activities by child_uuid to match the current host child
             hostActivities = createdActivities.filter(activity => activity.child_uuid === hostChildUuid);
           }
+          
+          // After filtering
+          console.log('🔍 DEBUG: Activities after filter:', hostActivities.map(a => ({ 
+            uuid: a.uuid, 
+            name: a.name,
+            child_uuid: a.child_uuid 
+          })));
           
           console.log(`🎯 Found ${hostActivities.length} activities for host ${hostChild.name}`);
           
