@@ -2035,21 +2035,15 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           const hostChild = hostChildUuid === child.uuid ? child : parentChildren.find(pc => pc.uuid === hostChildUuid);
           if (!hostChild) continue;
           
-          // Since createdActivities doesn't include child_uuid info, we need to split activities
-          // between hosts. For joint hosting with N total hosts, activities are created as pairs:
-          // [primary_activity1, joint_activity1, primary_activity2, joint_activity2, ...]
+          // With child_uuid now included in the response, we can properly filter activities by host
           let hostActivities = [];
           
           if (jointHostChildren.length === 0) {
             // No joint hosting - all activities belong to primary host
             hostActivities = createdActivities;
-          } else if (hostChildUuid === child.uuid) {
-            // Primary host gets activities at even indices (0, 2, 4, ...)
-            hostActivities = createdActivities.filter((_, index) => index % 2 === 0);
           } else {
-            // Joint host gets activities at odd indices (1, 3, 5, ...)
-            // For now, assuming only 1 joint host (Zoe Wong)
-            hostActivities = createdActivities.filter((_, index) => index % 2 === 1);
+            // Filter activities by child_uuid to match the current host child
+            hostActivities = createdActivities.filter(activity => activity.child_uuid === hostChildUuid);
           }
           
           console.log(`🎯 Found ${hostActivities.length} activities for host ${hostChild.name}`);

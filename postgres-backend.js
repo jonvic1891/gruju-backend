@@ -2231,12 +2231,18 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
 
         // ✅ SECURITY: Only return necessary fields with UUID
         const result = await client.query(
-            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, created_at, updated_at, (SELECT c.uuid FROM children c WHERE c.id = activities.child_id) as child_uuid',
+            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, created_at, updated_at',
             [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared, processedSeriesId, processedIsRecurring, processedRecurringDays, processedSeriesStartDate]
         );
 
+        // Get child_uuid separately
+        const childUuidResult = await client.query('SELECT uuid FROM children WHERE id = $1', [childId]);
+        const childUuid = childUuidResult.rows[0]?.uuid;
+
         console.log('🎯 Primary activity created:', result.rows[0].uuid);
-        const createdActivities = [result.rows[0]];
+        // Add child_uuid to the activity object
+        const primaryActivity = { ...result.rows[0], child_uuid: childUuid };
+        const createdActivities = [primaryActivity];
 
         // Create joint host activities if joint_host_children is provided
         if (joint_host_children && Array.isArray(joint_host_children) && joint_host_children.length > 0) {
@@ -2259,12 +2265,14 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
 
                     // Create activity for joint host child
                     const jointResult = await client.query(
-                        'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, created_at, updated_at, (SELECT c.uuid FROM children c WHERE c.id = activities.child_id) as child_uuid',
+                        'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, created_at, updated_at',
                         [jointChildId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared, processedSeriesId, processedIsRecurring, processedRecurringDays, processedSeriesStartDate]
                     );
 
                     console.log('✅ Joint host activity created:', jointResult.rows[0].uuid, 'for child:', jointChildUuid);
-                    createdActivities.push(jointResult.rows[0]);
+                    // Add child_uuid to the joint activity object
+                    const jointActivity = { ...jointResult.rows[0], child_uuid: jointChildUuid };
+                    createdActivities.push(jointActivity);
                 } catch (jointError) {
                     console.error(`❌ Failed to create joint activity for child ${jointChildUuid}:`, jointError);
                     // Continue with other joint children even if one fails
