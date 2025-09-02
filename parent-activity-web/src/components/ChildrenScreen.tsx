@@ -189,16 +189,16 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     try {
       const counts: Record<string, number> = {};
       
-      // Use current week date range (Aug 24-30, 2024)
+      // Use current week date range Sunday to Saturday
       const now = new Date();
       const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
-      const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert Sunday to 6, others to dayOfWeek - 1
       
+      // Calculate Sunday to Saturday week
       const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - daysFromMonday);
+      startOfWeek.setDate(now.getDate() - dayOfWeek); // Go back to Sunday (0 days if already Sunday)
       
       const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setDate(startOfWeek.getDate() + 6); // Add 6 days to get to Saturday
       
       const startDate = startOfWeek.toISOString().split('T')[0];
       const endDate = endOfWeek.toISOString().split('T')[0];
@@ -469,9 +469,9 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       if (calendarActivitiesResponse.success && calendarActivitiesResponse.data) {
         const allActivities = Array.isArray(calendarActivitiesResponse.data) ? calendarActivitiesResponse.data : [];
         
-        const notifications: any[] = [];
+        const rawNotifications: any[] = [];
         
-        // Check each activity where one of our children is the host AND has unviewed responses
+        // First, collect all activities with unviewed responses
         for (const activity of allActivities) {
           const hostChild = childrenData.find(child => child.uuid === activity.child_uuid);
           const hasUnviewedResponses = parseInt(activity.unviewed_status_changes || '0') > 0;
@@ -490,7 +490,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 );
                 
                 if (responseParticipants.length > 0) {
-                  notifications.push({
+                  rawNotifications.push({
                     activity_id: activity.id,
                     activity_uuid: activity.activity_uuid || activity.uuid,
                     activity_name: activity.name,
@@ -501,14 +501,15 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                     host_child_name: hostChild.name,
                     unviewed_responses: responseParticipants,
                     total_unviewed: parseInt(activity.unviewed_status_changes),
-                    unviewed_statuses: activity.unviewed_statuses
+                    unviewed_statuses: activity.unviewed_statuses,
+                    series_id: activity.series_id // Include series_id for grouping
                   });
                 }
               }
             } catch (error) {
               console.error(`Failed to load participants for activity ${activity.id}:`, error);
               // Fallback: create notification without detailed participant info
-              notifications.push({
+              rawNotifications.push({
                 activity_id: activity.id,
                 activity_uuid: activity.activity_uuid || activity.uuid,
                 activity_name: activity.name,
@@ -519,14 +520,88 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 host_child_name: hostChild.name,
                 unviewed_responses: [],
                 total_unviewed: parseInt(activity.unviewed_status_changes),
-                unviewed_statuses: activity.unviewed_statuses
+                unviewed_statuses: activity.unviewed_statuses,
+                series_id: activity.series_id // Include series_id for grouping
               });
             }
           }
         }
         
-        setHostedActivityNotifications(notifications);
-        console.log(`📊 Found ${notifications.length} hosted activities with unviewed responses`);
+        // Now group the notifications by series_id (same logic as NotificationBell)
+        const groupedNotifications = new Map<string, any[]>();
+        const singleNotifications: any[] = [];
+        
+        rawNotifications.forEach(notification => {
+          const seriesId = notification.series_id;
+          const activityName = notification.activity_name;
+          
+          if (seriesId && seriesId !== 'undefined') {
+            // Use series_id for proper grouping
+            const existingGroup = groupedNotifications.get(seriesId);
+            
+            if (existingGroup) {
+              existingGroup.push(notification);
+            } else {
+              // Check if there are other notifications with the same series_id
+              const seriesNotifications = rawNotifications.filter(n => n.series_id === seriesId);
+              
+              if (seriesNotifications.length > 1) {
+                // This is a recurring series
+                groupedNotifications.set(seriesId, seriesNotifications);
+              } else {
+                // Single activity in series
+                singleNotifications.push(notification);
+              }
+            }
+          } else {
+            // Fallback to name-based grouping if no series_id
+            const existingGroup = groupedNotifications.get(activityName);
+            
+            if (existingGroup) {
+              existingGroup.push(notification);
+            } else {
+              const sameNameNotifications = rawNotifications.filter(n => n.activity_name === activityName);
+              
+              if (sameNameNotifications.length > 1) {
+                groupedNotifications.set(activityName, sameNameNotifications);
+              } else {
+                if (!groupedNotifications.has(activityName)) {
+                  singleNotifications.push(notification);
+                }
+              }
+            }
+          }
+        });
+        
+        // Create final grouped notifications
+        const finalNotifications: any[] = [];
+        
+        // Add grouped recurring series notifications
+        groupedNotifications.forEach((notifications, seriesKey) => {
+          // Combine all responses from the series
+          const allResponses = notifications.flatMap(n => n.unviewed_responses);
+          const totalUnviewed = notifications.reduce((sum, n) => sum + n.total_unviewed, 0);
+          const allStatuses = notifications.map(n => n.unviewed_statuses).filter(Boolean).join(',');
+          
+          // Use the first notification as the template
+          const firstNotification = notifications[0];
+          
+          finalNotifications.push({
+            ...firstNotification,
+            unviewed_responses: allResponses,
+            total_unviewed: totalUnviewed,
+            unviewed_statuses: allStatuses,
+            is_recurring_series: true,
+            series_count: notifications.length,
+            series_notifications: notifications
+          });
+        });
+        
+        // Add single notifications
+        finalNotifications.push(...singleNotifications);
+        
+        setHostedActivityNotifications(finalNotifications);
+        console.log(`📊 Found ${finalNotifications.length} hosted activity notifications (${groupedNotifications.size} recurring series + ${singleNotifications.length} single activities)`);
       }
     } catch (error) {
       console.error('Failed to load hosted activity notifications:', error);
@@ -696,17 +771,43 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
 
   const handleMarkHostedActivityAsViewed = async (activityNotification: any) => {
     try {
-      // Mark all unviewed responses for this activity as viewed
-      for (const response of activityNotification.unviewed_responses) {
-        if (response.invitation_uuid) {
-          await apiService.markStatusChangeAsViewed(response.invitation_uuid);
+      if (activityNotification.is_recurring_series && activityNotification.series_notifications) {
+        // Handle recurring series - mark all activities in the series as viewed
+        for (const seriesNotification of activityNotification.series_notifications) {
+          for (const response of seriesNotification.unviewed_responses || []) {
+            if (response.invitation_uuid) {
+              await apiService.markStatusChangeAsViewed(response.invitation_uuid);
+            }
+          }
         }
+        
+        // Remove all notifications for activities in this series
+        setHostedActivityNotifications(prev => 
+          prev.filter(n => {
+            if (n.is_recurring_series && n.series_id === activityNotification.series_id) {
+              return false; // Remove this recurring series notification
+            }
+            // Also remove any individual notifications that might be part of this series
+            if (activityNotification.series_notifications) {
+              const seriesActivityUuids = activityNotification.series_notifications.map((sn: any) => sn.activity_uuid);
+              return !seriesActivityUuids.includes(n.activity_uuid);
+            }
+            return true;
+          })
+        );
+      } else {
+        // Handle single activity notification
+        for (const response of activityNotification.unviewed_responses || []) {
+          if (response.invitation_uuid) {
+            await apiService.markStatusChangeAsViewed(response.invitation_uuid);
+          }
+        }
+        
+        // Remove this notification from the list
+        setHostedActivityNotifications(prev => 
+          prev.filter(n => n.activity_uuid !== activityNotification.activity_uuid)
+        );
       }
-      
-      // Remove this notification from the list
-      setHostedActivityNotifications(prev => 
-        prev.filter(n => n.activity_uuid !== activityNotification.activity_uuid)
-      );
       
       // Also refresh the notification bell
       loadChildren();
@@ -1282,29 +1383,74 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                         return `${day}/${month}/${year}`;
                       };
 
-                      const timeRange = notification.start_time && notification.end_time 
-                        ? ` at ${notification.start_time}-${notification.end_time}`
-                        : notification.start_time
-                        ? ` at ${notification.start_time}`
-                        : '';
-
-                      // Create notification message - use detailed names if available, otherwise use summary
+                      // Create notification message based on whether it's a recurring series or single activity
+                      let displayMessage = '';
                       let responseMessage = '';
-                      if (notification.unviewed_responses && notification.unviewed_responses.length > 0) {
-                        // Detailed message with names
-                        responseMessage = notification.unviewed_responses
-                          .map((r: any) => `${r.child_name || r.parent_name || 'Someone'} ${r.status === 'accepted' ? 'accepted' : 'declined'}`)
-                          .join(', ');
+                      
+                      if (notification.is_recurring_series && notification.series_count > 1) {
+                        // Recurring series notification - show grouped message with deduplicated responses
+                        const startDate = new Date(notification.start_date);
+                        const dayOfWeek = startDate.toLocaleDateString('en-US', { weekday: 'long' });
+                        
+                        if (notification.unviewed_responses && notification.unviewed_responses.length > 0) {
+                          // Group responses by person and status to avoid duplicates
+                          const responseGroups = new Map<string, { name: string, statuses: Set<string> }>();
+                          
+                          notification.unviewed_responses.forEach((r: any) => {
+                            const name = r.child_name || r.parent_name || 'Someone';
+                            const status = r.status === 'accepted' ? 'accepted' : 'declined';
+                            
+                            if (responseGroups.has(name)) {
+                              responseGroups.get(name)!.statuses.add(status);
+                            } else {
+                              responseGroups.set(name, { name, statuses: new Set([status]) });
+                            }
+                          });
+                          
+                          // Create clean message for each person
+                          const responseTexts = Array.from(responseGroups.values()).map(group => {
+                            const statuses = Array.from(group.statuses);
+                            if (statuses.length === 1) {
+                              return `${group.name} ${statuses[0]} the series`;
+                            } else {
+                              return `${group.name} responded to the series`;
+                            }
+                          });
+                          
+                          responseMessage = responseTexts.join(', ');
+                        } else {
+                          // Fallback summary message
+                          const statusTypes = notification.unviewed_statuses ? notification.unviewed_statuses.split(',').join('/') : 'responses';
+                          responseMessage = `${notification.total_unviewed} series ${statusTypes}`;
+                        }
+                        
+                        displayMessage = `📅 Recurring Activity "${notification.activity_name}" (${notification.series_count} sessions every ${dayOfWeek}): ${responseMessage}`;
                       } else {
-                        // Fallback summary message
-                        const statusTypes = notification.unviewed_statuses ? notification.unviewed_statuses.split(',').join('/') : 'responses';
-                        responseMessage = `${notification.total_unviewed} unviewed ${statusTypes}`;
+                        // Single activity notification
+                        const timeRange = notification.start_time && notification.end_time 
+                          ? ` at ${notification.start_time}-${notification.end_time}`
+                          : notification.start_time
+                          ? ` at ${notification.start_time}`
+                          : '';
+                        
+                        if (notification.unviewed_responses && notification.unviewed_responses.length > 0) {
+                          // Detailed message with names for single activity
+                          responseMessage = notification.unviewed_responses
+                            .map((r: any) => `${r.child_name || r.parent_name || 'Someone'} ${r.status === 'accepted' ? 'accepted' : 'declined'}`)
+                            .join(', ');
+                        } else {
+                          // Fallback summary message
+                          const statusTypes = notification.unviewed_statuses ? notification.unviewed_statuses.split(',').join('/') : 'responses';
+                          responseMessage = `${notification.total_unviewed} unviewed ${statusTypes}`;
+                        }
+                        
+                        displayMessage = `📅 Activity "${notification.activity_name}" on ${formatDate(notification.start_date)}${timeRange}: ${responseMessage}`;
                       }
 
                       return (
                         <div key={`hosted_${notification.activity_uuid}`} className="invitation-item" onClick={(e) => e.stopPropagation()}>
                           <div className="invitation-message">
-                            📅 Activity "{notification.activity_name}" on {formatDate(notification.start_date)}{timeRange}: {responseMessage}
+                            {displayMessage}
                           </div>
                           <div className="invitation-actions">
                             <button

@@ -624,70 +624,117 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   const handleInvitationResponse = async (invitationUuid: string, action: 'accept' | 'reject') => {
     try {
-      // Find the current invitation
-      const currentInvitation = activities.find(activity => 
-        activity.invitationUuid === invitationUuid || 
-        (activity as any).invitation_uuid === invitationUuid
-      );
+      console.log(`🔍 INVITATION RESPONSE DEBUG for UUID: ${invitationUuid}`);
+      console.log(`🔍 All activities:`, activities.map(a => ({
+        name: a.name,
+        activity_uuid: (a as any).activity_uuid,
+        invitationUuid: (a as any).invitationUuid,
+        invitation_uuid: (a as any).invitation_uuid,
+        invitationId: (a as any).invitationId,
+        invitation_status: (a as any).invitation_status,
+        series_id: (a as any).series_id
+      })));
       
-      if (currentInvitation) {
-        // Check if this is part of a recurring series using series_id (safer than name matching)
-        const currentSeriesId = (currentInvitation as any).series_id;
+      // First, let's make the API call to get the invitation details
+      // Since the activities structure may not have complete invitation data,
+      // we'll use the activities to identify series based on activity names
+      
+      // For now, let's focus on finding activities with the same name and pending status
+      // and use the series_id approach once we have the invitation details
+      
+      // Load fresh invitations data to get series information
+      const today = new Date();
+      const oneYearLater = new Date();
+      oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+      const startDate = today.toISOString().split('T')[0];
+      const endDate = oneYearLater.toISOString().split('T')[0];
+      
+      const invitationsResponse = await apiService.getAllInvitations(startDate, endDate);
+      console.log(`🔍 Fresh invitations data:`, invitationsResponse);
+      
+      if (invitationsResponse.success && invitationsResponse.data) {
+        // Find the current invitation by UUID
+        const currentInvitation = invitationsResponse.data.find((inv: any) => 
+          inv.invitation_uuid === invitationUuid
+        );
         
-        // Check if series_id is valid (not null, undefined, or the string "undefined")
-        const seriesInvitations = currentSeriesId && currentSeriesId !== 'undefined'
-          ? activities.filter(activity => 
-              (activity as any).series_id === currentSeriesId &&
-              activity.is_host === false
-            )
-          : activities.filter(activity => 
-              activity.name === currentInvitation.name &&
-              activity.is_host === false &&
-              (activity as any).host_parent_name === (currentInvitation as any).host_parent_name
-            );
+        console.log(`🔍 Current invitation found in fresh data:`, currentInvitation);
         
-        if (seriesInvitations.length > 1) {
-          // This is a recurring series - ask user if they want to accept/decline the whole series
-          const actionText = action === 'accept' ? 'accept' : 'decline';
-          const seriesMessage = `This is a recurring activity "${currentInvitation.name}" with ${seriesInvitations.length} sessions. Do you want to ${actionText} the entire series?`;
+        if (currentInvitation) {
+          const seriesId = currentInvitation.series_id;
+          const activityName = currentInvitation.activity_name;
           
-          const acceptSeries = window.confirm(seriesMessage + '\n\nClick OK for entire series, Cancel for just this activity.');
+          console.log(`🔍 Current invitation details:`);
+          console.log(`🔍 - Name: ${activityName}`);
+          console.log(`🔍 - Series ID: ${seriesId}`);
+          console.log(`🔍 - Status: ${currentInvitation.status}`);
           
-          if (acceptSeries) {
-            // Accept/decline the entire series
-            console.log(`📧 ${action === 'accept' ? 'Accepting' : 'Declining'} entire series:`, seriesInvitations.map(act => ({
-              uuid: (act as any).invitationUuid || (act as any).invitation_uuid,
-              name: act.name,
-              date: (act as any).start_date || (act as any).date
-            })));
-            
-            const seriesPromises = seriesInvitations.map(act => 
-              apiService.respondToActivityInvitation(
-                (act as any).invitationUuid || (act as any).invitation_uuid, 
-                action
-              )
+          // Find all related invitations for this child
+          let seriesInvitations = [];
+          
+          if (seriesId && seriesId !== 'undefined' && seriesId !== null) {
+            // Use series_id for precise grouping
+            seriesInvitations = invitationsResponse.data.filter((inv: any) => 
+              inv.series_id === seriesId &&
+              inv.invited_child_id === currentInvitation.invited_child_id &&
+              inv.status === 'pending' // Only pending invitations can be accepted/declined
             );
+            console.log(`🔍 Found ${seriesInvitations.length} pending invitations in series using series_id`);
+          } else {
+            // Fallback to name-based grouping
+            seriesInvitations = invitationsResponse.data.filter((inv: any) => 
+              inv.activity_name === activityName &&
+              inv.invited_child_id === currentInvitation.invited_child_id &&
+              inv.host_parent_username === currentInvitation.host_parent_username &&
+              inv.status === 'pending' // Only pending invitations
+            );
+            console.log(`🔍 Found ${seriesInvitations.length} pending invitations in series using name matching`);
+          }
+          
+          console.log(`🔍 Series invitations:`, seriesInvitations.map(inv => ({
+            name: inv.activity_name,
+            invitation_uuid: inv.invitation_uuid,
+            start_date: inv.start_date,
+            status: inv.status,
+            series_id: inv.series_id
+          })));
+          
+          if (seriesInvitations.length > 1) {
+            // This is a recurring series - ask user if they want to accept/decline the whole series
+            const actionText = action === 'accept' ? 'accept' : 'decline';
+            const seriesMessage = `This is a recurring activity "${activityName}" with ${seriesInvitations.length} pending sessions. Do you want to ${actionText} the entire series?`;
             
-            const results = await Promise.all(seriesPromises);
-            const successCount = results.filter(r => r?.success).length;
+            const acceptSeries = window.confirm(seriesMessage + '\n\nClick OK for entire series, Cancel for just this activity.');
             
-            if (successCount > 0) {
-              const message = action === 'accept' 
-                ? `Series accepted! ${successCount} recurring activities will appear in your calendar.`
-                : `Series declined. ${successCount} invitations removed.`;
-              alert(message);
+            if (acceptSeries) {
+              // Accept/decline the entire series
+              console.log(`📧 ${action === 'accept' ? 'Accepting' : 'Declining'} entire series of ${seriesInvitations.length} invitations`);
               
-              // Reload activities to update the display
-              loadActivities();
+              const seriesPromises = seriesInvitations.map(inv => 
+                apiService.respondToActivityInvitation(inv.invitation_uuid, action)
+              );
               
-              // Close the detail modal and refresh parent data
-              goBack();
-              onDataChanged?.();
-            } else {
-              alert(`Error: Failed to ${action} series invitations`);
+              const results = await Promise.all(seriesPromises);
+              const successCount = results.filter(r => r?.success).length;
+              
+              if (successCount > 0) {
+                const message = action === 'accept' 
+                  ? `Series accepted! ${successCount} recurring activities will appear in your calendar.`
+                  : `Series declined. ${successCount} invitations removed.`;
+                alert(message);
+                
+                // Reload activities to update the display
+                loadActivities();
+                
+                // Close the detail modal and refresh parent data
+                goBack();
+                onDataChanged?.();
+              } else {
+                alert(`Error: Failed to ${action} series invitations`);
+              }
+              
+              return;
             }
-            
-            return;
           }
         }
       }
@@ -824,6 +871,15 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setAutoNotifyNewConnections(false);
       setSelectedConnectedChildren([]);
       setJointHostChildren([]);
+    }
+    
+    // Ensure parent children data is loaded for joint hosting
+    console.log('🔄 handleAddActivity - Ensuring parent children data is loaded');
+    if (parentChildren.length === 0) {
+      console.log('⚠️ Parent children not loaded, loading now...');
+      loadParentChildren();
+    } else {
+      console.log(`✅ Parent children already loaded: ${parentChildren.length} children`);
     }
     
     // Create a UUID-based URL for activity creation using special "new" identifier
@@ -983,8 +1039,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               id: item.connected_child_uuid || item.child_uuid || item.uuid,
               uuid: item.connected_child_uuid || item.child_uuid || item.uuid, 
               name: item.connected_child_name || item.child_name || item.name,
-              parentName: item.connected_parent_name || item.parent_name,
-              parentUuid: item.connected_parent_uuid || item.parent_uuid,
+              parentName: item.connected_parent_name || item.parent_name || item.parentname,
+              parentUuid: item.connected_parent_uuid || item.parent_uuid || item.parentuuid,
               parent_id: item.connected_parent_id || item.parent_id,
               family_name: item.connected_family_name || item.family_name,
               status: status
@@ -994,8 +1050,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               id: item.connected_child_uuid || item.child_uuid || item.uuid,
               uuid: item.connected_child_uuid || item.child_uuid || item.uuid, 
               name: item.connected_child_name || item.child_name || item.name,
-              parentName: item.connected_parent_name || item.parent_name,
-              parentUuid: item.connected_parent_uuid || item.parent_uuid,
+              parentName: item.connected_parent_name || item.parent_name || item.parentname,
+              parentUuid: item.connected_parent_uuid || item.parent_uuid || item.parentuuid,
               parent_id: item.connected_parent_id || item.parent_id,
               family_name: item.connected_family_name || item.family_name,
               status: 'pending'
@@ -1884,6 +1940,58 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       if (isSharedActivity && selectedConnectedChildren.length > 0 && createdActivities.length > 0) {
         console.log(`🎯 Sending invitations for ${createdActivities.length} activities to ${selectedConnectedChildren.length} children`);
         
+        // First, ensure all joint host connections are loaded and build a local connections map
+        const jointHostsNeeded = new Set<string>();
+        selectedConnectedChildren.forEach(childId => {
+          if (typeof childId === 'string' && childId.startsWith('joint-')) {
+            // Format: joint-{hostChildUuid}-{connectedChildUuid}
+            // Extract the hostChildUuid (first UUID after 'joint-')
+            const withoutPrefix = childId.substring('joint-'.length);
+            const uuidParts = withoutPrefix.split('-');
+            if (uuidParts.length >= 5) {
+              // Reconstruct the first UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+              const hostChildUuid = `${uuidParts[0]}-${uuidParts[1]}-${uuidParts[2]}-${uuidParts[3]}-${uuidParts[4]}`;
+              jointHostsNeeded.add(hostChildUuid);
+            }
+          }
+        });
+        
+        // Load joint host connections and store them locally for immediate use
+        const localJointHostConnections = { ...jointHostConnections };
+        if (jointHostsNeeded.size > 0) {
+          console.log(`🔄 Loading connections for ${jointHostsNeeded.size} joint host children before sending invitations...`);
+          for (const hostChildUuid of Array.from(jointHostsNeeded)) {
+            if (!localJointHostConnections[hostChildUuid]) {
+              console.log(`🔄 Loading missing joint host connections for ${hostChildUuid}...`);
+              try {
+                const response = await apiService.getChildConnections(hostChildUuid);
+                if (response.success && response.data) {
+                  const connectedChildren: any[] = [];
+                  response.data.forEach((item: any) => {
+                    const status = item.status || item.connection_status || 'accepted';
+                    if (status === 'accepted' || status === 'connected' || status === 'active') {
+                      connectedChildren.push({
+                        id: item.connected_child_uuid || item.child_uuid || item.uuid,
+                        uuid: item.connected_child_uuid || item.child_uuid || item.uuid, 
+                        name: item.connected_child_name || item.child_name || item.name,
+                        parentName: item.connected_parent_name || item.parent_name || item.parentname,
+                        parentUuid: item.connected_parent_uuid || item.parent_uuid || item.parentuuid,
+                        parent_id: item.connected_parent_id || item.parent_id,
+                        family_name: item.connected_family_name || item.family_name,
+                        status: status
+                      });
+                    }
+                  });
+                  localJointHostConnections[hostChildUuid] = connectedChildren;
+                  console.log(`✅ Loaded ${connectedChildren.length} connections for joint host ${hostChildUuid}`);
+                }
+              } catch (error) {
+                console.error(`❌ Failed to load connections for joint host ${hostChildUuid}:`, error);
+              }
+            }
+          }
+        }
+        
         // Group invitations by host child for joint hosting
         const invitationsByHost = new Map();
         
@@ -1903,10 +2011,13 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               actualChildId = childId.replace('main-', '');
             } else if (childId.startsWith('joint-')) {
               // Format: joint-{hostChildUuid}-{connectedChildId}
-              const parts = childId.split('-');
-              if (parts.length >= 3) {
-                hostChildUuid = parts[1];
-                actualChildId = parts.slice(2).join('-');
+              const withoutPrefix = childId.substring(6); // Remove 'joint-'
+              const uuidParts = withoutPrefix.split('-');
+              if (uuidParts.length >= 5) {
+                // Reconstruct the full host child UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+                hostChildUuid = `${uuidParts[0]}-${uuidParts[1]}-${uuidParts[2]}-${uuidParts[3]}-${uuidParts[4]}`;
+                // The rest is the connected child UUID
+                actualChildId = uuidParts.slice(5).join('-');
               }
             }
           }
@@ -1919,28 +2030,48 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         
         console.log('🎯 Invitations grouped by host:', Array.from(invitationsByHost.entries()));
         
-        // Send invitations from each host child
+        // Send invitations from each host child - handle both single and recurring activities
         for (const [hostChildUuid, childIds] of Array.from(invitationsByHost.entries())) {
           const hostChild = hostChildUuid === child.uuid ? child : parentChildren.find(pc => pc.uuid === hostChildUuid);
           if (!hostChild) continue;
           
-          // Find the activity created for this host child
-          const hostActivity = createdActivities.find(activity => 
-            // For main child, it's the first activity
-            hostChildUuid === child.uuid ? activity === createdActivities[0] : 
-            // For joint children, find by matching host (this is simplified - in reality all activities have same details)
-            true // For now, use the first activity for all hosts since they're identical
-          ) || createdActivities[0];
+          // Since createdActivities doesn't include child_uuid info, we need to split activities
+          // between hosts. For joint hosting with N total hosts, activities are created as pairs:
+          // [primary_activity1, joint_activity1, primary_activity2, joint_activity2, ...]
+          let hostActivities = [];
+          
+          if (jointHostChildren.length === 0) {
+            // No joint hosting - all activities belong to primary host
+            hostActivities = createdActivities;
+          } else if (hostChildUuid === child.uuid) {
+            // Primary host gets activities at even indices (0, 2, 4, ...)
+            hostActivities = createdActivities.filter((_, index) => index % 2 === 0);
+          } else {
+            // Joint host gets activities at odd indices (1, 3, 5, ...)
+            // For now, assuming only 1 joint host (Zoe Wong)
+            hostActivities = createdActivities.filter((_, index) => index % 2 === 1);
+          }
+          
+          console.log(`🎯 Found ${hostActivities.length} activities for host ${hostChild.name}`);
           
           for (const actualChildId of childIds) {
             try {
-              const connectedChild = connectedChildren.find(cc => cc.uuid === actualChildId);
-              console.log(`🔍 Looking for connected child with ID: ${actualChildId}`, connectedChild);
-              console.log(`🔍 Connected child structure:`, JSON.stringify(connectedChild, null, 2));
-              console.log(`🔍 Parent UUID value:`, connectedChild?.parentUuid);
+              // Find the connected child from the appropriate connections array
+              let connectedChild: any;
+              if (hostChildUuid === child.uuid) {
+                // Main host - search in main connectedChildren array
+                connectedChild = connectedChildren.find(cc => cc.uuid === actualChildId);
+                console.log(`🔍 Looking for connected child with ID: ${actualChildId} in main host connections`, connectedChild);
+              } else {
+                // Joint host - search in localJointHostConnections
+                const jointConnections = localJointHostConnections[hostChildUuid] || [];
+                connectedChild = jointConnections.find(cc => cc.uuid === actualChildId);
+                console.log(`🔍 Looking for connected child with ID: ${actualChildId} in joint host connections for ${hostChild?.name}`, connectedChild);
+                console.log(`🔍 Available joint connections for ${hostChild?.name}:`, jointConnections.map(jc => ({ name: jc.name, uuid: jc.uuid })));
+              }
               
               if (connectedChild) {
-                console.log(`📧 Sending invitation from ${hostChild.name} to ${connectedChild.name} (parent UUID: ${connectedChild.parentUuid})`);
+                console.log(`📧 Sending ${hostActivities.length} recurring invitations from ${hostChild.name} to ${connectedChild.name}`);
                 
                 if (!connectedChild.parentUuid) {
                   console.error(`❌ Parent UUID is missing for connected child:`, connectedChild);
@@ -1951,23 +2082,37 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   });
                 }
                 
-                // Send invitations for ALL activities in the series (not just hostActivity)
-                console.log(`📧 Sending invitations for ${createdActivities.length} activities to ${connectedChild.name}`);
-                for (const activity of createdActivities) {
-                  await apiService.sendActivityInvitation(
-                    activity.uuid || String(activity.id),
-                    connectedChild.parentUuid || connectedChild.parent_id,
-                    actualChildId,
-                    `${hostChild.name} would like to invite your child to join: ${activity.name}`
-                  );
-                  console.log(`✅ Invitation sent for activity "${activity.name}" on ${activity.start_date} from ${hostChild.name}`);
-                }
-                console.log(`✅ All ${createdActivities.length} invitations sent successfully from ${hostChild.name}`);
+                // Send invitations for ALL activities of this host
+                const hostInvitePromises = hostActivities.map(async (hostActivity, index) => {
+                  console.log(`📧 Sending invitation ${index + 1}/${hostActivities.length} from ${hostChild.name} to ${connectedChild.name}`);
+                  console.log(`🎯 Using activity: ${hostActivity.uuid} - ${hostActivity.name} on ${hostActivity.start_date}`);
+                  
+                  try {
+                    await apiService.sendActivityInvitation(
+                      hostActivity.uuid || String(hostActivity.id),
+                      connectedChild.parentUuid || connectedChild.parent_id,
+                      actualChildId,
+                      `${hostChild.name} would like to invite your child to join: ${hostActivity.name}`
+                    );
+                    console.log(`✅ Invitation ${index + 1}/${hostActivities.length} sent successfully`);
+                    return { success: true };
+                  } catch (error) {
+                    console.error(`❌ Failed to send invitation ${index + 1}/${hostActivities.length}:`, error);
+                    return { success: false, error };
+                  }
+                });
+                
+                // Wait for all invitations to be sent
+                const results = await Promise.all(hostInvitePromises);
+                const successCount = results.filter(r => r.success).length;
+                const failedCount = results.length - successCount;
+                
+                console.log(`✅ Joint host invitations result for ${connectedChild.name}: ${successCount}/${hostActivities.length} sent successfully, ${failedCount} failed`);
               } else {
                 console.error(`❌ Could not find connected child with ID: ${actualChildId}`);
               }
             } catch (inviteError) {
-              console.error(`💥 Error sending invitation from ${hostChild.name} to child ${actualChildId}:`, inviteError);
+              console.error(`💥 Error sending invitations from ${hostChild.name} to child ${actualChildId}:`, inviteError);
             }
           }
         }
@@ -3111,72 +3256,105 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             </div>
           )}
           
-          {/* Template Selector Dropdown */}
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '8px', 
-              fontWeight: '600', 
-              color: '#2d3748',
-              fontSize: '16px'
+          <div className="page-form">
+            {/* Activity Name and Template Selection Row */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '12px', 
+              alignItems: 'flex-start',
+              marginBottom: '16px'
             }}>
-              Choose Template
-            </label>
-            {loadingTemplates ? (
-              <div style={{ 
-                padding: '12px', 
-                background: '#f8f9fa', 
-                borderRadius: '8px',
-                color: '#666',
-                textAlign: 'center'
-              }}>
-                Loading templates...
+              <div style={{ flex: '1' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '8px', 
+                  fontWeight: '600', 
+                  color: '#2d3748',
+                  fontSize: '16px'
+                }}>
+                  Activity Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter activity name"
+                  value={newActivity.name}
+                  onChange={(e) => setNewActivity({...newActivity, name: e.target.value})}
+                  className="modal-input"
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    marginBottom: '0'
+                  }}
+                />
               </div>
-            ) : (
-              <select
-                value={selectedTemplate ? selectedTemplate.uuid : ''}
-                onChange={(e) => {
-                  const selectedUuid = e.target.value;
-                  if (selectedUuid === '') {
-                    handleTemplateSelect(null);
-                  } else {
-                    const template = activityTemplates.find(t => t.uuid === selectedUuid);
-                    if (template) {
-                      handleTemplateSelect(template);
-                    }
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: '1px solid #e2e8f0',
-                  fontSize: '16px',
-                  backgroundColor: 'white',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="">Create from scratch</option>
-                {activityTemplates.length === 0 ? (
-                  <option value="" disabled style={{ fontStyle: 'italic', color: '#999' }}>
-                    No templates available yet
-                  </option>
+              
+              <div style={{ width: '200px' }}>
+                <label style={{ 
+                  display: 'block', 
+                  marginBottom: '8px', 
+                  fontWeight: '600', 
+                  color: '#2d3748',
+                  fontSize: '16px'
+                }}>
+                  OR Use Template
+                </label>
+                {loadingTemplates ? (
+                  <div style={{ 
+                    padding: '12px', 
+                    background: '#f8f9fa', 
+                    borderRadius: '8px',
+                    color: '#666',
+                    textAlign: 'center',
+                    fontSize: '14px'
+                  }}>
+                    Loading...
+                  </div>
                 ) : (
-                  activityTemplates.map((template) => (
-                    <option key={template.uuid} value={template.uuid}>
-                      {template.name}
-                      {template.activity_type && ` (${template.activity_type})`}
-                      {template.usage_count > 0 && ` - Used ${template.usage_count} times`}
-                    </option>
-                  ))
+                  <select
+                    value={selectedTemplate ? selectedTemplate.uuid : ''}
+                    onChange={(e) => {
+                      const selectedUuid = e.target.value;
+                      if (selectedUuid === '') {
+                        handleTemplateSelect(null);
+                      } else {
+                        const template = activityTemplates.find(t => t.uuid === selectedUuid);
+                        if (template) {
+                          handleTemplateSelect(template);
+                        }
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #e2e8f0',
+                      fontSize: '14px',
+                      backgroundColor: 'white',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="">None</option>
+                    {activityTemplates.length === 0 ? (
+                      <option value="" disabled style={{ fontStyle: 'italic', color: '#999' }}>
+                        No templates yet
+                      </option>
+                    ) : (
+                      activityTemplates.map((template) => (
+                        <option key={template.uuid} value={template.uuid}>
+                          {template.name}
+                          {template.usage_count > 0 && ` (${template.usage_count}x)`}
+                        </option>
+                      ))
+                    )}
+                  </select>
                 )}
-              </select>
-            )}
+              </div>
+            </div>
             
             {/* Template Confirmation Message */}
             {templateConfirmationMessage && (
               <div style={{
-                marginTop: '12px',
+                marginBottom: '16px',
                 padding: '12px',
                 background: '#d4edda',
                 color: '#155724',
@@ -3187,17 +3365,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 ✅ {templateConfirmationMessage}
               </div>
             )}
-          </div>
-
-          <div className="page-form">
-            <input
-              type="text"
-              placeholder="Activity name *"
-              value={newActivity.name}
-              onChange={(e) => setNewActivity({...newActivity, name: e.target.value})}
-              className="modal-input"
-              autoFocus
-            />
             <textarea
               placeholder="Description"
               value={newActivity.description}
@@ -3369,25 +3536,26 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                       marginBottom: '16px'
                     }}>
                       {[
-                        { day: 'Sun', value: 0, emoji: '🌅' },
-                        { day: 'Mon', value: 1, emoji: '💼' },
-                        { day: 'Tue', value: 2, emoji: '📅' },
-                        { day: 'Wed', value: 3, emoji: '🎯' },
-                        { day: 'Thu', value: 4, emoji: '⚡' },
-                        { day: 'Fri', value: 5, emoji: '🎉' },
-                        { day: 'Sat', value: 6, emoji: '🌟' }
+                        { day: 'Sun', value: 0 },
+                        { day: 'Mon', value: 1 },
+                        { day: 'Tue', value: 2 },
+                        { day: 'Wed', value: 3 },
+                        { day: 'Thu', value: 4 },
+                        { day: 'Fri', value: 5 },
+                        { day: 'Sat', value: 6 }
                       ].map((dayOption) => (
                         <label key={dayOption.value} style={{ 
                           display: 'flex',
                           flexDirection: 'column',
                           alignItems: 'center',
-                          padding: '12px 8px',
+                          justifyContent: 'center',
+                          padding: '16px 8px',
                           background: recurringDaysOfWeek.includes(dayOption.value) ? '#e6f3ff' : '#f8f9fa',
                           borderRadius: '8px',
                           border: recurringDaysOfWeek.includes(dayOption.value) ? '2px solid #0066cc' : '1px solid #e2e8f0',
                           cursor: 'pointer',
                           textAlign: 'center',
-                          fontSize: '12px'
+                          fontSize: '14px'
                         }}>
                           <input
                             type="checkbox"
@@ -3401,8 +3569,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                             }}
                             style={{ display: 'none' }}
                           />
-                          <span style={{ fontSize: '16px', marginBottom: '4px' }}>{dayOption.emoji}</span>
-                          <span style={{ fontWeight: '600' }}>{dayOption.day}</span>
+                          <span style={{ fontWeight: '600', fontSize: '16px' }}>{dayOption.day}</span>
                         </label>
                       ))}
                     </div>
