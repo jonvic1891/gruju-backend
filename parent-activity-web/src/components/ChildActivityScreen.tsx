@@ -1900,19 +1900,19 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         console.log(`🔍 FULL RESPONSE DATA for ${date}:`, response.data);
         
         if (response.success) {
-          // Add the primary activity
-          createdActivities.push(response.data);
-          console.log(`✅ Successfully created activity ${response.data?.name} for ${date} with UUID: ${response.data?.uuid || response.data?.activity_uuid}`);
-          
-          // Also add joint activities if they exist (for multi-host scenarios)
+          // Check if this is a multi-host scenario with joint_activities
           const responseAny = response as any;
-          if (responseAny.joint_activities && Array.isArray(responseAny.joint_activities) && responseAny.joint_activities.length > 1) {
-            // joint_activities includes both primary and joint activities, so add the joint ones (skip the first which is the primary)
-            for (let i = 1; i < responseAny.joint_activities.length; i++) {
-              const jointActivity = responseAny.joint_activities[i];
-              createdActivities.push(jointActivity);
-              console.log(`✅ Also added joint activity ${jointActivity?.name} with UUID: ${jointActivity?.uuid} and child_uuid: ${jointActivity?.child_uuid}`);
-            }
+          if (responseAny.joint_activities && Array.isArray(responseAny.joint_activities) && responseAny.joint_activities.length > 0) {
+            // Use the complete joint_activities array instead of just the primary activity
+            // This ensures all activities (primary + joint) are included with proper child_uuid values
+            responseAny.joint_activities.forEach((activity: any) => {
+              createdActivities.push(activity);
+              console.log(`✅ Added activity ${activity?.name} for ${date} with UUID: ${activity?.uuid} and child_uuid: ${activity?.child_uuid}`);
+            });
+          } else {
+            // Single host scenario - add the primary activity
+            createdActivities.push(response.data);
+            console.log(`✅ Successfully created activity ${response.data?.name} for ${date} with UUID: ${response.data?.uuid || response.data?.activity_uuid}`);
           }
         } else {
           console.error(`❌ Failed to create activity for ${date}:`, response.error);
