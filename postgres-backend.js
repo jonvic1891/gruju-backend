@@ -2189,7 +2189,16 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
     try {
         // ✅ SECURITY: Expect UUID instead of sequential ID
         const childUuid = req.params.childId;
+        
+        console.log('🎯 Activity creation request received:');
+        console.log('🔍 Child UUID (from params):', childUuid);
+        console.log('🔍 User ID:', req.user.id);
+        console.log('🔍 Request body keys:', Object.keys(req.body));
+        console.log('🔍 joint_host_children in request:', req.body.joint_host_children);
+        
         const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, joint_host_children, series_id, is_recurring, recurring_days, series_start_date } = req.body;
+
+        console.log('🔍 joint_host_children after destructuring:', joint_host_children);
 
         if (!name || !name.trim() || !start_date) {
             return res.status(400).json({ success: false, error: 'Activity name and start date are required' });
@@ -2245,17 +2254,39 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         // Create joint host activities if joint_host_children is provided
         if (joint_host_children && Array.isArray(joint_host_children) && joint_host_children.length > 0) {
             console.log('👥 Creating joint host activities for:', joint_host_children);
+            console.log('👥 Current user ID:', req.user.id);
 
             for (const jointChildUuid of joint_host_children) {
                 try {
+                    console.log(`🔍 Checking joint child: ${jointChildUuid}`);
+                    
                     // Verify the joint child belongs to this user
                     const jointChild = await client.query(
                         'SELECT c.id FROM children c WHERE c.uuid = $1 AND c.parent_id = $2',
                         [jointChildUuid, req.user.id]
                     );
 
+                    console.log(`🔍 Joint child query result:`, {
+                        uuid: jointChildUuid,
+                        foundRows: jointChild.rows.length,
+                        childId: jointChild.rows[0]?.id
+                    });
+
                     if (jointChild.rows.length === 0) {
-                        console.log(`⚠️ Joint child ${jointChildUuid} not found or doesn't belong to user`);
+                        console.log(`⚠️ Joint child ${jointChildUuid} not found or doesn't belong to user ${req.user.id}`);
+                        
+                        // Additional debug: check if child exists at all
+                        const anyChild = await client.query(
+                            'SELECT c.id, c.parent_id FROM children c WHERE c.uuid = $1',
+                            [jointChildUuid]
+                        );
+                        
+                        if (anyChild.rows.length > 0) {
+                            console.log(`🔍 Child exists but belongs to parent_id: ${anyChild.rows[0].parent_id}, current user: ${req.user.id}`);
+                        } else {
+                            console.log(`❌ Child with UUID ${jointChildUuid} does not exist in database`);
+                        }
+                        
                         continue;
                     }
 
@@ -4663,6 +4694,111 @@ app.get('/api/activities/:activityId/participants', authenticateToken, async (re
             userId: req.user.id
         });
         res.status(500).json({ success: false, error: 'Failed to get activity participants' });
+    }
+});
+
+// Get participants for multiple activities in batch
+app.post('/api/activities/batch/participants', authenticateToken, async (req, res) => {
+    try {
+        const { activityUuids } = req.body;
+        console.log(`🔍 Getting batch participants for ${activityUuids?.length || 0} activities, user ${req.user.id}`);
+        
+        if (!activityUuids || !Array.isArray(activityUuids) || activityUuids.length === 0) {
+            return res.status(400).json({ success: false, error: 'Activity UUIDs array is required' });
+        }
+        
+        if (activityUuids.length > 50) {
+            return res.status(400).json({ success: false, error: 'Too many activities requested (max 50)' });
+        }
+        
+        const client = await pool.connect();
+        const results = {};
+        
+        for (const activityUuid of activityUuids) {
+            try {
+                // Check if activity exists
+                const activityExists = await client.query('SELECT id, name FROM activities WHERE uuid = $1', [activityUuid]);
+                
+                if (activityExists.rows.length === 0) {
+                    results[activityUuid] = { success: false, error: 'Activity not found' };
+                    continue;
+                }
+                
+                const activityId = activityExists.rows[0].id;
+                
+                // Check permissions
+                const permissionCheck = await client.query(`
+                    SELECT 1 FROM activities a
+                    INNER JOIN children c ON a.child_id = c.id
+                    WHERE a.id = $1 AND c.parent_id = $2
+                    UNION
+                    SELECT 1 FROM activity_invitations ai
+                    WHERE ai.activity_id = $1 AND ai.invited_parent_id = $2
+                    UNION
+                    SELECT 1 FROM pending_activity_invitations pai
+                    WHERE pai.activity_id = $1 AND pai.pending_connection_id LIKE 'pending-%' 
+                    AND pai.invited_parent_uuid = (SELECT uuid FROM users WHERE id = $2)
+                `, [activityId, req.user.id]);
+                
+                if (permissionCheck.rows.length === 0) {
+                    results[activityUuid] = { success: false, error: 'Permission denied' };
+                    continue;
+                }
+                
+                // Get host info and participants (same logic as single endpoint but condensed)
+                const hostQuery = await client.query(`
+                    SELECT u.username as host_parent_name, c.name as host_child_name, a.name as activity_name
+                    FROM activities a
+                    INNER JOIN children c ON a.child_id = c.id
+                    INNER JOIN users u ON c.parent_id = u.id
+                    WHERE a.id = $1
+                `, [activityId]);
+                
+                const participantsQuery = await client.query(`
+                    SELECT 
+                        COALESCE(u_direct.username, u_legacy.username) as parent_name,
+                        COALESCE(c_direct.name, c_legacy.name) as child_name,
+                        COALESCE(c_direct.uuid, c_legacy.uuid) as child_uuid,
+                        'pending' as status
+                    FROM pending_activity_invitations pai
+                    LEFT JOIN users u_direct ON pai.invited_parent_uuid = u_direct.uuid
+                    LEFT JOIN children c_direct ON pai.invited_child_uuid = c_direct.uuid
+                    LEFT JOIN children c_legacy ON (pai.invited_parent_uuid IS NULL AND c_legacy.uuid = REPLACE(pai.pending_connection_id, 'pending-child-', '')::uuid)
+                    LEFT JOIN users u_legacy ON c_legacy.parent_id = u_legacy.id
+                    WHERE pai.activity_id = $1
+                    UNION ALL
+                    SELECT 
+                        u.username as parent_name,
+                        c.name as child_name,
+                        c.uuid as child_uuid,
+                        ai.status
+                    FROM activity_invitations ai
+                    INNER JOIN children c ON ai.invited_child_id = c.id
+                    INNER JOIN users u ON c.parent_id = u.id
+                    WHERE ai.activity_id = $1
+                `, [activityId]);
+                
+                results[activityUuid] = {
+                    success: true,
+                    data: {
+                        host: hostQuery.rows[0] || null,
+                        participants: participantsQuery.rows || []
+                    }
+                };
+                
+            } catch (error) {
+                console.error(`Error processing activity ${activityUuid}:`, error);
+                results[activityUuid] = { success: false, error: 'Failed to load participants' };
+            }
+        }
+        
+        client.release();
+        console.log(`✅ Batch participants loaded for ${Object.keys(results).length} activities`);
+        res.json({ success: true, data: results });
+        
+    } catch (error) {
+        console.error('🚨 Batch participants error:', error);
+        res.status(500).json({ success: false, error: 'Failed to get batch participants' });
     }
 });
 
