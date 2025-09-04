@@ -48,6 +48,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [isRecurringActivity, setIsRecurringActivity] = useState(false);
   const [recurringDaysOfWeek, setRecurringDaysOfWeek] = useState<number[]>([]);
   const [recurringStartDate, setRecurringStartDate] = useState('');
+  const [recurringEndDate, setRecurringEndDate] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteDialogActivity, setDeleteDialogActivity] = useState<Activity | null>(null);
   const [isSharedActivity, setIsSharedActivity] = useState(false);
@@ -75,6 +76,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [addingActivity, setAddingActivity] = useState(false);
   const [activityParticipants, setActivityParticipants] = useState<any>(null);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
+  const [batchParticipantsData, setBatchParticipantsData] = useState<any>({});
   const [invitationData, setInvitationData] = useState<any>(null);
   
   // Activity Templates
@@ -87,6 +89,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [templateDialogMessage, setTemplateDialogMessage] = useState('');
   const [dialogTemplateData, setDialogTemplateData] = useState<any>(null);
+  
+  // Connection search
+  const [connectionSearchTerm, setConnectionSearchTerm] = useState('');
   
   const apiService = ApiService.getInstance();
 
@@ -330,6 +335,39 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     console.log('🖥️ parentChildren state changed:', parentChildren.length, 'children:', parentChildren.map((c: any) => ({ name: c.name, uuid: c.uuid })));
   }, [parentChildren]);
 
+  // Filter and sort connections
+  const getFilteredAndSortedConnections = () => {
+    let filtered = connectedChildren;
+    
+    // Filter by search term
+    if (connectionSearchTerm.trim()) {
+      filtered = connectedChildren.filter(child =>
+        child.name.toLowerCase().includes(connectionSearchTerm.toLowerCase())
+      );
+    }
+    
+    // Sort alphabetically by name
+    return filtered.sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  const getFilteredAndSortedPendingRequests = () => {
+    let filtered = pendingConnectionRequests;
+    
+    // Filter by search term
+    if (connectionSearchTerm.trim()) {
+      filtered = pendingConnectionRequests.filter(request =>
+        (request.child_name || request.username || '').toLowerCase().includes(connectionSearchTerm.toLowerCase())
+      );
+    }
+    
+    // Sort alphabetically by name
+    return filtered.sort((a, b) => {
+      const nameA = a.child_name || a.username || '';
+      const nameB = b.child_name || b.username || '';
+      return nameA.localeCompare(nameB);
+    });
+  };
+
   // Page navigation function
   const navigateToPage = (page: typeof currentPage) => {
     console.log('🧭 navigateToPage called:', { from: currentPage, to: page });
@@ -485,6 +523,9 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       
       setLoading(true);
       
+      // Clear old batch participants data
+      setBatchParticipantsData({});
+      
       console.log('🚀 ChildActivityScreen v2.0 - NEW VERSION WITH UNIFIED ACTIVITIES ENDPOINT');
       
       // Load child's own activities using calendar endpoint to get status change notifications
@@ -594,6 +635,40 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             series_id: a.series_id,
             is_recurring: a.is_recurring
           })));
+          
+          // Batch load participants for all activities with valid UUIDs
+          const activitiesWithUuids = allActivitiesWithRejected.filter(a => a.activity_uuid || a.uuid);
+          if (activitiesWithUuids.length > 0) {
+            console.log(`🔄 Batch loading participants for ${activitiesWithUuids.length} activities...`);
+            
+            // Get unique, valid UUIDs only
+            const allUuids = activitiesWithUuids.map(a => a.activity_uuid || a.uuid).filter(Boolean);
+            const uniqueUuids = Array.from(new Set(allUuids)); // Remove duplicates
+            console.log(`📊 Unique UUIDs: ${uniqueUuids.length} (from ${allUuids.length} total)`);
+            
+            // Split into batches of 50 to respect backend limit
+            const batchSize = 50;
+            const allParticipantsData = {};
+            
+            for (let i = 0; i < uniqueUuids.length; i += batchSize) {
+              const batchUuids = uniqueUuids.slice(i, i + batchSize);
+              console.log(`🔄 Loading batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(uniqueUuids.length/batchSize)} (${batchUuids.length} activities)`);
+              
+              try {
+                const participantsResponse = await apiService.getBatchActivityParticipants(batchUuids);
+                if (participantsResponse.success && participantsResponse.data) {
+                  Object.assign(allParticipantsData, participantsResponse.data);
+                } else {
+                  console.error(`❌ Batch ${Math.floor(i/batchSize) + 1} failed:`, participantsResponse.error);
+                }
+              } catch (error) {
+                console.error(`❌ Batch ${Math.floor(i/batchSize) + 1} error:`, error);
+              }
+            }
+            
+            console.log(`✅ Batch participants loaded for ${Object.keys(allParticipantsData).length} activities`);
+            setBatchParticipantsData(allParticipantsData);
+          }
         } else {
           console.log('No invitations data or failed to load invitations');
           setActivities(childActivities);
@@ -608,6 +683,40 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             series_id: a.series_id,
             is_recurring: a.is_recurring
           })));
+          
+          // Batch load participants for activities without rejected invitations
+          const activitiesWithUuids = childActivities.filter(a => a.activity_uuid || a.uuid);
+          if (activitiesWithUuids.length > 0) {
+            console.log(`🔄 Batch loading participants for ${activitiesWithUuids.length} activities...`);
+            
+            // Get unique, valid UUIDs only
+            const allUuids = activitiesWithUuids.map(a => a.activity_uuid || a.uuid).filter(Boolean);
+            const uniqueUuids = Array.from(new Set(allUuids)); // Remove duplicates
+            console.log(`📊 Unique UUIDs: ${uniqueUuids.length} (from ${allUuids.length} total)`);
+            
+            // Split into batches of 50 to respect backend limit
+            const batchSize = 50;
+            const allParticipantsData = {};
+            
+            for (let i = 0; i < uniqueUuids.length; i += batchSize) {
+              const batchUuids = uniqueUuids.slice(i, i + batchSize);
+              console.log(`🔄 Loading batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(uniqueUuids.length/batchSize)} (${batchUuids.length} activities)`);
+              
+              try {
+                const participantsResponse = await apiService.getBatchActivityParticipants(batchUuids);
+                if (participantsResponse.success && participantsResponse.data) {
+                  Object.assign(allParticipantsData, participantsResponse.data);
+                } else {
+                  console.error(`❌ Batch ${Math.floor(i/batchSize) + 1} failed:`, participantsResponse.error);
+                }
+              } catch (error) {
+                console.error(`❌ Batch ${Math.floor(i/batchSize) + 1} error:`, error);
+              }
+            }
+            
+            console.log(`✅ Batch participants loaded for ${Object.keys(allParticipantsData).length} activities`);
+            setBatchParticipantsData(allParticipantsData);
+          }
         }
       } else {
         console.error('Failed to load activities:', activitiesResponse.error);
@@ -766,15 +875,17 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const handleStatusChangeClicked = async (activity: Activity) => {
     // Show participants to see status changes, then mark all as viewed
     try {
-      const response = await apiService.getActivityParticipants((activity as any).activity_uuid || (activity as any).uuid);
+      const activityUuid = (activity as any).activity_uuid || (activity as any).uuid;
       
-      if (response.success && response.data) {
-        setActivityParticipants(response.data);
+      // Use batch cache data instead of individual API call
+      const cachedData = batchParticipantsData[activityUuid];
+      if (cachedData && cachedData.success && cachedData.data) {
+        setActivityParticipants(cachedData.data);
         
         // Mark all unviewed status changes as viewed for this activity
         // Find the invitation ID from the participants data and mark it as viewed
-        if (response.data.participants && response.data.participants.length > 0) {
-          const invitationWithStatusChange = response.data.participants.find((p: any) => p.invitation_uuid);
+        if (cachedData.data.participants && cachedData.data.participants.length > 0) {
+          const invitationWithStatusChange = cachedData.data.participants.find((p: any) => p.invitation_uuid);
           if (invitationWithStatusChange && invitationWithStatusChange.invitation_uuid) {
             await apiService.markStatusChangeAsViewed(invitationWithStatusChange.invitation_uuid);
           }
@@ -902,41 +1013,44 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     try {
       setLoadingParticipants(true);
       console.log('🔍 Loading participants for activity ID:', activityId);
-      const response = await apiService.getActivityParticipants(activityId);
-      console.log('📡 Participants API response:', response);
-      if (response.success && response.data) {
-        console.log('✅ Participants loaded successfully:', response.data);
-        console.log('🏠 Host data:', response.data.host);
-        console.log('🎟️ Raw user_invitation data:', response.data.user_invitation);
-        console.log('🎯 Current selectedActivity:', selectedActivity);
+      
+      // First check if we have cached batch data for this activity
+      if (batchParticipantsData[activityId]) {
+        console.log('✅ Using cached batch participants data for:', activityId);
+        const cachedData = batchParticipantsData[activityId];
         
-        
-        setActivityParticipants(response.data);
-        
-        // Store invitation data separately if present
-        if (response.data.user_invitation) {
-          console.log('🎟️ Found user invitation - storing separately:', response.data.user_invitation);
-          const invitation = response.data.user_invitation;
+        if (cachedData.success && cachedData.data) {
+          console.log('✅ Cached participants loaded successfully:', cachedData.data);
+          setActivityParticipants(cachedData.data);
           
-          const invitationInfo = {
-            isPendingInvitation: invitation.status === 'pending',
-            isAcceptedInvitation: invitation.status === 'accepted',
-            isDeclinedInvitation: invitation.status === 'declined',
-            invitationUuid: invitation.invitation_uuid,
-            invitation_message: invitation.invitation_message
-          };
-          
-          setInvitationData(invitationInfo);
-          
-          console.log('💾 Stored invitation data separately:', invitationInfo);
-        } else {
-          setInvitationData(null);
+          // Store invitation data separately if present
+          if (cachedData.data.user_invitation) {
+            console.log('🎟️ Found user invitation in cache - storing separately:', cachedData.data.user_invitation);
+            const invitation = cachedData.data.user_invitation;
+            
+            const invitationInfo = {
+              isPendingInvitation: invitation.status === 'pending',
+              isAcceptedInvitation: invitation.status === 'accepted',
+              isDeclinedInvitation: invitation.status === 'declined',
+              invitationUuid: invitation.invitation_uuid,
+              invitation_message: invitation.invitation_message
+            };
+            
+            setInvitationData(invitationInfo);
+            console.log('💾 Stored cached invitation data separately:', invitationInfo);
+          } else {
+            setInvitationData(null);
+          }
+          setLoadingParticipants(false);
+          return;
         }
-        
-      } else {
-        console.error('❌ Failed to load activity participants:', response.error);
-        setActivityParticipants(null);
       }
+      
+      // If not in batch cache, the participants weren't loaded - log this for debugging
+      console.warn('⚠️ Activity participants not found in batch cache for:', activityId);
+      console.log('🔍 Available batch cache keys:', Object.keys(batchParticipantsData));
+      setActivityParticipants(null);
+      setInvitationData(null);
     } catch (error) {
       console.error('💥 Error loading activity participants:', error);
       setActivityParticipants(null);
@@ -1773,18 +1887,17 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     setDeleteDialogActivity(null);
   };
 
-  // Function to generate recurring dates for the next 2 months
-  const generateRecurringDates = (startDate: string, daysOfWeek: number[]): string[] => {
-    console.log(`🗓️ Generating recurring dates for days: ${daysOfWeek} (${daysOfWeek.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')})`);
+  // Function to generate recurring dates between start and end dates
+  const generateRecurringDates = (startDate: string, endDate: string, daysOfWeek: number[]): string[] => {
+    console.log(`🗓️ Generating recurring dates for days: ${daysOfWeek} (${daysOfWeek.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}) from ${startDate} to ${endDate}`);
     
     const dates: string[] = [];
     const start = new Date(startDate);
-    const endDate = new Date(start);
-    endDate.setMonth(endDate.getMonth() + 2); // 2 months from start date
+    const end = new Date(endDate);
     
     const current = new Date(start);
     
-    while (current <= endDate) {
+    while (current <= end) {
       // Check if current day of week is in the selected days
       const dayOfWeek = current.getDay(); // 0 = Sunday, 1 = Monday, etc.
       
@@ -1828,13 +1941,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         alert('Please select a start date for the recurring activity');
         return;
       }
+      if (!recurringEndDate) {
+        alert('Please select an end date for the recurring activity');
+        return;
+      }
+      if (new Date(recurringEndDate) < new Date(recurringStartDate)) {
+        alert('End date must be after start date');
+        return;
+      }
       if (recurringDaysOfWeek.length === 0) {
         alert('Please select at least one day of the week for the recurring activity');
         return;
       }
       
-      // Generate dates for the next 2 months based on selected days of week
-      datesToCreate = generateRecurringDates(recurringStartDate, recurringDaysOfWeek);
+      // Generate dates between start and end dates based on selected days of week
+      datesToCreate = generateRecurringDates(recurringStartDate, recurringEndDate, recurringDaysOfWeek);
       
       if (datesToCreate.length === 0) {
         alert('No valid dates generated for the recurring activity');
@@ -3485,6 +3606,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                         // Clear recurring-specific state when switching to single activity
                         setRecurringDaysOfWeek([]);
                         setRecurringStartDate('');
+                        setRecurringEndDate('');
                       }}
                       style={{ marginRight: '8px' }}
                     />
@@ -3498,24 +3620,44 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     background: isRecurringActivity ? '#e6f3ff' : '#f8f9fa',
                     borderRadius: '8px',
                     border: isRecurringActivity ? '2px solid #0066cc' : '1px solid #e2e8f0',
-                    cursor: 'pointer'
+                    cursor: (isSharedActivity || jointHostChildren.length > 0) ? 'not-allowed' : 'pointer',
+                    opacity: (isSharedActivity || jointHostChildren.length > 0) ? 0.5 : 1
                   }}>
                     <input
                       type="radio"
                       name="activityType"
                       checked={isRecurringActivity}
+                      disabled={isSharedActivity || jointHostChildren.length > 0}
                       onChange={() => {
-                        setIsRecurringActivity(true);
-                        // Clear single activity state when switching to recurring
-                        setSelectedDates([]);
-                        // Set default start date to today if not already set
-                        if (!recurringStartDate) {
-                          setRecurringStartDate(new Date().toISOString().split('T')[0]);
+                        if (!isSharedActivity && jointHostChildren.length === 0) {
+                          setIsRecurringActivity(true);
+                          // Clear single activity state when switching to recurring
+                          setSelectedDates([]);
+                          // Set default start date to today if not already set
+                          if (!recurringStartDate) {
+                            setRecurringStartDate(new Date().toISOString().split('T')[0]);
+                          }
+                          // Set default end date to 2 months from today if not already set
+                          if (!recurringEndDate) {
+                            const defaultEndDate = new Date();
+                            defaultEndDate.setMonth(defaultEndDate.getMonth() + 2);
+                            setRecurringEndDate(defaultEndDate.toISOString().split('T')[0]);
+                          }
                         }
                       }}
                       style={{ marginRight: '8px' }}
                     />
-                    <span>🔄 Recurring Activity (2 months)</span>
+                    <span>🔄 Recurring Activity</span>
+                    {(isSharedActivity || jointHostChildren.length > 0) && (
+                      <span style={{ 
+                        fontSize: '12px', 
+                        color: '#999', 
+                        fontStyle: 'italic',
+                        marginLeft: '8px' 
+                      }}>
+                        (Disabled for {isSharedActivity ? 'shared' : 'joint host'} activities)
+                      </span>
+                    )}
                   </label>
                 </div>
               </div>
@@ -3531,33 +3673,85 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 </div>
               ) : (
                 <div className="recurring-options">
-                  <p className="section-description">Select which days of the week this activity will repeat. It will run for 2 months starting from your chosen date.</p>
+                  <p className="section-description">Select the date range and which days of the week this activity will repeat.</p>
                   
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600' }}>Start Date:</label>
-                    <input
-                      type="date"
-                      value={recurringStartDate}
-                      onChange={(e) => setRecurringStartDate(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      style={{
-                        padding: '12px',
-                        borderRadius: '8px',
-                        border: '1px solid #e2e8f0',
-                        fontSize: '16px',
-                        width: '100%',
-                        maxWidth: '200px'
-                      }}
-                    />
+                  {/* Start and End Dates Side by Side */}
+                  <div style={{ 
+                    display: 'flex', 
+                    gap: '24px', 
+                    marginBottom: '16px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <div style={{ 
+                      flex: '1', 
+                      minWidth: '150px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center'
+                    }}>
+                      <label style={{ 
+                        display: 'block', 
+                        marginBottom: '8px', 
+                        fontWeight: '600',
+                        textAlign: 'center',
+                        width: '100%'
+                      }}>Start Date:</label>
+                      <input
+                        type="date"
+                        value={recurringStartDate}
+                        onChange={(e) => setRecurringStartDate(e.target.value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        style={{
+                          padding: '12px',
+                          borderRadius: '8px',
+                          border: '1px solid #e2e8f0',
+                          fontSize: '16px',
+                          width: '100%',
+                          textAlign: 'center'
+                        }}
+                      />
+                    </div>
+                    
+                    <div style={{ 
+                      flex: '1', 
+                      minWidth: '150px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center'
+                    }}>
+                      <label style={{ 
+                        display: 'block', 
+                        marginBottom: '8px', 
+                        fontWeight: '600',
+                        textAlign: 'center',
+                        width: '100%'
+                      }}>End Date:</label>
+                      <input
+                        type="date"
+                        value={recurringEndDate}
+                        onChange={(e) => setRecurringEndDate(e.target.value)}
+                        min={recurringStartDate || new Date().toISOString().split('T')[0]}
+                        style={{
+                          padding: '12px',
+                          borderRadius: '8px',
+                          border: '1px solid #e2e8f0',
+                          fontSize: '16px',
+                          width: '100%',
+                          textAlign: 'center'
+                        }}
+                      />
+                    </div>
                   </div>
 
                   <div>
                     <label style={{ display: 'block', marginBottom: '12px', fontWeight: '600' }}>Days of the Week:</label>
                     <div className="days-of-week-selector" style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(7, 1fr)', 
-                      gap: '8px',
-                      marginBottom: '16px'
+                      display: 'flex', 
+                      flexWrap: 'wrap',
+                      gap: '6px',
+                      marginBottom: '16px',
+                      maxWidth: '100%',
+                      justifyContent: 'space-between'
                     }}>
                       {[
                         { day: 'Sun', value: 0 },
@@ -3573,13 +3767,16 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                           flexDirection: 'column',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          padding: '16px 8px',
+                          padding: '12px 6px',
                           background: recurringDaysOfWeek.includes(dayOption.value) ? '#e6f3ff' : '#f8f9fa',
                           borderRadius: '8px',
                           border: recurringDaysOfWeek.includes(dayOption.value) ? '2px solid #0066cc' : '1px solid #e2e8f0',
                           cursor: 'pointer',
                           textAlign: 'center',
-                          fontSize: '14px'
+                          fontSize: '13px',
+                          minWidth: '45px',
+                          flex: '1 1 auto',
+                          maxWidth: '60px'
                         }}>
                           <input
                             type="checkbox"
@@ -3610,7 +3807,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                         {recurringDaysOfWeek.map(day => 
                           ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day]
                         ).join(', ')}{' '}
-                        for 2 months starting from {recurringStartDate || 'selected date'}.
+                        from {recurringStartDate || 'start date'} to {recurringEndDate || 'end date'}.
                       </div>
                     )}
                   </div>
@@ -3688,7 +3885,16 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     type="radio"
                     name="privacyMode"
                     checked={isSharedActivity}
-                    onChange={() => setIsSharedActivity(true)}
+                    onChange={() => {
+                      setIsSharedActivity(true);
+                      // Disable recurring when switching to shared
+                      if (isRecurringActivity) {
+                        setIsRecurringActivity(false);
+                        setRecurringDaysOfWeek([]);
+                        setRecurringStartDate('');
+                        setRecurringEndDate('');
+                      }
+                    }}
                   />
                   🌐 Shared (Invite connected children)
                   {!isSharedActivity && connectedChildren.length === 0 && pendingConnectionRequests.length === 0 && (
@@ -3783,6 +3989,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     </div>
                   ) : (
                     <div className="children-list">
+                      
                       {/* Joint hosting explanation */}
                       {jointHostChildren.length > 0 && (
                         <div style={{
@@ -3797,8 +4004,31 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                         </div>
                       )}
                       
+                      {/* Connection Search */}
+                      {(connectedChildren.length + pendingConnectionRequests.length) > 5 && (
+                        <div style={{ marginBottom: '12px' }}>
+                          <input
+                            type="text"
+                            placeholder="🔍 Search connections..."
+                            value={connectionSearchTerm}
+                            onChange={(e) => setConnectionSearchTerm(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              border: '2px solid #e0e0e0',
+                              borderRadius: '6px',
+                              fontSize: '14px',
+                              outline: 'none',
+                              transition: 'border-color 0.2s'
+                            }}
+                            onFocus={(e) => e.target.style.borderColor = '#2196f3'}
+                            onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
+                          />
+                        </div>
+                      )}
+                      
                       {/* Confirmed connections */}
-                      {connectedChildren.map((connectedChild) => (
+                      {getFilteredAndSortedConnections().map((connectedChild) => (
                         <label key={connectedChild.id} className="child-checkbox">
                           <input
                             type="checkbox"
@@ -3818,7 +4048,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                       ))}
                       
                       {/* Pending connection requests */}
-                      {pendingConnectionRequests.map((request) => (
+                      {getFilteredAndSortedPendingRequests().map((request) => (
                         <label key={`pending-${request.id}`} className="child-checkbox" style={{ opacity: 0.7 }}>
                           <input
                             type="checkbox"
@@ -3837,6 +4067,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                           ⏳ {request.target_child_name || `${request.target_parent_name || request.target_family_name || 'Unknown Parent'} (Any Child)`} - <em style={{ fontSize: '12px' }}>pending connection</em>
                         </label>
                       ))}
+                      
+                      {/* No search results message */}
+                      {connectionSearchTerm.trim() && 
+                       getFilteredAndSortedConnections().length === 0 && 
+                       getFilteredAndSortedPendingRequests().length === 0 && (
+                        <div style={{ 
+                          padding: '16px',
+                          textAlign: 'center',
+                          color: '#666',
+                          fontStyle: 'italic',
+                          fontSize: '14px'
+                        }}>
+                          No connections found matching "{connectionSearchTerm}"
+                        </div>
+                      )}
                       
                       {connectedChildren.length === 0 && pendingConnectionRequests.length > 0 && (
                         <p style={{ fontSize: '14px', color: '#666', fontStyle: 'italic', marginTop: '12px' }}>

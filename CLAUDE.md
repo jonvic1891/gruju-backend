@@ -25,20 +25,47 @@ curl -X DELETE 'https://gruju-backend-5014424c95f2.herokuapp.com/api/admin/clean
 - **roberts11@example.com** - Parent with Charlie 11  
 - **charlie@example.com** - Additional test user
 
+## 🚀 DEPLOYMENT PIPELINE
+
+### ⚠️ CRITICAL DEPLOYMENT RULES FOR CLAUDE:
+
+1. **ALL CHANGES GO TO TEST FIRST**: When user requests changes, ALWAYS deploy to test environment automatically
+2. **PRODUCTION REQUIRES EXPLICIT REQUEST**: Only deploy to production when user specifically says "deploy to production"
+3. **AUTO-TEST DEPLOYMENT**: After making any code changes, automatically run test deployment
+
+### 🧪 Test Environment (Auto-Deploy)
+**ALWAYS deploy here when making changes**
+```bash
+# Backend
+git add -A && git commit -m "Deploy to test - $(date)" && git push test-heroku main
+
+# Frontend  
+cd parent-activity-web && npm run build && cd .. && firebase use gruju-parent-activity-app && firebase deploy --only hosting
+```
+- **Backend**: https://gruju-backend-5014424c95f2.herokuapp.com
+- **Frontend**: https://gruju-parent-activity-app.web.app
+- **Users**: roberts10@example.com, roberts11@example.com, charlie@example.com
+
+### 🚀 Production Environment (Manual Only)
+**ONLY deploy when user explicitly requests "deploy to production"**
+```bash
+# Backend
+git add -A && git commit -m "Deploy to production - $(date)" && git push production main
+
+# Frontend
+cd parent-activity-web && NODE_ENV=production npm run build && cd .. && firebase use gruju-production && firebase deploy --only hosting:production
+```
+- **Backend**: https://gruju-d3d8121d3647.herokuapp.com  
+- **Frontend**: https://gruju-com.web.app (gruju.com when DNS ready)
+- **Admin**: admin@gruju.com / Admin123!
+
 ## Development Commands
 
-### Frontend (React)
-```bash
-cd parent-activity-web
-npm run build
-firebase deploy --only hosting
-```
-
-### Backend (Node.js)
-```bash
-git add . && git commit -m "Your commit message"
-git push heroku main
-```
+### When Making Changes (Claude Protocol)
+1. Make the requested changes
+2. Automatically deploy to test environment
+3. Confirm test deployment successful
+4. Only deploy to production if explicitly requested
 
 ## Recent Issues Fixed
 - ✅ Connection request acceptance (UUID vs ID mismatch)

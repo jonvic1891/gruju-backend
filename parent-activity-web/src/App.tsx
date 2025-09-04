@@ -90,7 +90,7 @@ function App() {
   console.log('App component rendering');
   
   return (
-    <div className="App">
+    <div className="App" data-deployment-pipeline="configured">
       <AuthProvider>
         <Router>
           <AppContent />

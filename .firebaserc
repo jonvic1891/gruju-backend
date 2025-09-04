@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "gruju-parent-activity-app"
-  }
+  },
+  "targets": {
+    "gruju-production": {
+      "hosting": {
+        "production": [
+          "gruju-com"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

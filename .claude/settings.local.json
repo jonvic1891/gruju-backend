@@ -32,7 +32,17 @@
       "WebFetch(domain:www.cascadecamps.co.uk)",
       "Bash(sed:*)",
       "Bash(npx tsc:*)",
-      "Bash(DISABLE_ESLINT_PLUGIN=true npm run build)"
+      "Bash(DISABLE_ESLINT_PLUGIN=true npm run build)",
+      "Bash(BACKUP_DIR=\"backups/20250904_120936\")",
+      "Bash(tar:*)",
+      "Bash(heroku pg:backups:capture:*)",
+      "Bash(heroku pg:backups:download:*)",
+      "Bash(heroku apps:info:*)",
+      "Bash(heroku addons:create:*)",
+      "Bash(git remote add:*)",
+      "Bash(git remote rename:*)",
+      "Bash(firebase hosting:sites:create:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

@@ -1,0 +1,37 @@
+Gruju Parent Activity App - Full Backup
+=========================================
+
+Backup Date: September 4, 2025 - 12:09:36 UTC
+Backup Location: /home/jonathan/Claud-Clubs2/backups/20250904_120936/
+
+Contents:
+---------
+1. frontend_backup.tar.gz (300K)
+   - React frontend application source code
+   - Excludes: node_modules, build, .firebase directories
+   - Location: parent-activity-web/
+
+2. backend_backup.tar.gz (1.4M)  
+   - Node.js backend API source code
+   - All JavaScript files, configuration, and scripts
+   - Excludes: node_modules, logs, previous backups, .git
+
+3. database_backup.dump (148K)
+   - PostgreSQL database dump from Heroku
+   - App: gruju-backend-5014424c95f2.herokuapp.com
+   - Contains all tables, data, and schema
+
+System Information:
+------------------
+- Git Status: Modified files in parent-activity-web/
+- Current Branch: main
+- Frontend URL: https://gruju-parent-activity-app.web.app  
+- Backend URL: https://gruju-backend-5014424c95f2.herokuapp.com
+
+Restore Instructions:
+--------------------
+1. Frontend: Extract frontend_backup.tar.gz and run `npm install` then `npm run build`
+2. Backend: Extract backend_backup.tar.gz and run `npm install`
+3. Database: Use `pg_restore` with database_backup.dump file
+
+Total Backup Size: 1.8MB

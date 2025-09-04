@@ -472,57 +472,92 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
         const rawNotifications: any[] = [];
         
         // First, collect all activities with unviewed responses
-        for (const activity of allActivities) {
+        const activitiesWithUnviewedResponses = allActivities.filter(activity => {
           const hostChild = childrenData.find(child => child.uuid === activity.child_uuid);
           const hasUnviewedResponses = parseInt(activity.unviewed_status_changes || '0') > 0;
+          return hostChild && hasUnviewedResponses;
+        });
+        
+        console.log(`🔄 ChildrenScreen: Batch loading participants for ${activitiesWithUnviewedResponses.length} activities with unviewed responses...`);
+        
+        // Batch load participants for all activities with unviewed responses
+        if (activitiesWithUnviewedResponses.length > 0) {
+          // Get unique, valid UUIDs only
+          const allUuids = activitiesWithUnviewedResponses.map(a => a.activity_uuid || a.uuid).filter(Boolean);
+          const uniqueUuids = Array.from(new Set(allUuids)); // Remove duplicates
+          console.log(`📊 ChildrenScreen: Unique UUIDs: ${uniqueUuids.length} (from ${allUuids.length} total)`);
           
-          if (hostChild && hasUnviewedResponses) {
+          // Split into batches of 50 to respect backend limit
+          const batchSize = 50;
+          const allParticipantsData: any = {};
+          
+          for (let i = 0; i < uniqueUuids.length; i += batchSize) {
+            const batchUuids = uniqueUuids.slice(i, i + batchSize);
+            console.log(`🔄 ChildrenScreen: Loading batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(uniqueUuids.length/batchSize)} (${batchUuids.length} activities)`);
+            
             try {
-              // Get participants for this activity to get detailed response information
-              const participantsResponse = await apiService.getActivityParticipants(activity.activity_uuid || activity.uuid);
+              const participantsResponse = await apiService.getBatchActivityParticipants(batchUuids);
               if (participantsResponse.success && participantsResponse.data) {
-                const participants = participantsResponse.data.participants || [];
-                
-                // Since calendar activities says there are unviewed responses, find non-pending participants
-                // We can't rely on status_viewed_at since it's missing from the API, but we know there are unviewed responses
-                const responseParticipants = participants.filter((p: any) => 
-                  p.status !== 'pending'
-                );
-                
-                if (responseParticipants.length > 0) {
-                  rawNotifications.push({
-                    activity_id: activity.id,
-                    activity_uuid: activity.activity_uuid || activity.uuid,
-                    activity_name: activity.name,
-                    start_date: activity.start_date,
-                    start_time: activity.start_time,
-                    end_time: activity.end_time,
-                    host_child_uuid: hostChild.uuid,
-                    host_child_name: hostChild.name,
-                    unviewed_responses: responseParticipants,
-                    total_unviewed: parseInt(activity.unviewed_status_changes),
-                    unviewed_statuses: activity.unviewed_statuses,
-                    series_id: activity.series_id // Include series_id for grouping
-                  });
-                }
+                Object.assign(allParticipantsData, participantsResponse.data);
+              } else {
+                console.error(`❌ ChildrenScreen: Batch ${Math.floor(i/batchSize) + 1} failed:`, participantsResponse.error);
               }
             } catch (error) {
-              console.error(`Failed to load participants for activity ${activity.id}:`, error);
-              // Fallback: create notification without detailed participant info
-              rawNotifications.push({
-                activity_id: activity.id,
-                activity_uuid: activity.activity_uuid || activity.uuid,
-                activity_name: activity.name,
-                start_date: activity.start_date,
-                start_time: activity.start_time,
-                end_time: activity.end_time,
-                host_child_id: hostChild.id,
-                host_child_name: hostChild.name,
-                unviewed_responses: [],
-                total_unviewed: parseInt(activity.unviewed_status_changes),
-                unviewed_statuses: activity.unviewed_statuses,
-                series_id: activity.series_id // Include series_id for grouping
-              });
+              console.error(`❌ ChildrenScreen: Batch ${Math.floor(i/batchSize) + 1} error:`, error);
+            }
+          }
+          
+          console.log(`✅ ChildrenScreen: Batch participants loaded for ${Object.keys(allParticipantsData).length} activities`);
+          
+          // Process activities using batch data
+          for (const activity of activitiesWithUnviewedResponses) {
+            const hostChild = childrenData.find(child => child.uuid === activity.child_uuid);
+            const activityUuid = activity.activity_uuid || activity.uuid;
+            const participantsData = allParticipantsData[activityUuid];
+            
+            if (hostChild && participantsData && participantsData.success && participantsData.data) {
+              const participants = participantsData.data.participants || [];
+              
+              // Since calendar activities says there are unviewed responses, find non-pending participants
+              const responseParticipants = participants.filter((p: any) => 
+                p.status !== 'pending'
+              );
+              
+              if (responseParticipants.length > 0) {
+                rawNotifications.push({
+                  activity_id: activity.id,
+                  activity_uuid: activityUuid,
+                  activity_name: activity.name,
+                  start_date: activity.start_date,
+                  start_time: activity.start_time,
+                  end_time: activity.end_time,
+                  host_child_uuid: hostChild.uuid,
+                  host_child_name: hostChild.name,
+                  unviewed_responses: responseParticipants,
+                  total_unviewed: parseInt(activity.unviewed_status_changes),
+                  unviewed_statuses: activity.unviewed_statuses,
+                  series_id: activity.series_id // Include series_id for grouping
+                });
+              }
+            } else {
+              console.warn(`⚠️ ChildrenScreen: No batch participants data for activity ${activityUuid}`);
+              // Fallback: create notification without detailed participant info (only if hostChild exists)
+              if (hostChild) {
+                rawNotifications.push({
+                  activity_id: activity.id,
+                  activity_uuid: activityUuid,
+                  activity_name: activity.name,
+                  start_date: activity.start_date,
+                  start_time: activity.start_time,
+                  end_time: activity.end_time,
+                  host_child_uuid: hostChild.uuid,
+                  host_child_name: hostChild.name,
+                  unviewed_responses: [],
+                  total_unviewed: parseInt(activity.unviewed_status_changes),
+                  unviewed_statuses: activity.unviewed_statuses,
+                  series_id: activity.series_id // Include series_id for grouping
+                });
+              }
             }
           }
         }

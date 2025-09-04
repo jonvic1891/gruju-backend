@@ -531,13 +531,9 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
   const loadActivityParticipants = async (activityId: string) => {
     try {
       setLoadingParticipants(true);
-      const response = await apiService.getActivityParticipants(activityId);
-      if (response.success && response.data) {
-        setActivityParticipants(response.data);
-      } else {
-        setActivityParticipants(null);
-        console.error('Failed to load activity participants:', response.error);
-      }
+      // TODO: Implement batch loading for CalendarScreen to avoid individual API calls
+      console.warn('⚠️ CalendarScreen: Individual participants API call disabled for performance - implement batch loading');
+      setActivityParticipants(null);
     } catch (error) {
       console.error('Error loading activity participants:', error);
       setActivityParticipants(null);

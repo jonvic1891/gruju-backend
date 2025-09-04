@@ -1,8 +1,10 @@
 import axios, { AxiosResponse } from 'axios';
 import { LoginRequest, RegisterRequest, AuthResponse, ApiResponse } from '../types';
 
-// API Configuration - Always use production Heroku backend
-const API_BASE_URL = 'https://gruju-backend-5014424c95f2.herokuapp.com';
+// API Configuration - Environment-based backend URLs
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://gruju-d3d8121d3647.herokuapp.com'
+  : 'https://gruju-backend-5014424c95f2.herokuapp.com';
 
 class ApiService {
   private static instance: ApiService;
@@ -358,6 +360,10 @@ class ApiService {
 
   async getActivityParticipants(activityUuid: string): Promise<ApiResponse<any>> {
     return this.request('get', `/api/activities/${activityUuid}/participants`);
+  }
+
+  async getBatchActivityParticipants(activityUuids: string[]): Promise<ApiResponse<any>> {
+    return this.request('post', '/api/activities/batch/participants', { activityUuids });
   }
 
   async createPendingInvitations(activityUuid: string, pendingConnections: string[]): Promise<ApiResponse<any>> {
