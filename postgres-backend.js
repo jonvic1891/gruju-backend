@@ -4647,6 +4647,18 @@ app.get('/api/notifications/dismissed', authenticateToken, async (req, res) => {
         
         const client = await pool.connect();
         
+        // Create dismissed_notifications table if it doesn't exist
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS dismissed_notifications (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                notification_id VARCHAR(255) NOT NULL,
+                notification_type VARCHAR(100),
+                dismissed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, notification_id)
+            )
+        `);
+        
         // Get all dismissed notifications for this user
         const result = await client.query(`
             SELECT notification_id, notification_type, dismissed_at
