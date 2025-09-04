@@ -4715,34 +4715,31 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
             ORDER BY cr.created_at DESC
         `, [userId]);
         
-        // Get activity invitations (using same logic as batch endpoint)
-        const today = new Date();
-        const oneYearLater = new Date();
-        oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
-        const startDate = today.toISOString().split('T')[0];
-        const endDate = oneYearLater.toISOString().split('T')[0];
-        
+        // Get activity invitations (using same logic as batch endpoint - pending invitations query)
         const invitationsResult = await client.query(`
-            SELECT DISTINCT a.uuid as activity_uuid, a.name as activity_name, a.start_date, a.end_date, a.start_time, a.end_time, 
-                    a.description as activity_description, a.location, a.series_id, a.is_recurring,
-                    c.name as child_name, c.id as child_id,
-                    u.username as host_parent_username,
-                    ai.message as invitation_message,
-                    ai.uuid as invitation_uuid,
-                    ai.status,
-                    ai.created_at,
-                    c_invited.name as invited_child_name, c_invited.id as invited_child_id
-            FROM activities a
-            INNER JOIN children c ON a.child_id = c.id
-            INNER JOIN users u ON c.parent_id = u.id
-            INNER JOIN activity_invitations ai ON a.id = ai.activity_id
-            LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
-            WHERE ai.invited_parent_id = $1 
-              AND ai.status = 'pending'
-              AND a.start_date <= $3
-              AND (a.end_date IS NULL OR a.end_date >= $2)
-            ORDER BY a.start_date, a.start_time
-        `, [userId, startDate, endDate]);
+            SELECT 
+                ai.*,
+                a.name as activity_name,
+                a.description as activity_description,
+                a.start_date,
+                a.end_date,
+                a.start_time,
+                a.end_time,
+                a.location,
+                a.series_id,
+                c_host.name as host_child_name,
+                u_host.family_name as host_family_name,
+                u_host.username as host_parent_name,
+                c_invited.name as invited_child_name, c_invited.id as invited_child_id
+            FROM activity_invitations ai
+            JOIN activities a ON ai.activity_uuid = a.uuid
+            JOIN children c_host ON a.child_id = c_host.id
+            JOIN users u_host ON c_host.parent_id = u_host.id
+            LEFT JOIN children c_invited ON ai.invited_child_uuid = c_invited.uuid
+            WHERE ai.invited_parent_id = $1
+            AND ai.status = 'pending'
+            ORDER BY ai.created_at DESC
+        `, [userId]);
         
         client.release();
         
