@@ -18,6 +18,10 @@ class ApiService {
   private token: string | null = null;
   private invitationCache: Map<string, { data: any, timestamp: number }> = new Map();
   private cacheTimeoutMs = 30000; // 30 seconds cache
+  private masterInvitationData: { data: any, timestamp: number, dateRange: { start: string, end: string } } | null = null;
+  private masterInvitationPromise: Promise<any> | null = null;
+  private childrenCache: { data: any, timestamp: number } | null = null;
+  private childrenPromise: Promise<any> | null = null;
 
   private constructor() {
     this.token = localStorage.getItem('authToken');
@@ -32,6 +36,42 @@ class ApiService {
 
   private getAuthHeaders() {
     return this.token ? { Authorization: `Bearer ${this.token}` } : {};
+  }
+
+  // Get a master date range that covers all component needs
+  private getMasterDateRange(): { start: string, end: string } {
+    const today = new Date();
+    // Start from beginning of current week to cover ChildrenScreen's current week view
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
+    
+    // End 1 year from now to cover NotificationBell and ChildActivityScreen's 1-year view
+    const oneYearLater = new Date(today);
+    oneYearLater.setFullYear(today.getFullYear() + 1);
+    
+    return {
+      start: startOfWeek.toISOString().split('T')[0],
+      end: oneYearLater.toISOString().split('T')[0]
+    };
+  }
+
+  // Check if requested date range is covered by master data
+  private isDateRangeCovered(requestedStart: string, requestedEnd: string, masterStart: string, masterEnd: string): boolean {
+    return requestedStart >= masterStart && requestedEnd <= masterEnd;
+  }
+
+  // Filter master data to requested date range
+  private filterInvitationsByDateRange(invitations: any[], startDate: string, endDate: string): any[] {
+    if (!invitations) return [];
+    
+    return invitations.filter(invitation => {
+      const activityStartDate = invitation.start_date?.split('T')[0] || '';
+      const activityEndDate = invitation.end_date?.split('T')[0] || activityStartDate;
+      
+      // Activity overlaps with requested range if:
+      // Activity start <= requested end AND activity end >= requested start
+      return activityStartDate <= endDate && activityEndDate >= startDate;
+    });
   }
 
   private async request<T>(
@@ -175,23 +215,85 @@ class ApiService {
     return this.request('put', `/api/parents/${parentUuid}`, parentData);
   }
 
-  // Children
+  // Children - with promise deduplication and caching
   async getChildren(): Promise<ApiResponse<any[]>> {
+    // Check if we have valid cached data
+    if (this.childrenCache && (Date.now() - this.childrenCache.timestamp) < this.cacheTimeoutMs) {
+      console.log('📦 Using cached children data');
+      return { success: true, data: this.childrenCache.data };
+    }
+
+    // If there's already a request in flight, return the same promise
+    if (this.childrenPromise) {
+      console.log('⏳ Children request already in flight, waiting for existing promise...');
+      try {
+        const result = await this.childrenPromise;
+        return result;
+      } catch (error) {
+        // If the existing promise failed, clear it and try again
+        this.childrenPromise = null;
+      }
+    }
+
+    // Create new promise for the API request
+    console.log('🔄 Loading children data...');
+    this.childrenPromise = this.fetchChildren();
+
+    try {
+      const result = await this.childrenPromise;
+      return result;
+    } finally {
+      // Clear the promise when done (success or failure)
+      this.childrenPromise = null;
+    }
+  }
+
+  // Separate method for the actual children API call
+  private async fetchChildren(): Promise<ApiResponse<any[]>> {
     // Add cache-busting parameter to force fresh request
     const timestamp = Date.now();
-    return this.request('get', `/api/children?_t=${timestamp}`);
+    const response = await this.request<any[]>('get', `/api/children?_t=${timestamp}`);
+    
+    if (response.success && response.data) {
+      // Cache successful responses
+      this.childrenCache = {
+        data: response.data,
+        timestamp: Date.now()
+      };
+      console.log('✅ Children data loaded and cached:', Array.isArray(response.data) ? response.data.length : 'unknown count', 'children');
+    }
+    
+    return response;
   }
 
   async createChild(childData: { first_name: string; last_name?: string; name?: string }): Promise<ApiResponse<any>> {
-    return this.request('post', '/api/children', childData);
+    const response = await this.request('post', '/api/children', childData);
+    // Clear children cache when data changes
+    if (response.success) {
+      this.childrenCache = null;
+      this.childrenPromise = null;
+    }
+    return response;
   }
 
   async deleteChild(childUuid: string): Promise<ApiResponse<any>> {
-    return this.request('delete', `/api/children/${childUuid}`);
+    const response = await this.request('delete', `/api/children/${childUuid}`);
+    // Clear children cache when data changes
+    if (response.success) {
+      this.childrenCache = null;
+      this.childrenPromise = null;
+    }
+    return response;
   }
 
   async updateChild(childUuid: string, childData: any): Promise<ApiResponse<any>> {
-    return this.request('put', `/api/children/${childUuid}`, childData);
+    const response = await this.request('put', `/api/children/${childUuid}`, childData);
+    // Clear children cache when data changes
+    if (response.success) {
+      this.childrenCache = null;
+      this.childrenPromise = null;
+    }
+    return response;
   }
 
   // Activities
@@ -239,37 +341,117 @@ class ApiService {
     return this.request('get', `/api/calendar/connected-activities?start=${startDate}&end=${endDate}`);
   }
 
-  // Unified batch method to get all invitation data with caching
+  // Master invitation data loader - loads once with wide date range to serve all components
+  // Uses promise deduplication to prevent simultaneous requests
+  private async loadMasterInvitationData(): Promise<{ calendar_invitations: any[], pending_invitations: any[], stats: any } | null> {
+    const masterRange = this.getMasterDateRange();
+    
+    // Check if we have valid master data that covers the full range
+    if (this.masterInvitationData && 
+        (Date.now() - this.masterInvitationData.timestamp) < this.cacheTimeoutMs &&
+        this.masterInvitationData.dateRange.start <= masterRange.start &&
+        this.masterInvitationData.dateRange.end >= masterRange.end) {
+      console.log('📦 Using cached master invitation data', this.masterInvitationData.dateRange);
+      return this.masterInvitationData.data;
+    }
+    
+    // If there's already a request in flight, return the same promise
+    if (this.masterInvitationPromise) {
+      console.log('⏳ Request already in flight, waiting for existing promise...');
+      try {
+        const result = await this.masterInvitationPromise;
+        return result;
+      } catch (error) {
+        // If the existing promise failed, clear it and try again
+        this.masterInvitationPromise = null;
+      }
+    }
+    
+    // Create new promise for the API request
+    console.log('🔄 Loading master invitation data for range:', masterRange);
+    this.masterInvitationPromise = this.fetchMasterInvitationData(masterRange);
+    
+    try {
+      const result = await this.masterInvitationPromise;
+      return result;
+    } finally {
+      // Clear the promise when done (success or failure)
+      this.masterInvitationPromise = null;
+    }
+  }
+
+  // Separate method for the actual API call
+  private async fetchMasterInvitationData(masterRange: { start: string, end: string }): Promise<{ calendar_invitations: any[], pending_invitations: any[], stats: any } | null> {
+    const response = await this.request<{
+      calendar_invitations: any[],
+      pending_invitations: any[],
+      stats: any
+    }>('get', `/api/invitations/batch?start=${masterRange.start}&end=${masterRange.end}`);
+    
+    if (response.success && response.data) {
+      this.masterInvitationData = {
+        data: response.data,
+        timestamp: Date.now(),
+        dateRange: masterRange
+      };
+      console.log('✅ Master invitation data loaded:', {
+        calendar_invitations: response.data.calendar_invitations?.length || 0,
+        pending_invitations: response.data.pending_invitations?.length || 0,
+        dateRange: masterRange
+      });
+      return response.data;
+    }
+    
+    return null;
+  }
+
+  // Unified batch method to get all invitation data with intelligent caching
   async getBatchInvitations(startDate: string, endDate: string): Promise<ApiResponse<{
     calendar_invitations: any[],
     pending_invitations: any[],
     stats: any
   }>> {
-    const cacheKey = `batch-${startDate}-${endDate}`;
-    const cached = this.invitationCache.get(cacheKey);
-    
-    // Return cached data if still valid
-    if (cached && (Date.now() - cached.timestamp) < this.cacheTimeoutMs) {
-      console.log('📦 Returning cached batch invitations for', cacheKey);
-      return { success: true, data: cached.data };
-    }
-    
-    console.log('🔄 Fetching fresh batch invitations for', cacheKey);
-    const response = await this.request<{
-      calendar_invitations: any[],
-      pending_invitations: any[],
-      stats: any
-    }>('get', `/api/invitations/batch?start=${startDate}&end=${endDate}`);
-    
-    // Cache successful responses
-    if (response.success && response.data) {
-      this.invitationCache.set(cacheKey, {
-        data: response.data,
-        timestamp: Date.now()
+    try {
+      const masterData = await this.loadMasterInvitationData();
+      
+      if (!masterData) {
+        return { success: false, error: 'Failed to load invitation data' };
+      }
+      
+      // Filter master data to requested date range
+      const filteredCalendarInvitations = this.filterInvitationsByDateRange(
+        masterData.calendar_invitations, startDate, endDate
+      );
+      
+      // Pending invitations don't need date filtering as they're status-based
+      const filteredData = {
+        calendar_invitations: filteredCalendarInvitations,
+        pending_invitations: masterData.pending_invitations, // Always return all pending
+        stats: {
+          total_calendar: filteredCalendarInvitations.length,
+          total_pending: masterData.pending_invitations?.length || 0,
+          by_status: {} as Record<string, number>
+        }
+      };
+      
+      // Recalculate stats for filtered data
+      filteredCalendarInvitations.forEach(invitation => {
+        const status = invitation.status || 'unknown';
+        filteredData.stats.by_status[status] = (filteredData.stats.by_status[status] || 0) + 1;
       });
+      
+      console.log(`📊 Returning filtered invitations for ${startDate} to ${endDate}:`, {
+        calendar: filteredData.stats.total_calendar,
+        pending: filteredData.stats.total_pending,
+        original_calendar: masterData.calendar_invitations?.length || 0
+      });
+      
+      return { success: true, data: filteredData };
+      
+    } catch (error) {
+      console.error('❌ Error in getBatchInvitations:', error);
+      return { success: false, error: 'Failed to get batch invitations' };
     }
-    
-    return response;
   }
 
   // Legacy method - kept for backward compatibility but now uses batch endpoint
@@ -286,10 +468,19 @@ class ApiService {
     };
   }
 
-  // Clear invitation cache (call when data changes)
-  clearInvitationCache(): void {
-    console.log('🧹 Clearing invitation cache');
+  // Clear all caches (call when data changes)
+  clearAllCaches(): void {
+    console.log('🧹 Clearing all caches, master data, and pending promises');
     this.invitationCache.clear();
+    this.masterInvitationData = null;
+    this.masterInvitationPromise = null;
+    this.childrenCache = null;
+    this.childrenPromise = null;
+  }
+
+  // Legacy method for backward compatibility
+  clearInvitationCache(): void {
+    this.clearAllCaches();
   }
 
   // Helper methods to filter invitations by status
@@ -458,6 +649,19 @@ class ApiService {
 
   async useActivityTemplate(templateUuid: string): Promise<ApiResponse<any>> {
     return this.request('post', `/api/activity-templates/${templateUuid}/use`);
+  }
+
+  // Notification dismissal
+  async dismissNotification(notificationId: string, type?: string): Promise<ApiResponse<any>> {
+    return this.request('post', '/api/notifications/dismiss', { notificationId, type });
+  }
+
+  async getDismissedNotifications(): Promise<ApiResponse<string[]>> {
+    return this.request('get', '/api/notifications/dismissed');
+  }
+
+  async getBellNotifications(): Promise<ApiResponse<any[]>> {
+    return this.request('get', '/api/notifications/bell');
   }
 }
 

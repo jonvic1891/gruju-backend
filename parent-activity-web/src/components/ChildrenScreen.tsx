@@ -166,9 +166,8 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
         console.log('🔍 Children count:', childrenData.length);
         setChildren(childrenData);
         
-        // Load activity counts, invitations, connection requests, and hosted activity notifications
-        await loadActivityCounts(childrenData);
-        await loadInvitationsForChildren(childrenData);
+        // Load activity counts and invitations together (consolidated to avoid duplicate API calls)
+        await loadActivityCountsAndInvitations(childrenData);
         await loadConnectionRequestsForChildren(childrenData);
         await loadHostedActivityNotifications(childrenData);
       } else {
@@ -185,7 +184,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     }
   };
 
-  const loadActivityCounts = async (childrenData: Child[]) => {
+  const loadActivityCountsAndInvitations = async (childrenData: Child[]) => {
     try {
       const counts: Record<string, number> = {};
       
@@ -210,19 +209,17 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       const calendarActivitiesResponse = await apiService.getCalendarActivities(startDate, endDate);
       console.log(`🔍 ChildrenScreen - Calendar activities API response:`, calendarActivitiesResponse);
       
-      console.log(`📡 ChildrenScreen - Loading invited activities...`);
+      console.log(`📡 ChildrenScreen - Loading all invitations (single call for both invited and pending)...`);
       const invitationsResponse = await apiService.getAllInvitations(startDate, endDate);
       console.log(`🔍 ChildrenScreen - Invitations API response:`, invitationsResponse);
       
-      console.log(`📡 ChildrenScreen - Loading pending invitations (using getAllInvitations directly)...`);
-      // Use the same API call as NotificationBell to ensure we get series_id data
-      const allInvitationsResponse = await apiService.getAllInvitations(startDate, endDate);
+      // Extract pending invitations from the same data (no additional API call needed)
       const pendingResponse = {
-        success: allInvitationsResponse.success,
-        data: allInvitationsResponse.success && allInvitationsResponse.data 
-          ? allInvitationsResponse.data.filter((inv: any) => inv.status === 'pending')
+        success: invitationsResponse.success,
+        data: invitationsResponse.success && invitationsResponse.data 
+          ? invitationsResponse.data.filter((inv: any) => inv.status === 'pending')
           : [],
-        error: allInvitationsResponse.error
+        error: invitationsResponse.error
       };
       console.log(`🔍 ChildrenScreen - Pending invitations API response:`, pendingResponse);
       
@@ -336,23 +333,10 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
       }
       
       setChildActivityCounts(counts);
-    } catch (error) {
-      console.error('Failed to load activity counts:', error);
-    }
-  };
 
-  const loadInvitationsForChildren = async (childrenData: Child[]) => {
-    try {
-      // Use unified calendar invitations endpoint with a reasonable date range (next 3 months)
-      const today = new Date();
-      const threeMonthsLater = new Date();
-      threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
-      
-      const startDate = today.toISOString().split('T')[0];
-      const endDate = threeMonthsLater.toISOString().split('T')[0];
-      
-      const response = await apiService.getAllInvitations(startDate, endDate);
-      if (response.success && response.data) {
+      // Now load invitations for children using the SAME master date range
+      // (Reuse invitationsResponse from above to avoid additional API call)
+      if (invitationsResponse.success && invitationsResponse.data) {
         
         // Group invitations by child
         const invitationsByChild: Record<string, ActivityInvitation[]> = {};
@@ -363,19 +347,20 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
         });
         
         // Filter for pending invitations only and group by child
-        response.data.forEach((invitation: any) => {
-          if (invitation.status === 'pending') {
-            // Find the child this invitation is for using child name
-            const targetChild = childrenData.find(child => 
+        invitationsResponse.data.forEach((invitation: any) => {
+          if (invitation.status === 'pending' && invitation.invited_child_name) {
+            // Find child by name (matching logic from original function)
+            const matchingChild = childrenData.find(child => 
               child.name === invitation.invited_child_name
             );
             
-            if (targetChild) {
-              // Convert the calendar invitation format to match ActivityInvitation interface
-              invitationsByChild[targetChild.uuid].push({
-                id: invitation.invitation_uuid || invitation.id, // Use invitation_uuid as primary ID
+            if (matchingChild) {
+              // Convert to ActivityInvitation format (matching the interface)
+              const activityInvitation: ActivityInvitation = {
+                id: invitation.invitation_uuid || invitation.id,
                 invitation_uuid: invitation.invitation_uuid,
-                activity_id: invitation.activity_uuid || invitation.id,
+                activity_id: invitation.activity_uuid,
+                activity_uuid: invitation.activity_uuid,
                 activity_name: invitation.activity_name,
                 activity_description: invitation.activity_description,
                 start_date: invitation.start_date,
@@ -388,30 +373,34 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 host_family_name: invitation.host_family_name,
                 host_parent_name: invitation.host_parent_username,
                 host_parent_email: invitation.host_parent_email,
-                invited_child_uuid: targetChild.uuid,
+                invited_child_uuid: matchingChild.uuid,
                 invited_child_name: invitation.invited_child_name,
                 message: invitation.invitation_message,
                 created_at: invitation.created_at || new Date().toISOString(),
-                // Add series_id and recurring fields from API response
+                viewed_at: invitation.viewed_at,
                 series_id: invitation.series_id,
-                is_recurring: invitation.is_recurring,
+                is_recurring: invitation.is_recurring || false,
                 recurring_days: invitation.recurring_days,
                 series_start_date: invitation.series_start_date
-              } as any);
+              } as any;
+              
+              invitationsByChild[matchingChild.uuid].push(activityInvitation);
             }
           }
         });
         
         setChildInvitations(invitationsByChild);
+        console.log(`📧 Loaded invitations for ${Object.keys(invitationsByChild).length} children`);
       } else {
-        console.error('Failed to load activity invitations:', response.error);
+        console.error('Failed to load invitations:', invitationsResponse.error);
         setChildInvitations({});
       }
+      
     } catch (error) {
-      console.error('Failed to load invitations:', error);
-      setChildInvitations({});
+      console.error('Failed to load activity counts and invitations:', error);
     }
   };
+
 
   const loadConnectionRequestsForChildren = async (childrenData: Child[]) => {
     try {

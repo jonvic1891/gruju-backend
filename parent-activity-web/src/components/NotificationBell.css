@@ -112,6 +112,10 @@
   border-bottom: 1px solid #f1f3f4;
   cursor: pointer;
   transition: background-color 0.2s;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .notification-item:hover {
@@ -129,6 +133,8 @@
 
 .notification-content {
   margin-bottom: 10px;
+  flex: 1;
+  margin-right: 10px;
 }
 
 .notification-title {
@@ -148,6 +154,29 @@
 .notification-time {
   color: #6c757d;
   font-size: 11px;
+}
+
+.notification-dismiss-btn {
+  background: none;
+  border: none;
+  color: #6c757d;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.notification-dismiss-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #495057;
 }
 
 .notification-actions {

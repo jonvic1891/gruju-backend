@@ -4680,6 +4680,158 @@ app.get('/api/notifications/dismissed', authenticateToken, async (req, res) => {
     }
 });
 
+// Get notifications for the notification bell (constructs and filters server-side)
+app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const client = await pool.connect();
+        
+        // Create dismissed_notifications table if it doesn't exist
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS dismissed_notifications (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                notification_id VARCHAR(255) NOT NULL,
+                notification_type VARCHAR(100),
+                dismissed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, notification_id)
+            )
+        `);
+        
+        // Get dismissed notification IDs for this user
+        const dismissedResult = await client.query(`
+            SELECT notification_id FROM dismissed_notifications WHERE user_id = $1
+        `, [userId]);
+        const dismissedIds = new Set(dismissedResult.rows.map(row => row.notification_id));
+        
+        console.log(`🔕 User ${userId} has ${dismissedIds.size} dismissed notifications`);
+        
+        // Get connection requests
+        const connectionRequestsResult = await client.query(`
+            SELECT cr.*, u.username as requester_username, u.email as requester_email
+            FROM connection_requests cr
+            JOIN users u ON cr.requester_id = u.id
+            WHERE cr.target_parent_id = $1 AND cr.status = 'pending'
+            ORDER BY cr.created_at DESC
+        `, [userId]);
+        
+        // Get activity invitations (using same logic as batch endpoint)
+        const today = new Date();
+        const oneYearLater = new Date();
+        oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+        const startDate = today.toISOString().split('T')[0];
+        const endDate = oneYearLater.toISOString().split('T')[0];
+        
+        const invitationsResult = await client.query(`
+            SELECT DISTINCT a.uuid as activity_uuid, a.name as activity_name, a.start_date, a.end_date, a.start_time, a.end_time, 
+                    a.description as activity_description, a.location, a.series_id, a.is_recurring,
+                    c.name as child_name, c.id as child_id,
+                    u.username as host_parent_username,
+                    ai.message as invitation_message,
+                    ai.uuid as invitation_uuid,
+                    ai.status,
+                    ai.created_at,
+                    c_invited.name as invited_child_name, c_invited.id as invited_child_id
+            FROM activities a
+            INNER JOIN children c ON a.child_id = c.id
+            INNER JOIN users u ON c.parent_id = u.id
+            INNER JOIN activity_invitations ai ON a.id = ai.activity_id
+            LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
+            WHERE ai.invited_parent_id = $1 
+              AND ai.status = 'pending'
+              AND a.start_date <= $3
+              AND (a.end_date IS NULL OR a.end_date >= $2)
+            ORDER BY a.start_date, a.start_time
+        `, [userId, startDate, endDate]);
+        
+        client.release();
+        
+        // Construct notifications (same logic as NotificationBell frontend)
+        const allNotifications = [];
+        
+        // Add connection request notifications
+        connectionRequestsResult.rows.forEach(request => {
+            const notificationId = `connection_${request.uuid}`;
+            if (!dismissedIds.has(notificationId)) {
+                allNotifications.push({
+                    id: notificationId,
+                    type: 'connection_request',
+                    title: 'New Connection Request',
+                    message: `${request.requester_username} wants to connect`,
+                    timestamp: request.created_at,
+                    read: false,
+                    data: { requestUuid: request.uuid }
+                });
+            }
+        });
+        
+        // Group recurring invitations (same logic as frontend)
+        const processedSeriesIds = new Set();
+        const groupedInvitations = new Map();
+        const singleInvitations = [];
+        
+        invitationsResult.rows.forEach(invitation => {
+            const seriesId = invitation.series_id;
+            
+            if (seriesId && !processedSeriesIds.has(seriesId)) {
+                const seriesInvitations = invitationsResult.rows.filter(inv => inv.series_id === seriesId);
+                
+                if (seriesInvitations.length > 1) {
+                    groupedInvitations.set(seriesId, {
+                        invitations: seriesInvitations,
+                        displayName: invitation.activity_name
+                    });
+                    processedSeriesIds.add(seriesId);
+                } else {
+                    singleInvitations.push(invitation);
+                }
+            } else if (!seriesId) {
+                singleInvitations.push(invitation);
+            }
+        });
+        
+        // Add recurring invitations summary
+        if (groupedInvitations.size > 0) {
+            const notificationId = 'recurring_activity_invitations_summary';
+            if (!dismissedIds.has(notificationId)) {
+                allNotifications.push({
+                    id: notificationId,
+                    type: 'activity_invitation',
+                    title: 'Recurring Activity Invitations',
+                    message: `${groupedInvitations.size} recurring activity invitation${groupedInvitations.size !== 1 ? 's' : ''}`,
+                    timestamp: new Date().toISOString(),
+                    read: false,
+                    data: { type: 'recurring_summary', seriesCount: groupedInvitations.size }
+                });
+            }
+        }
+        
+        // Add single invitations summary
+        if (singleInvitations.length > 0) {
+            const notificationId = 'single_activity_invitations_summary';
+            if (!dismissedIds.has(notificationId)) {
+                allNotifications.push({
+                    id: notificationId,
+                    type: 'activity_invitation',
+                    title: 'Activity Invitations',
+                    message: `${singleInvitations.length} new activity invitation${singleInvitations.length !== 1 ? 's' : ''}`,
+                    timestamp: singleInvitations[0]?.created_at || new Date().toISOString(),
+                    read: false,
+                    data: { type: 'single_activities' }
+                });
+            }
+        }
+        
+        console.log(`🔔 Constructed ${allNotifications.length} notifications for user ${userId} (${dismissedIds.size} were filtered out)`);
+        
+        res.json({ success: true, data: allNotifications });
+        
+    } catch (error) {
+        console.error('❌ Error loading bell notifications:', error);
+        res.status(500).json({ success: false, error: 'Failed to load notifications' });
+    }
+});
+
 // Test endpoint for debugging
 app.get('/api/activities/:activityId/test', (req, res) => {
     console.log(`🧪 TEST ENDPOINT HIT: ActivityID ${req.params.activityId}`);
