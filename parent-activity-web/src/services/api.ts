@@ -1,10 +1,17 @@
 import axios, { AxiosResponse } from 'axios';
 import { LoginRequest, RegisterRequest, AuthResponse, ApiResponse } from '../types';
 
-// API Configuration - Environment-based backend URLs
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://gruju-d3d8121d3647.herokuapp.com'
-  : 'https://gruju-backend-5014424c95f2.herokuapp.com';
+// API Configuration - Force test backend for test environment
+const API_BASE_URL = 'https://gruju-backend-5014424c95f2.herokuapp.com';
+
+// Debug logging to verify which backend we're connecting to
+console.log('🔗 API Configuration (TEST ENVIRONMENT):', {
+  REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+  API_BASE_URL: API_BASE_URL,
+  NODE_ENV: process.env.NODE_ENV,
+  environment: 'TEST',
+  timestamp: new Date().toISOString()
+});
 
 class ApiService {
   private static instance: ApiService;
@@ -80,6 +87,12 @@ class ApiService {
 
   // Authentication
   async login(credentials: LoginRequest): Promise<ApiResponse<AuthResponse>> {
+    console.log('🔐 Login attempt:', {
+      email: credentials.email,
+      backend: API_BASE_URL,
+      url: `${API_BASE_URL}/api/auth/login`,
+      timestamp: new Date().toISOString()
+    });
     const response = await this.request<AuthResponse>('post', '/api/auth/login', credentials);
     if (response.success && response.data) {
       this.token = response.data.token;
