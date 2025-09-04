@@ -4501,11 +4501,6 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
     }
 });
 
-// Test endpoint to verify deployment
-app.get('/api/test-batch', (req, res) => {
-    res.json({ success: true, message: 'Batch endpoint test working', timestamp: new Date().toISOString() });
-});
-
 // Batch endpoint - Get all invitation data in one call
 app.get('/api/invitations/batch', authenticateToken, async (req, res) => {
     try {
@@ -4599,6 +4594,77 @@ app.get('/api/invitations/batch', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('❌ Error in batch invitations:', error);
         res.status(500).json({ success: false, error: 'Failed to get batch invitations' });
+    }
+});
+
+// Notification dismissal endpoints
+app.post('/api/notifications/dismiss', authenticateToken, async (req, res) => {
+    try {
+        const { notificationId, type } = req.body;
+        const userId = req.user.id;
+        
+        console.log(`🔕 Dismissing notification: ${notificationId} for user ${userId}`);
+        
+        if (!notificationId) {
+            return res.status(400).json({ success: false, error: 'Notification ID is required' });
+        }
+        
+        const client = await pool.connect();
+        
+        // Create dismissed_notifications table if it doesn't exist
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS dismissed_notifications (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                notification_id VARCHAR(255) NOT NULL,
+                notification_type VARCHAR(100),
+                dismissed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, notification_id)
+            )
+        `);
+        
+        // Insert dismissal record (ON CONFLICT DO NOTHING to handle duplicates)
+        await client.query(`
+            INSERT INTO dismissed_notifications (user_id, notification_id, notification_type)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id, notification_id) DO NOTHING
+        `, [userId, notificationId, type || 'unknown']);
+        
+        client.release();
+        
+        console.log(`✅ Notification ${notificationId} dismissed for user ${userId}`);
+        res.json({ success: true, message: 'Notification dismissed' });
+        
+    } catch (error) {
+        console.error('❌ Error dismissing notification:', error);
+        res.status(500).json({ success: false, error: 'Failed to dismiss notification' });
+    }
+});
+
+app.get('/api/notifications/dismissed', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        const client = await pool.connect();
+        
+        // Get all dismissed notifications for this user
+        const result = await client.query(`
+            SELECT notification_id, notification_type, dismissed_at
+            FROM dismissed_notifications
+            WHERE user_id = $1
+            ORDER BY dismissed_at DESC
+        `, [userId]);
+        
+        client.release();
+        
+        const dismissedIds = result.rows.map(row => row.notification_id);
+        console.log(`📋 User ${userId} has ${dismissedIds.length} dismissed notifications`);
+        
+        res.json({ success: true, data: dismissedIds });
+        
+    } catch (error) {
+        console.error('❌ Error getting dismissed notifications:', error);
+        res.status(500).json({ success: false, error: 'Failed to get dismissed notifications' });
     }
 });
 
