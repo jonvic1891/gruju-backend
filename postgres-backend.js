@@ -4501,6 +4501,107 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
     }
 });
 
+// Test endpoint to verify deployment
+app.get('/api/test-batch', (req, res) => {
+    res.json({ success: true, message: 'Batch endpoint test working', timestamp: new Date().toISOString() });
+});
+
+// Batch endpoint - Get all invitation data in one call
+app.get('/api/invitations/batch', authenticateToken, async (req, res) => {
+    try {
+        const { start, end } = req.query;
+        
+        if (!start || !end) {
+            return res.status(400).json({ success: false, error: 'Start and end dates are required' });
+        }
+        
+        const client = await pool.connect();
+        
+        // Get all calendar invitations (same as /api/calendar/invitations)
+        const calendarQuery = `
+            SELECT DISTINCT a.uuid as activity_uuid, a.name as activity_name, a.start_date, a.end_date, a.start_time, a.end_time, 
+                    a.website_url, a.created_at, a.updated_at, a.description as activity_description, 
+                    a.location, a.cost, a.series_id, a.is_recurring, a.recurring_days, a.series_start_date,
+                    c.name as child_name, c.uuid as child_uuid,
+                    u.username as host_parent_username,
+                    ai.message as invitation_message,
+                    ai.uuid as invitation_uuid,
+                    ai.status,
+                    ai.viewed_at,
+                    c_invited.name as invited_child_name
+            FROM activities a
+            INNER JOIN children c ON a.child_id = c.id
+            INNER JOIN users u ON c.parent_id = u.id
+            INNER JOIN activity_invitations ai ON a.id = ai.activity_id
+            LEFT JOIN children c_invited ON ai.invited_child_id = c_invited.id
+            WHERE (ai.invited_parent_id = $1 OR ai.inviter_parent_id = $1)
+              AND a.start_date <= $3
+              AND (a.end_date IS NULL OR a.end_date >= $2)
+            ORDER BY a.start_date, a.start_time, ai.status
+        `;
+        
+        // Get unviewed pending invitations (same as /api/activity-invitations)
+        const pendingQuery = `
+            SELECT 
+                ai.*,
+                a.name as activity_name,
+                a.description as activity_description,
+                a.start_date,
+                a.end_date,
+                a.start_time,
+                a.end_time,
+                a.location,
+                c_host.name as host_child_name,
+                u_host.family_name as host_family_name,
+                u_host.username as host_parent_name,
+                c_invited.name as invited_child_name
+            FROM activity_invitations ai
+            JOIN activities a ON ai.activity_uuid = a.uuid
+            JOIN children c_host ON a.child_id = c_host.id
+            JOIN users u_host ON c_host.parent_id = u_host.id
+            LEFT JOIN children c_invited ON ai.invited_child_uuid = c_invited.uuid
+            WHERE ai.invited_parent_id = $1
+            AND ai.status = 'pending'
+            AND ai.viewed_at IS NULL
+            ORDER BY ai.created_at DESC
+        `;
+        
+        console.log(`🔥 BATCH: Getting all invitation data for user ${req.user.id} (${start} to ${end})`);
+        
+        // Execute both queries in parallel
+        const [calendarResult, pendingResult] = await Promise.all([
+            client.query(calendarQuery, [req.user.id, start, end]),
+            client.query(pendingQuery, [req.user.id])
+        ]);
+        
+        client.release();
+        
+        const batchData = {
+            calendar_invitations: calendarResult.rows,
+            pending_invitations: pendingResult.rows,
+            stats: {
+                total_calendar: calendarResult.rows.length,
+                total_pending: pendingResult.rows.length,
+                by_status: {}
+            }
+        };
+        
+        // Calculate stats by status
+        calendarResult.rows.forEach(invitation => {
+            const status = invitation.status || 'unknown';
+            batchData.stats.by_status[status] = (batchData.stats.by_status[status] || 0) + 1;
+        });
+        
+        console.log(`📊 BATCH: Returning ${batchData.stats.total_calendar} calendar invitations, ${batchData.stats.total_pending} pending`);
+        
+        res.json({ success: true, data: batchData });
+        
+    } catch (error) {
+        console.error('❌ Error in batch invitations:', error);
+        res.status(500).json({ success: false, error: 'Failed to get batch invitations' });
+    }
+});
+
 // Test endpoint for debugging
 app.get('/api/activities/:activityId/test', (req, res) => {
     console.log(`🧪 TEST ENDPOINT HIT: ActivityID ${req.params.activityId}`);
