@@ -16,7 +16,7 @@ console.log('🔗 API Configuration (TEST ENVIRONMENT):', {
 class ApiService {
   private static instance: ApiService;
   private token: string | null = null;
-  private invitationCache: Map<string, { data: any[], timestamp: number }> = new Map();
+  private invitationCache: Map<string, { data: any, timestamp: number }> = new Map();
   private cacheTimeoutMs = 30000; // 30 seconds cache
 
   private constructor() {
@@ -239,19 +239,27 @@ class ApiService {
     return this.request('get', `/api/calendar/connected-activities?start=${startDate}&end=${endDate}`);
   }
 
-  // Unified method to get all invitations with caching
-  async getAllInvitations(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
-    const cacheKey = `${startDate}-${endDate}`;
+  // Unified batch method to get all invitation data with caching
+  async getBatchInvitations(startDate: string, endDate: string): Promise<ApiResponse<{
+    calendar_invitations: any[],
+    pending_invitations: any[],
+    stats: any
+  }>> {
+    const cacheKey = `batch-${startDate}-${endDate}`;
     const cached = this.invitationCache.get(cacheKey);
     
     // Return cached data if still valid
     if (cached && (Date.now() - cached.timestamp) < this.cacheTimeoutMs) {
-      console.log('📦 Returning cached invitations for', cacheKey);
+      console.log('📦 Returning cached batch invitations for', cacheKey);
       return { success: true, data: cached.data };
     }
     
-    console.log('🔄 Fetching fresh invitations for', cacheKey);
-    const response = await this.request<any[]>('get', `/api/calendar/invitations?start=${startDate}&end=${endDate}`);
+    console.log('🔄 Fetching fresh batch invitations for', cacheKey);
+    const response = await this.request<{
+      calendar_invitations: any[],
+      pending_invitations: any[],
+      stats: any
+    }>('get', `/api/invitations/batch?start=${startDate}&end=${endDate}`);
     
     // Cache successful responses
     if (response.success && response.data) {
@@ -264,6 +272,20 @@ class ApiService {
     return response;
   }
 
+  // Legacy method - kept for backward compatibility but now uses batch endpoint
+  async getAllInvitations(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
+    const batchResponse = await this.getBatchInvitations(startDate, endDate);
+    if (!batchResponse.success) {
+      return batchResponse as any;
+    }
+    
+    // Return just the calendar invitations for backward compatibility
+    return {
+      success: true,
+      data: batchResponse.data?.calendar_invitations || []
+    };
+  }
+
   // Clear invitation cache (call when data changes)
   clearInvitationCache(): void {
     console.log('🧹 Clearing invitation cache');
@@ -272,12 +294,13 @@ class ApiService {
 
   // Helper methods to filter invitations by status
   async getInvitedActivities(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
-    const allInvitationsResponse = await this.getAllInvitations(startDate, endDate);
-    if (!allInvitationsResponse.success) {
-      return allInvitationsResponse;
+    const batchResponse = await this.getBatchInvitations(startDate, endDate);
+    if (!batchResponse.success) {
+      return batchResponse as any;
     }
     
-    const acceptedInvitations = allInvitationsResponse.data?.filter(invitation => invitation.status === 'accepted') || [];
+    // Filter accepted invitations from calendar invitations
+    const acceptedInvitations = batchResponse.data?.calendar_invitations?.filter(invitation => invitation.status === 'accepted') || [];
     return {
       success: true,
       data: acceptedInvitations
@@ -360,28 +383,29 @@ class ApiService {
   }
 
   async getPendingInvitationsForCalendar(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
-    const allInvitationsResponse = await this.getAllInvitations(startDate, endDate);
-    if (!allInvitationsResponse.success) {
-      return allInvitationsResponse;
+    const batchResponse = await this.getBatchInvitations(startDate, endDate);
+    if (!batchResponse.success) {
+      return batchResponse as any;
     }
     
-    const pendingInvitations = allInvitationsResponse.data?.filter(invitation => invitation.status === 'pending') || [];
+    // Return pending invitations from batch data
     return {
       success: true,
-      data: pendingInvitations
+      data: batchResponse.data?.pending_invitations || []
     };
   }
 
   async getDeclinedInvitationsForCalendar(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
-    const allInvitationsResponse = await this.getAllInvitations(startDate, endDate);
-    if (!allInvitationsResponse.success) {
-      return allInvitationsResponse;
+    const batchResponse = await this.getBatchInvitations(startDate, endDate);
+    if (!batchResponse.success) {
+      return batchResponse as any;
     }
     
-    const declinedInvitations = allInvitationsResponse.data?.filter(invitation => invitation.status === 'rejected') || [];
+    // Filter rejected invitations from calendar invitations
+    const rejectedInvitations = batchResponse.data?.calendar_invitations?.filter(invitation => invitation.status === 'rejected') || [];
     return {
       success: true,
-      data: declinedInvitations
+      data: rejectedInvitations
     };
   }
 
