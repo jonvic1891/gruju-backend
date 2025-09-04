@@ -4762,7 +4762,7 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
             }
         });
         
-        // Group recurring invitations (same logic as frontend)
+        // Group recurring invitations (same logic as original frontend)
         const processedSeriesIds = new Set();
         const groupedInvitations = new Map();
         const singleInvitations = [];
@@ -4787,21 +4787,35 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
             }
         });
         
-        // Add recurring invitations summary
-        if (groupedInvitations.size > 0) {
-            const notificationId = 'recurring_activity_invitations_summary';
+        // Add individual notifications for each recurring activity group (like original)
+        groupedInvitations.forEach((groupData, seriesId) => {
+            const invitations = groupData.invitations;
+            const activityName = groupData.displayName;
+            const firstInvitation = invitations[0];
+            
+            // Get the day of the week from the first invitation
+            const startDate = new Date(firstInvitation.start_date);
+            const dayOfWeek = startDate.toLocaleDateString('en-US', { weekday: 'long' });
+            
+            const notificationId = `recurring_activity_${activityName.replace(/\s+/g, '_')}`;
             if (!dismissedIds.has(notificationId)) {
                 allNotifications.push({
                     id: notificationId,
                     type: 'activity_invitation',
-                    title: 'Recurring Activity Invitations',
-                    message: `${groupedInvitations.size} recurring activity invitation${groupedInvitations.size !== 1 ? 's' : ''}`,
-                    timestamp: new Date().toISOString(),
+                    title: 'Recurring Activity Invitation',
+                    message: `"${activityName}" recurring every ${dayOfWeek} (${invitations.length} activities) from ${firstInvitation.host_child_name || firstInvitation.host_family_name || 'Unknown Host'}`,
+                    timestamp: firstInvitation.created_at,
                     read: false,
-                    data: { type: 'recurring_summary', seriesCount: groupedInvitations.size }
+                    data: { 
+                        type: 'recurring_series',
+                        activityName,
+                        dayOfWeek,
+                        count: invitations.length,
+                        invitations 
+                    }
                 });
             }
-        }
+        });
         
         // Add single invitations summary
         if (singleInvitations.length > 0) {
@@ -4816,6 +4830,86 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
                     read: false,
                     data: { type: 'single_activities' }
                 });
+            }
+        }
+        
+        // Get parent children data for hosted activity notifications
+        const childrenResult = await client.query('SELECT * FROM children WHERE parent_id = $1', [userId]);
+        const parentChildren = childrenResult.rows;
+        
+        // Load hosted activity notifications (activities where our children are hosts and guests have responded)
+        const today = new Date();
+        const oneYearLater = new Date();
+        oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+        const startDate = today.toISOString().split('T')[0];
+        const endDate = oneYearLater.toISOString().split('T')[0];
+        
+        const calendarActivitiesResult = await client.query(`
+            SELECT a.*, c.name as child_name, c.uuid as child_uuid,
+                   a.unviewed_status_changes, a.unviewed_statuses
+            FROM activities a
+            INNER JOIN children c ON a.child_id = c.id
+            WHERE c.parent_id = $1 
+              AND a.start_date <= $3
+              AND (a.end_date IS NULL OR a.end_date >= $2)
+            ORDER BY a.start_date, a.start_time
+        `, [userId, startDate, endDate]);
+        
+        if (calendarActivitiesResult.rows.length > 0) {
+            const allActivities = calendarActivitiesResult.rows;
+            
+            // Count different types of activity responses where our children are hosts
+            let totalAcceptances = 0;
+            let totalDeclines = 0;
+            
+            for (const activity of allActivities) {
+                const hostChild = parentChildren.find((child) => child.uuid === activity.child_uuid);
+                const hasUnviewedResponses = parseInt(activity.unviewed_status_changes || '0') > 0;
+                
+                if (hostChild && hasUnviewedResponses) {
+                    // Try to categorize by status types if available
+                    if (activity.unviewed_statuses) {
+                        const statuses = activity.unviewed_statuses.split(',');
+                        statuses.forEach((status) => {
+                            if (status.trim() === 'accepted') {
+                                totalAcceptances++;
+                            } else if (status.trim() === 'rejected' || status.trim() === 'declined') {
+                                totalDeclines++;
+                            }
+                        });
+                    }
+                }
+            }
+            
+            // Create summary notifications for activity responses
+            if (totalAcceptances > 0) {
+                const notificationId = 'activity_acceptances_summary';
+                if (!dismissedIds.has(notificationId)) {
+                    allNotifications.push({
+                        id: notificationId,
+                        type: 'activity_invitation',
+                        title: 'Activity Acceptances',
+                        message: `${totalAcceptances} activity invitation${totalAcceptances !== 1 ? 's' : ''} accepted`,
+                        timestamp: new Date().toISOString(),
+                        read: false,
+                        data: { type: 'acceptances', count: totalAcceptances }
+                    });
+                }
+            }
+            
+            if (totalDeclines > 0) {
+                const notificationId = 'activity_declines_summary';
+                if (!dismissedIds.has(notificationId)) {
+                    allNotifications.push({
+                        id: notificationId,
+                        type: 'activity_invitation',
+                        title: 'Activity Declines',
+                        message: `${totalDeclines} activity invitation${totalDeclines !== 1 ? 's' : ''} declined`,
+                        timestamp: new Date().toISOString(),
+                        read: false,
+                        data: { type: 'declines', count: totalDeclines }
+                    });
+                }
             }
         }
         
