@@ -4741,8 +4741,6 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
             ORDER BY ai.created_at DESC
         `, [userId]);
         
-        client.release();
-        
         // Construct notifications (same logic as NotificationBell frontend)
         const allNotifications = [];
         
@@ -4912,6 +4910,8 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
                 }
             }
         }
+        
+        client.release();
         
         console.log(`🔔 Constructed ${allNotifications.length} notifications for user ${userId} (${dismissedIds.size} were filtered out)`);
         
