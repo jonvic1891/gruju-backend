@@ -62,7 +62,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
   };
 
   useEffect(() => {
-    console.log('📊 useEffect triggered with:', {
+    console.log('📊 useEffect triggered for month/settings change:', {
       currentMonth: currentMonth.toISOString(),
       includeConnected,
       includeInvited,
@@ -81,7 +81,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
       console.log('⏳ Loading pending invitations...');
       loadPendingInvitations();
     }
-  }, [currentMonth, includeInvited, includePending, selectedChildrenFilter]);
+  }, [currentMonth, includeInvited, includePending]); // Removed selectedChildrenFilter to prevent excessive reloads
 
   // Separate useEffect for connected activities that depends on children being loaded
   useEffect(() => {

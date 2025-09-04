@@ -343,13 +343,13 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
 
   const loadInvitationsForChildren = async (childrenData: Child[]) => {
     try {
-      // Use unified calendar invitations endpoint with a wide date range
+      // Use unified calendar invitations endpoint with a reasonable date range (next 3 months)
       const today = new Date();
-      const oneYearLater = new Date();
-      oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+      const threeMonthsLater = new Date();
+      threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
       
       const startDate = today.toISOString().split('T')[0];
-      const endDate = oneYearLater.toISOString().split('T')[0];
+      const endDate = threeMonthsLater.toISOString().split('T')[0];
       
       const response = await apiService.getAllInvitations(startDate, endDate);
       if (response.success && response.data) {

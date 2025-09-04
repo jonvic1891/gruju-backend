@@ -16,6 +16,8 @@ console.log('🔗 API Configuration (TEST ENVIRONMENT):', {
 class ApiService {
   private static instance: ApiService;
   private token: string | null = null;
+  private invitationCache: Map<string, { data: any[], timestamp: number }> = new Map();
+  private cacheTimeoutMs = 30000; // 30 seconds cache
 
   private constructor() {
     this.token = localStorage.getItem('authToken');
@@ -237,11 +239,35 @@ class ApiService {
     return this.request('get', `/api/calendar/connected-activities?start=${startDate}&end=${endDate}`);
   }
 
-  // Unified method to get all invitations (replaces separate accepted/pending/declined methods)
+  // Unified method to get all invitations with caching
   async getAllInvitations(startDate: string, endDate: string): Promise<ApiResponse<any[]>> {
-    // Add cache-busting parameter to force fresh request
-    const timestamp = Date.now();
-    return this.request('get', `/api/calendar/invitations?start=${startDate}&end=${endDate}&_t=${timestamp}`);
+    const cacheKey = `${startDate}-${endDate}`;
+    const cached = this.invitationCache.get(cacheKey);
+    
+    // Return cached data if still valid
+    if (cached && (Date.now() - cached.timestamp) < this.cacheTimeoutMs) {
+      console.log('📦 Returning cached invitations for', cacheKey);
+      return { success: true, data: cached.data };
+    }
+    
+    console.log('🔄 Fetching fresh invitations for', cacheKey);
+    const response = await this.request<any[]>('get', `/api/calendar/invitations?start=${startDate}&end=${endDate}`);
+    
+    // Cache successful responses
+    if (response.success && response.data) {
+      this.invitationCache.set(cacheKey, {
+        data: response.data,
+        timestamp: Date.now()
+      });
+    }
+    
+    return response;
+  }
+
+  // Clear invitation cache (call when data changes)
+  clearInvitationCache(): void {
+    console.log('🧹 Clearing invitation cache');
+    this.invitationCache.clear();
   }
 
   // Helper methods to filter invitations by status
