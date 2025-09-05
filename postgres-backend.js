@@ -4765,11 +4765,20 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
         const groupedInvitations = new Map();
         const singleInvitations = [];
         
+        console.log(`🔔 Processing ${invitationsResult.rows.length} pending invitations for user ${userId}`);
+        console.log(`🔔 Sample invitations:`, invitationsResult.rows.slice(0, 3).map(inv => ({
+            activity_name: inv.activity_name,
+            series_id: inv.series_id,
+            status: inv.status
+        })));
+        
         invitationsResult.rows.forEach(invitation => {
             const seriesId = invitation.series_id;
             
             if (seriesId && !processedSeriesIds.has(seriesId)) {
                 const seriesInvitations = invitationsResult.rows.filter(inv => inv.series_id === seriesId);
+                
+                console.log(`🔔 Series ${seriesId}: Found ${seriesInvitations.length} invitations for "${invitation.activity_name}"`);
                 
                 if (seriesInvitations.length > 1) {
                     groupedInvitations.set(seriesId, {
@@ -4777,13 +4786,18 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
                         displayName: invitation.activity_name
                     });
                     processedSeriesIds.add(seriesId);
+                    console.log(`🔔 ✅ Added to grouped invitations: ${seriesId}`);
                 } else {
                     singleInvitations.push(invitation);
+                    console.log(`🔔 ➡️ Added to single invitations: "${invitation.activity_name}" (only 1 in series)`);
                 }
             } else if (!seriesId) {
                 singleInvitations.push(invitation);
+                console.log(`🔔 ➡️ Added to single invitations: "${invitation.activity_name}" (no series_id)`);
             }
         });
+        
+        console.log(`🔔 Final grouping: ${groupedInvitations.size} recurring series, ${singleInvitations.length} single invitations`);
         
         // Add individual notifications for each recurring activity group (like original)
         groupedInvitations.forEach((groupData, seriesId) => {
