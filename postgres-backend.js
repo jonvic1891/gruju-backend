@@ -1176,7 +1176,7 @@ app.post('/api/auth/register', async (req, res) => {
         const result = await client.query(`
             INSERT INTO users (username, email, phone, password_hash, family_name)
             VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, username, email, phone, role, family_name
+            RETURNING id, uuid, username, email, phone, role, family_name
         `, [username, email, phone, hashedPassword, family_name]);
 
         const newUser = result.rows[0];
@@ -1214,6 +1214,7 @@ app.post('/api/auth/register', async (req, res) => {
             token,
             user: {
                 id: newUser.id,
+                uuid: newUser.uuid,
                 username: newUser.username,
                 email: newUser.email,
                 phone: newUser.phone,
