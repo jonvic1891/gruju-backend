@@ -4780,17 +4780,13 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
                 
                 console.log(`🔔 Series ${seriesId}: Found ${seriesInvitations.length} invitations for "${invitation.activity_name}"`);
                 
-                if (seriesInvitations.length > 1) {
-                    groupedInvitations.set(seriesId, {
-                        invitations: seriesInvitations,
-                        displayName: invitation.activity_name
-                    });
-                    processedSeriesIds.add(seriesId);
-                    console.log(`🔔 ✅ Added to grouped invitations: ${seriesId}`);
-                } else {
-                    singleInvitations.push(invitation);
-                    console.log(`🔔 ➡️ Added to single invitations: "${invitation.activity_name}" (only 1 in series)`);
-                }
+                // Any invitation with series_id should be treated as recurring, even if only 1 is pending
+                groupedInvitations.set(seriesId, {
+                    invitations: seriesInvitations,
+                    displayName: invitation.activity_name
+                });
+                processedSeriesIds.add(seriesId);
+                console.log(`🔔 ✅ Added to grouped invitations: ${seriesId} (recurring series)`);
             } else if (!seriesId) {
                 singleInvitations.push(invitation);
                 console.log(`🔔 ➡️ Added to single invitations: "${invitation.activity_name}" (no series_id)`);
