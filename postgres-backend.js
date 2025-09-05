@@ -481,6 +481,21 @@ async function runMigrations() {
             console.log('ℹ️ Migration 17: Recurring activities series_id assignment issue:', error.message);
         }
         
+        // Migration 18: Add onboarding_completed field to users table
+        try {
+            await client.query(`
+                ALTER TABLE users 
+                ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT false
+            `);
+            console.log('✅ Migration 18: Added onboarding_completed column to users table');
+        } catch (error) {
+            if (error.code === '42701') {
+                console.log('✅ Migration 18: onboarding_completed column already exists');
+            } else {
+                console.log('ℹ️ Migration 18: Could not add onboarding_completed column:', error.message);
+            }
+        }
+        
     } catch (error) {
         console.error('❌ Migration failed:', error);
         throw error;
@@ -1291,7 +1306,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
         const result = await client.query(
-            'SELECT id, username, email, phone, created_at, updated_at FROM users WHERE id = $1',
+            'SELECT id, username, email, phone, created_at, updated_at, onboarding_completed FROM users WHERE id = $1',
             [req.user.id]
         );
         client.release();
@@ -1313,7 +1328,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
 // Update user profile
 app.put('/api/users/profile', authenticateToken, async (req, res) => {
     try {
-        const { username, email, phone } = req.body;
+        const { username, email, phone, onboarding_completed } = req.body;
 
         // Validate input
         if (!username || !email || !phone) {
@@ -1333,15 +1348,25 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
             return res.status(409).json({ error: 'Email or phone number already exists' });
         }
 
-        // Update user
+        // Update user - include onboarding_completed if provided
+        const updateFields = ['username = $1', 'email = $2', 'phone = $3', 'updated_at = NOW()'];
+        const updateValues = [username, email, phone];
+        
+        if (onboarding_completed !== undefined) {
+            updateFields.push(`onboarding_completed = $${updateValues.length + 1}`);
+            updateValues.push(onboarding_completed);
+        }
+        
+        updateValues.push(req.user.id);
+        
         await client.query(
-            'UPDATE users SET username = $1, email = $2, phone = $3, updated_at = NOW() WHERE id = $4',
-            [username, email, phone, req.user.id]
+            `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${updateValues.length}`,
+            updateValues
         );
 
         // Get updated user data
         const updatedUser = await client.query(
-            'SELECT id, username, email, phone, created_at, updated_at FROM users WHERE id = $1',
+            'SELECT id, username, email, phone, created_at, updated_at, onboarding_completed FROM users WHERE id = $1',
             [req.user.id]
         );
         
