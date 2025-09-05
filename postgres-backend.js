@@ -4795,35 +4795,39 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
         
         console.log(`🔔 Final grouping: ${groupedInvitations.size} recurring series, ${singleInvitations.length} single invitations`);
         
-        // Add individual notifications for each recurring activity group (like original)
-        groupedInvitations.forEach((groupData, seriesId) => {
-            const invitations = groupData.invitations;
-            const activityName = groupData.displayName;
-            const firstInvitation = invitations[0];
+        // Add single summary notification for all recurring activity groups
+        if (groupedInvitations.size > 0) {
+            const recurringSeriesCount = groupedInvitations.size;
+            const allRecurringInvitations = [];
             
-            // Get the day of the week from the first invitation
-            const startDate = new Date(firstInvitation.start_date);
-            const dayOfWeek = startDate.toLocaleDateString('en-US', { weekday: 'long' });
+            // Collect all invitations from recurring series
+            groupedInvitations.forEach((groupData) => {
+                allRecurringInvitations.push(...groupData.invitations);
+            });
             
-            const notificationId = `recurring_activity_${activityName.replace(/\s+/g, '_')}`;
+            // Get the most recent timestamp
+            const mostRecentTimestamp = allRecurringInvitations
+                .map(inv => new Date(inv.created_at).getTime())
+                .reduce((max, time) => Math.max(max, time), 0);
+            
+            const notificationId = 'recurring_activity_invitations_summary';
             if (!dismissedIds.has(notificationId)) {
                 allNotifications.push({
                     id: notificationId,
                     type: 'activity_invitation',
-                    title: 'Recurring Activity Invitation',
-                    message: `"${activityName}" recurring every ${dayOfWeek} (${invitations.length} activities) from ${firstInvitation.host_child_name || firstInvitation.host_family_name || 'Unknown Host'}`,
-                    timestamp: firstInvitation.created_at,
+                    title: 'Recurring Activity Invitations',
+                    message: `${recurringSeriesCount} recurring activity invitation${recurringSeriesCount !== 1 ? 's' : ''}`,
+                    timestamp: new Date(mostRecentTimestamp).toISOString(),
                     read: false,
                     data: { 
-                        type: 'recurring_series',
-                        activityName,
-                        dayOfWeek,
-                        count: invitations.length,
-                        invitations 
+                        type: 'recurring_summary',
+                        seriesCount: recurringSeriesCount,
+                        totalActivities: allRecurringInvitations.length,
+                        groupedInvitations: Object.fromEntries(groupedInvitations)
                     }
                 });
             }
-        });
+        }
         
         // Add single invitations summary
         if (singleInvitations.length > 0) {
