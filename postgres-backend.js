@@ -4844,7 +4844,18 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
         
         const calendarActivitiesResult = await client.query(`
             SELECT a.*, c.name as child_name, c.uuid as child_uuid,
-                   a.unviewed_status_changes, a.unviewed_statuses
+                   COALESCE((SELECT COUNT(*) FROM activity_invitations ai_status 
+                            WHERE ai_status.activity_id = a.id 
+                            AND ai_status.inviter_parent_id = $1 
+                            AND ai_status.status IN ('accepted', 'rejected')
+                            AND ai_status.status_viewed_at IS NULL 
+                            AND ai_status.updated_at > ai_status.created_at), 0) as unviewed_status_changes,
+                   (SELECT string_agg(DISTINCT ai_status.status, ',') FROM activity_invitations ai_status 
+                    WHERE ai_status.activity_id = a.id 
+                    AND ai_status.inviter_parent_id = $1 
+                    AND ai_status.status IN ('accepted', 'rejected')
+                    AND ai_status.status_viewed_at IS NULL 
+                    AND ai_status.updated_at > ai_status.created_at) as unviewed_statuses
             FROM activities a
             INNER JOIN children c ON a.child_id = c.id
             WHERE c.parent_id = $1 
