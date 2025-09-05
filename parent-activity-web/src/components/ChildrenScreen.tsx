@@ -188,21 +188,14 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
     try {
       const counts: Record<string, number> = {};
       
-      // Use current week date range Sunday to Saturday
+      // Use same date range as ChildActivityScreen (current date to 1 year ahead)
       const now = new Date();
-      const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const oneYearLater = new Date();
+      oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+      const startDate = now.toISOString().split('T')[0];
+      const endDate = oneYearLater.toISOString().split('T')[0];
       
-      // Calculate Sunday to Saturday week
-      const startOfWeek = new Date(now);
-      startOfWeek.setDate(now.getDate() - dayOfWeek); // Go back to Sunday (0 days if already Sunday)
-      
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6); // Add 6 days to get to Saturday
-      
-      const startDate = startOfWeek.toISOString().split('T')[0];
-      const endDate = endOfWeek.toISOString().split('T')[0];
-      
-      console.log(`📅 ChildrenScreen - Using CURRENT WEEK date range: ${startDate} to ${endDate} (${startOfWeek.toDateString()} to ${endOfWeek.toDateString()})`);
+      console.log(`📅 ChildrenScreen - Using SAME date range as ChildActivityScreen: ${startDate} to ${endDate} (current date to 1 year ahead)`);
       
       // Load activity count for each child using the SAME logic as ChildActivityScreen
       console.log(`📡 ChildrenScreen - Loading owned activities...`);
@@ -292,33 +285,91 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
         for (const child of childrenData) {
           console.log(`\n🔍 Processing activities for ${child.name} (UUID: ${child.uuid})...`);
           try {
-            // Filter activities for this specific child using EXACT same logic as ChildActivityScreen
+            // Filter activities the child is going to: hosted by them (private OR shared) OR accepted invitations
             const childActivities = allActivities.filter(activity => {
-              const ownsActivity = activity.child_uuid === child.uuid;
-              const isInvited = activity.invited_child_uuid === child.uuid && 
-                               activity.invitation_status && 
-                               activity.invitation_status !== 'none';
-              const shouldInclude = ownsActivity || isInvited;
+              const isHosting = activity.child_uuid === child.uuid; // Child is hosting (private or shared)
+              const isAcceptedInvitation = activity.invited_child_uuid === child.uuid && 
+                                          activity.invitation_status === 'accepted'; // Child accepted someone else's invite
+              const shouldInclude = isHosting || isAcceptedInvitation;
               
-              // Enhanced debug logging to match ChildActivityScreen
+              // Enhanced debug logging
               if (shouldInclude) {
                 console.log(`🔍 ChildrenScreen - INCLUDING "${activity.name}" for ${child.name}:`);
-                console.log(`   - Type: ${ownsActivity ? 'PRIVATE (owned)' : 'SHARED (invited)'}`);
-                console.log(`   - Owns: ${ownsActivity} (${activity.child_uuid} === ${child.uuid})`);
-                console.log(`   - Invited: ${isInvited} (${activity.invited_child_uuid} === ${child.uuid}, status: ${activity.invitation_status})`);
-                console.log(`   - Date: ${activity.date}, Host: ${activity.host_parent_username || 'N/A'}`);
+                console.log(`   - Type: ${isHosting ? 'HOSTING (private or shared)' : 'ACCEPTED INVITATION'}`);
+                console.log(`   - Hosting: ${isHosting} (${activity.child_uuid} === ${child.uuid})`);
+                console.log(`   - Accepted: ${isAcceptedInvitation} (${activity.invited_child_uuid} === ${child.uuid}, status: ${activity.invitation_status})`);
+                console.log(`   - Date: ${activity.start_date}, Host: ${activity.child_name || 'N/A'}`);
               }
               
               return shouldInclude;
             });
             
-            // Count private vs shared activities for detailed breakdown
-            const privateCount = childActivities.filter(a => a.child_uuid === child.uuid).length;
-            const sharedCount = childActivities.filter(a => a.invited_child_uuid === child.uuid && a.invitation_status !== 'none').length;
+            // Now filter to only count activities in the CURRENT WEEK (same as ChildActivityScreen week view)
+            const currentWeek = new Date();
+            const dayOfWeek = currentWeek.getDay(); // 0 = Sunday, 1 = Monday, etc.
+            const startOfWeek = new Date(currentWeek);
+            startOfWeek.setDate(currentWeek.getDate() - dayOfWeek); // Go back to Sunday
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 6); // Add 6 days to get to Saturday
             
-            counts[child.uuid] = childActivities.length;
-            console.log(`📊 Child ${child.name} (UUID: ${child.uuid}): ${childActivities.length} total activities`);
-            console.log(`   📈 Breakdown: ${privateCount} private + ${sharedCount} shared = ${privateCount + sharedCount} total`);
+            console.log(`📅 Week filtering: ${startOfWeek.toDateString()} to ${endOfWeek.toDateString()}`);
+            
+            let weekActivitiesRaw = childActivities.filter(activity => {
+              const activityStartDate = activity.start_date.split('T')[0];
+              const activityEndDate = activity.end_date ? activity.end_date.split('T')[0] : activityStartDate;
+              const startDate = startOfWeek.toISOString().split('T')[0];
+              const endDate = endOfWeek.toISOString().split('T')[0];
+              
+              const isInCurrentWeek = (activityStartDate >= startDate && activityStartDate <= endDate) ||
+                                    (activityEndDate >= startDate && activityEndDate <= endDate) ||
+                                    (activityStartDate <= startDate && activityEndDate >= endDate);
+              
+              if (isInCurrentWeek) {
+                console.log(`📅 Week activity: "${activity.name}" (${activityStartDate}), series_id: ${activity.series_id}`);
+              }
+              
+              return isInCurrentWeek;
+            });
+
+            // EXPERIMENTAL: Group recurring activities to match ChildActivityScreen display logic
+            // This might explain why 9 individual activities show as 2 grouped activities
+            const recurringGroups = new Map();
+            const singleActivities = [];
+            
+            weekActivitiesRaw.forEach(activity => {
+              if (activity.series_id && activity.series_id !== 'undefined' && activity.series_id !== null) {
+                // This is part of a recurring series
+                if (!recurringGroups.has(activity.series_id)) {
+                  recurringGroups.set(activity.series_id, []);
+                }
+                recurringGroups.get(activity.series_id).push(activity);
+              } else {
+                // Single activity
+                singleActivities.push(activity);
+              }
+            });
+            
+            // Count: 1 for each recurring series + individual single activities
+            const recurringSeriesCount = recurringGroups.size;
+            const singleActivitiesCount = singleActivities.length;
+            const groupedCount = recurringSeriesCount + singleActivitiesCount;
+            
+            console.log(`🔍 Activity grouping for ${child.name}:`);
+            console.log(`  - Raw activities in week: ${weekActivitiesRaw.length}`);
+            console.log(`  - Recurring series: ${recurringSeriesCount}`);
+            console.log(`  - Single activities: ${singleActivitiesCount}`);
+            console.log(`  - Grouped total: ${groupedCount}`);
+            
+            // Use grouped count to match ChildActivityScreen behavior
+            const weekActivities = { length: groupedCount }; // Fake array-like object for count
+            
+            // Count hosted vs accepted activities for detailed breakdown (use raw activities)
+            const hostedCount = weekActivitiesRaw.filter(a => a.child_uuid === child.uuid).length;
+            const acceptedCount = weekActivitiesRaw.filter(a => a.invited_child_uuid === child.uuid && a.invitation_status === 'accepted').length;
+            
+            counts[child.uuid] = weekActivities.length;
+            console.log(`📊 Child ${child.name} (UUID: ${child.uuid}): ${childActivities.length} total activities -> ${weekActivities.length} in current week`);
+            console.log(`   📈 Week breakdown: ${hostedCount} hosted + ${acceptedCount} accepted = ${hostedCount + acceptedCount} total`);
           } catch (error) {
             console.error(`Failed to load activity count for child ${child.uuid}:`, error);
             counts[child.uuid] = 0;

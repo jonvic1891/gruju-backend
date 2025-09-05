@@ -8,6 +8,7 @@ import ConnectionsScreen from './ConnectionsScreen';
 import ProfileScreen from './ProfileScreen';
 import AdminScreen from './AdminScreen';
 import NotificationBell from './NotificationBell';
+import OnboardingFlow from './OnboardingFlow';
 import './Dashboard.css';
 
 type Tab = 'children' | 'calendar' | 'connections' | 'profile' | 'admin';
@@ -34,9 +35,40 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   const [calendarInitialViewMode, setCalendarInitialViewMode] = useState<'month' | 'week'>('month');
   const [children, setChildren] = useState<any[]>([]);
   const [childrenRefreshTrigger, setChildrenRefreshTrigger] = useState<number>(0);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const apiService = ApiService.getInstance();
+
+  // Check if user should see onboarding (new user with no children and no "onboarding_completed" flag)
+  const checkForNewUserOnboarding = (childrenData: any[]) => {
+    const onboardingCompleted = localStorage.getItem('onboarding_completed') === 'true';
+    const isNewUser = childrenData.length === 0 && !onboardingCompleted;
+    
+    console.log('🎯 Onboarding check:', { childrenCount: childrenData.length, onboardingCompleted, isNewUser });
+    
+    if (isNewUser) {
+      setShowOnboarding(true);
+    }
+  };
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('onboarding_completed', 'true');
+    setShowOnboarding(false);
+  };
+
+  const handleNavigateToProfile = () => {
+    setShowOnboarding(false);
+    setActiveTab('profile');
+    
+    // Trigger the add parent modal after a short delay
+    setTimeout(() => {
+      const addParentButton = document.querySelector('.add-btn') as HTMLButtonElement;
+      if (addParentButton) {
+        addParentButton.click();
+      }
+    }, 500);
+  };
 
   // Load children on mount
   useEffect(() => {
@@ -50,6 +82,9 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
             : (response.data as any)?.data || [];
           console.log('🔍 Dashboard children loaded:', childrenData.length);
           setChildren(childrenData);
+          
+          // Check if this is a new user who should see onboarding
+          checkForNewUserOnboarding(childrenData);
         }
       } catch (error) {
         console.error('Failed to load children:', error);
@@ -525,6 +560,14 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
           {renderContent()}
         </main>
       </div>
+
+      {/* Onboarding Flow for New Users */}
+      {showOnboarding && (
+        <OnboardingFlow 
+          onComplete={handleOnboardingComplete}
+          onNavigateToProfile={handleNavigateToProfile}
+        />
+      )}
     </div>
   );
 };

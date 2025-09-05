@@ -1181,6 +1181,15 @@ app.post('/api/auth/register', async (req, res) => {
 
         const newUser = result.rows[0];
         
+        // Create primary parent record for the new user
+        // This is required for resolveAccountUserId to work properly
+        await client.query(`
+            INSERT INTO parents (uuid, account_uuid, username, email, phone, role, is_primary)
+            VALUES ($1, $2, $3, $4, $5, 'parent', true)
+        `, [newUser.uuid, newUser.uuid, newUser.username, newUser.email, newUser.phone]);
+        
+        console.log(`✅ Created primary parent record for new user: ${newUser.email}`);
+        
         // ===== SKELETON ACCOUNT MERGING =====
         // Check for skeleton accounts matching this email or phone and merge them
         await mergeSkeletonAccounts(client, newUser, email, phone);
