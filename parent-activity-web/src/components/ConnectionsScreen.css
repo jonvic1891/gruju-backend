@@ -46,12 +46,12 @@
 
 .search-input:focus {
   outline: none;
-  border-color: #007bff;
+  border-color: #8B3FD9;
   box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
 
 .search-btn {
-  background: #007bff;
+  background: #8B3FD9;
   color: white;
   border: none;
   border-radius: 8px;
@@ -120,7 +120,7 @@
 
 .children-count {
   font-size: 12px;
-  color: #007bff;
+  color: #6c757d;
 }
 
 .connect-btn {
@@ -208,7 +208,7 @@
 }
 
 .request-card.sent-request {
-  border-left: 4px solid #007bff;
+  border-left: 4px solid #8B3FD9;
 }
 
 .request-header {
@@ -235,7 +235,7 @@
   padding: 16px;
   background: #f8f9fa;
   border-radius: 8px;
-  border-left: 4px solid #007bff;
+  border-left: 4px solid #8B3FD9;
 }
 
 .request-card.compact .request-message {
@@ -259,7 +259,7 @@
 }
 
 .request-message strong {
-  color: #007bff;
+  color: #343a40;
   font-weight: 600;
 }
 
@@ -410,7 +410,7 @@
 }
 
 .child-option.selected {
-  background: #007bff;
+  background: #8B3FD9;
   color: white;
 }
 
@@ -428,7 +428,7 @@
 
 .message-input:focus {
   outline: none;
-  border-color: #007bff;
+  border-color: #8B3FD9;
   box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
 
@@ -457,7 +457,7 @@
 
 .send-btn {
   flex: 1;
-  background: #007bff;
+  background: #8B3FD9;
   color: white;
   border: none;
   border-radius: 8px;
@@ -520,7 +520,7 @@
   font-weight: 600;
   color: #495057;
   padding-bottom: 8px;
-  border-bottom: 2px solid #007bff;
+  border-bottom: 2px solid #8B3FD9;
 }
 
 .child-connections-list {
@@ -545,7 +545,7 @@
 }
 
 .connected-to strong {
-  color: #007bff;
+  color: #343a40;
 }
 
 .connection-item .remove-connection-btn {

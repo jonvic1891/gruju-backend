@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#000000" />
     <meta
       name="description"
-      content="Parent Activity App - Connect families and manage children's activities"
+      content="Gruju - Connect families and manage children's activities"
     />
     <!-- Cache busting meta tags -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
@@ -16,7 +16,7 @@
     <meta name="app-version" content="APP_VERSION_PLACEHOLDER" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <title>Parent Activity App</title>
+    <title>Gruju</title>
     <script>
       // Version-based cache clearing - only clear when version changes
       try {
@@ -24,12 +24,20 @@
         const lastVersion = localStorage.getItem('lastAppVersion');
         
         if (lastVersion !== appVersion) {
-          console.log(`🔥 App version changed from ${lastVersion || 'unknown'} to ${appVersion}, clearing storage`);
+          // Preserve important user state during cache clearing
+          const userToken = localStorage.getItem('token');
+          const userData = localStorage.getItem('userData');
+          const forceOnboarding = localStorage.getItem('force_onboarding');
+          
           localStorage.clear();
           sessionStorage.clear();
+          
+          // Restore preserved state
+          if (userToken) localStorage.setItem('token', userToken);
+          if (userData) localStorage.setItem('userData', userData);
+          if (forceOnboarding === 'true') localStorage.setItem('force_onboarding', 'true');
+          
           localStorage.setItem('lastAppVersion', appVersion);
-        } else {
-          console.log(`✅ App version ${appVersion} unchanged, keeping storage`);
         }
       } catch (e) {
         console.log('Version check error:', e);
@@ -40,14 +48,13 @@
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
             .then((registration) => {
-              console.log('SW registered: ', registration);
               // Check for updates periodically
               setInterval(() => {
                 registration.update();
               }, 60000); // Check every minute instead of 30 seconds
             })
             .catch((registrationError) => {
-              console.log('SW registration failed: ', registrationError);
+              // Service worker registration failed
             });
         });
         
@@ -57,9 +64,8 @@
             try {
               localStorage.clear();
               sessionStorage.clear();
-              console.log('Cleared localStorage and sessionStorage');
             } catch (e) {
-              console.log('Error clearing storage:', e);
+              // Error clearing storage
             }
           }
         });

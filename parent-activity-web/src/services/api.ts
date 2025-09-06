@@ -181,7 +181,11 @@ class ApiService {
   }
 
   // Profile
-  async updateProfile(profileData: { username: string; email: string; phone: string }): Promise<ApiResponse<any>> {
+  async getProfile(): Promise<ApiResponse<any>> {
+    return await this.request('get', '/api/users/profile');
+  }
+
+  async updateProfile(profileData: { username: string; email: string; phone: string; onboarding_completed?: boolean }): Promise<ApiResponse<any>> {
     const response = await this.request('put', '/api/users/profile', profileData);
     if (response.success && response.data) {
       // Update stored user data
@@ -662,6 +666,22 @@ class ApiService {
 
   async getBellNotifications(): Promise<ApiResponse<any[]>> {
     return this.request('get', '/api/notifications/bell');
+  }
+
+  // Clubs API
+  async getClubs(activityType?: string, search?: string): Promise<ApiResponse<any[]>> {
+    const params = new URLSearchParams();
+    if (activityType) {
+      params.append('activity_type', activityType);
+    }
+    if (search?.trim()) {
+      params.append('search', search.trim());
+    }
+    
+    const queryString = params.toString();
+    const url = `/api/clubs${queryString ? `?${queryString}` : ''}`;
+    
+    return this.request('get', url);
   }
 }
 

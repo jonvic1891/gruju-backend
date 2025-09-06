@@ -15,8 +15,8 @@
 }
 
 .time-selectors:focus-within {
-  border-color: #007bff;
-  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  border-color: #8B3FD9;
+  box-shadow: 0 0 0 3px rgba(139, 63, 217, 0.1);
 }
 
 .time-select {
@@ -146,7 +146,7 @@
 }
 
 .hour-option.selected, .minute-option.selected {
-  background: #007bff;
+  background: #8B3FD9;
   color: white;
 }
 
@@ -262,7 +262,7 @@
   }
   
   .hour-option.selected, .minute-option.selected {
-    background: #007bff;
+    background: #8B3FD9;
     color: white;
   }
   

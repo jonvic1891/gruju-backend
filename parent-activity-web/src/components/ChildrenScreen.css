@@ -69,7 +69,7 @@
 }
 
 .add-first-btn {
-  background: #007bff;
+  background: #8B3FD9;
   color: white;
   border: none;
   border-radius: 12px;
@@ -138,7 +138,7 @@
 }
 
 .child-activity-count {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #8B3FD9, #764ba2);
   color: white;
   font-size: 14px;
   font-weight: 600;
@@ -243,7 +243,7 @@
 
 .modal-input:focus {
   outline: none;
-  border-color: #007bff;
+  border-color: #8B3FD9;
   box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
 
@@ -271,7 +271,7 @@
 
 .confirm-btn {
   flex: 1;
-  background: #007bff;
+  background: #8B3FD9;
   color: white;
   border: none;
   border-radius: 8px;
@@ -424,7 +424,7 @@
 }
 
 .invitation-calendar-btn {
-  background: #007bff;
+  background: #8B3FD9;
   color: white;
 }
 

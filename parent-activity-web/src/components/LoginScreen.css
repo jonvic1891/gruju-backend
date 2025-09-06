@@ -11,26 +11,46 @@
   background: white;
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  padding: 40px;
+  padding: 0 40px 40px 40px;
   width: 100%;
   max-width: 500px;
 }
 
-.header {
+.logo-container {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 24px;
+  padding-top: 20px;
 }
 
-.header h1 {
-  color: #007bff;
-  font-size: 28px;
-  font-weight: bold;
-  margin-bottom: 8px;
+.app-logo {
+  height: 60px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
 }
 
-.header p {
-  color: #6c757d;
-  font-size: 16px;
+.app-logo-large {
+  height: 120px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.app-logo-extra-large {
+  height: 240px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+@media (max-width: 768px) {
+  .app-logo-large {
+    height: 100px;
+  }
+  
+  .app-logo-extra-large {
+    height: 180px;
+  }
 }
 
 .form {
@@ -57,13 +77,13 @@
 
 .input:focus {
   outline: none;
-  border-color: #007bff;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  border-color: #8B3FD9;
+  box-shadow: 0 0 0 2px rgba(139, 63, 217, 0.25);
 }
 
 .button {
   width: 100%;
-  background: #007bff;
+  background: #8B3FD9;
   color: white;
   border: none;
   border-radius: 8px;
@@ -76,7 +96,7 @@
 }
 
 .button:hover {
-  background: #0056b3;
+  background: #7A35C4;
 }
 
 .button-disabled {
@@ -91,7 +111,7 @@
 .link-button {
   background: none;
   border: none;
-  color: #007bff;
+  color: #8B3FD9;
   font-size: 14px;
   cursor: pointer;
   text-decoration: underline;
@@ -101,7 +121,7 @@
 }
 
 .link-button:hover {
-  color: #0056b3;
+  color: #7A35C4;
 }
 
 .demo-container {
@@ -118,7 +138,7 @@
   padding: 16px;
   font-size: 16px;
   font-weight: 600;
-  color: #007bff;
+  color: #8B3FD9;
   cursor: pointer;
   border-radius: 12px;
 }
@@ -204,12 +224,12 @@
 }
 
 .demo-note {
-  background: #e3f2fd;
+  background: #F3E8FF;
   padding: 12px;
   border-radius: 8px;
   margin-top: 8px;
   font-size: 14px;
-  color: #1976d2;
+  color: #8B3FD9;
   text-align: center;
   font-style: italic;
 }
@@ -253,7 +273,7 @@
 }
 
 .password-toggle:hover {
-  color: #007bff;
+  color: #8B3FD9;
 }
 
 .login-type-toggle {
@@ -276,13 +296,13 @@
 }
 
 .toggle-button:hover {
-  border-color: #007bff;
-  color: #007bff;
+  border-color: #8B3FD9;
+  color: #8B3FD9;
 }
 
 .toggle-button.active {
-  border-color: #007bff;
-  background: #007bff;
+  border-color: #8B3FD9;
+  background: #8B3FD9;
   color: white;
 }
 

@@ -116,7 +116,7 @@
   position: absolute;
   top: -2px;
   left: 2px;
-  color: #667eea;
+  color: #8B3FD9;
   font-size: 12px;
   font-weight: bold;
 }
@@ -139,8 +139,8 @@
 }
 
 .nav-btn {
-  background: #007bff;
-  color: black;
+  background: #6c757d;
+  color: white;
   border: none;
   border-radius: 50%;
   width: 44px;
@@ -155,7 +155,7 @@
 }
 
 .nav-btn:hover {
-  background: #0056b3;
+  background: #495057;
 }
 
 .month-year {
@@ -214,13 +214,13 @@
 }
 
 .day.today {
-  background: #e3f2fd;
-  color: #007bff;
+  background: #F3E8FF;
+  color: #8B3FD9;
   font-weight: bold;
 }
 
 .day.selected {
-  background: #007bff;
+  background: #8B3FD9;
   color: black;
 }
 
@@ -300,7 +300,7 @@
   background: #f8f9fa;
   border-radius: 8px;
   padding: 16px;
-  border-left: 4px solid #007bff;
+  border-left: 4px solid #8B3FD9;
 }
 
 .activity-header {
@@ -319,7 +319,7 @@
 
 .activity-time {
   font-size: 14px;
-  color: #007bff;
+  color: #8B3FD9;
   font-weight: 500;
 }
 
@@ -348,7 +348,7 @@
 }
 
 .activity-url a {
-  color: #007bff;
+  color: #8B3FD9;
   text-decoration: none;
   font-weight: 500;
 }
@@ -370,7 +370,7 @@
 }
 
 .add-activity-btn {
-  background: #007bff;
+  background: #8B3FD9;
   color: black;
   border: none;
   border-radius: 8px;
@@ -944,8 +944,8 @@
 
 .multi-select:focus {
   outline: none;
-  border-color: #007bff;
-  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  border-color: #8B3FD9;
+  box-shadow: 0 0 0 3px rgba(139, 63, 217, 0.1);
 }
 
 .multi-select option {
@@ -955,7 +955,7 @@
 }
 
 .multi-select option:checked {
-  background: #007bff;
+  background: #8B3FD9;
   color: white;
 }
 
@@ -979,8 +979,8 @@
 
 .single-select:focus {
   outline: none;
-  border-color: #007bff;
-  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  border-color: #8B3FD9;
+  box-shadow: 0 0 0 3px rgba(139, 63, 217, 0.1);
 }
 
 .single-select option {

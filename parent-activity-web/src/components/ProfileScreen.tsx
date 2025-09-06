@@ -434,7 +434,7 @@ const ProfileScreen = () => {
       </div>
 
       <div className="app-info">
-        <p>Parent Activity App v1.0.0</p>
+        <p>Gruju v1.0.0</p>
       </div>
 
       {/* Change Password Modal */}

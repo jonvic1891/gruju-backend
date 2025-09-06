@@ -154,9 +154,12 @@ const LoginScreen = () => {
   return (
     <div className="login-container">
       <div className="login-card">
-        <div className="header">
-          <h1>Parent Activity App</h1>
-          <p>Connect and share activities</p>
+        <div className="logo-container">
+          <img 
+            src="/logo-gruju.png" 
+            alt="Gruju" 
+            className="app-logo-extra-large"
+          />
         </div>
 
         <form onSubmit={handleSubmit} className="form" key={isRegisterMode ? 'register' : 'login'}>

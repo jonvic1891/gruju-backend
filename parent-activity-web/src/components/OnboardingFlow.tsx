@@ -31,7 +31,7 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onNavigateT
   const renderStep1 = () => (
     <div className="onboarding-step">
       <div className="step-header">
-        <h2>👋 Welcome to Parent Activity App!</h2>
+        <h2>👋 Welcome to Gruju!</h2>
         <p>Let's get your family set up in just a few steps.</p>
       </div>
 
@@ -40,17 +40,16 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onNavigateT
           <h3>🏠 Family Account Setup</h3>
           <p>
             {userInfo?.family_name || 'Your family'} account has been created successfully! 
-            Many families use this app with both parents to better coordinate activities.
+            You can choose to add another parent if you'd like to share account access.
           </p>
           
           <div className="setup-options">
-            <div className="option-card recommended">
+            <div className="option-card">
               <div className="option-header">
                 <span className="option-icon">👫</span>
-                <span className="option-title">Add Second Parent</span>
-                <span className="recommended-badge">Recommended</span>
+                <span className="option-title">Add Another Parent</span>
               </div>
-              <p>Invite your partner to join your family account. You'll both be able to:</p>
+              <p>If you have a partner, you can invite them to join your family account. You'll both be able to:</p>
               <ul>
                 <li>Create and manage activities for your children</li>
                 <li>Receive notifications about activity responses</li>
@@ -61,21 +60,21 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onNavigateT
                 className="option-button primary"
                 onClick={handleAddParent}
               >
-                Add Second Parent
+                Add Another Parent
               </button>
             </div>
 
             <div className="option-card">
               <div className="option-header">
-                <span className="option-icon">👤</span>
-                <span className="option-title">Continue Solo</span>
+                <span className="option-icon">🏃</span>
+                <span className="option-title">Continue to Set Up Children</span>
               </div>
-              <p>Set up your family account with just yourself for now. You can always add a second parent later from your profile settings.</p>
+              <p>Continue with setting up your children and start organizing activities.</p>
               <button 
                 className="option-button secondary"
                 onClick={handleContinueSolo}
               >
-                Continue Solo
+                Continue to Set Up Children
               </button>
             </div>
           </div>
@@ -89,12 +88,19 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onNavigateT
     <div className="onboarding-overlay">
       <div className="onboarding-container">
         <div className="progress-bar">
-          <div className="progress-steps">
-            <div className="progress-step active">
-              <div className="step-number">1</div>
-              <div className="step-label">Welcome</div>
-            </div>
+          <div className="progress-header">
+          <div className="progress-logo">
+            <img 
+              src="/gruju-logo-white.png" 
+              alt="Gruju" 
+              className="progress-brand-logo"
+              onError={(e) => {
+                console.error('Progress logo failed to load:', e);
+                e.currentTarget.style.display = 'none';
+              }}
+            />
           </div>
+        </div>
         </div>
 
         <div className="onboarding-content">

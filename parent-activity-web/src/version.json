@@ -1,4 +1,4 @@
 {
-  "version": "1.0.9",
-  "description": "FORCE UPDATE: New invite activity form with checkboxes and professional styling"
+  "version": "1.2.0",
+  "description": "FORCE UPDATE: ClubsScreen now uses ApiService instead of direct fetch"
 }

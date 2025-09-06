@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import ApiService from '../services/api';
 import ChildrenScreen from './ChildrenScreen';
 import CalendarScreen from './CalendarScreen';
+import ClubsScreen from './ClubsScreen';
 import ConnectionsScreen from './ConnectionsScreen';
 import ProfileScreen from './ProfileScreen';
 import AdminScreen from './AdminScreen';
@@ -11,7 +12,7 @@ import NotificationBell from './NotificationBell';
 import OnboardingFlow from './OnboardingFlow';
 import './Dashboard.css';
 
-type Tab = 'children' | 'calendar' | 'connections' | 'profile' | 'admin';
+type Tab = 'children' | 'calendar' | 'clubs' | 'connections' | 'profile' | 'admin';
 
 interface DashboardProps {
   initialTab?: Tab;
@@ -40,21 +41,70 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const apiService = ApiService.getInstance();
 
-  // Check if user should see onboarding (new user with no children and no "onboarding_completed" flag)
-  const checkForNewUserOnboarding = (childrenData: any[]) => {
-    const onboardingCompleted = localStorage.getItem('onboarding_completed') === 'true';
-    const isNewUser = childrenData.length === 0 && !onboardingCompleted;
-    
-    console.log('🎯 Onboarding check:', { childrenCount: childrenData.length, onboardingCompleted, isNewUser });
-    
-    if (isNewUser) {
-      setShowOnboarding(true);
+  // Check if user should see onboarding (new user with no children and no server-side onboarding_completed flag)
+  const checkForNewUserOnboarding = async (childrenData: any[]) => {
+    try {
+      // Get user profile to check onboarding status
+      const profileResponse = await apiService.getProfile();
+      const onboardingCompleted = profileResponse.data?.onboarding_completed || false;
+      
+      const userEmail = user?.email;
+      const isNewUser = childrenData.length === 0 && !onboardingCompleted;
+      const forceOnboarding = localStorage.getItem('force_onboarding') === 'true';
+      const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+      
+      console.log('🎯 Onboarding check (server-side):', {
+        userEmail,
+        childrenCount: childrenData.length, 
+        onboardingCompleted, 
+        isNewUser,
+        forceOnboarding,
+        willTrigger: isNewUser || forceOnboarding
+      });
+      
+      if (isNewUser || forceOnboarding) {
+        console.log('🎯 TRIGGERING onboarding flow:', { isNewUser, forceOnboarding });
+        console.log('🎯 Setting showOnboarding to TRUE');
+        setShowOnboarding(true);
+        
+        // Clear force flag after using it
+        if (forceOnboarding) {
+          localStorage.removeItem('force_onboarding');
+        }
+      } else {
+        console.log('🎯 NOT showing onboarding:', { 
+          childrenCount: childrenData.length, 
+          onboardingCompleted, 
+          forceOnboarding 
+        });
+      }
+    } catch (error) {
+      console.error('Failed to check onboarding status:', error);
+      // Fallback to not showing onboarding on error
     }
   };
 
-  const handleOnboardingComplete = () => {
-    localStorage.setItem('onboarding_completed', 'true');
-    setShowOnboarding(false);
+  const handleOnboardingComplete = async () => {
+    try {
+      // Get current profile data first
+      const currentProfile = await apiService.getProfile();
+      const { username, email, phone } = currentProfile.data;
+      
+      // Update profile with onboarding_completed = true
+      await apiService.updateProfile({
+        username,
+        email,
+        phone,
+        onboarding_completed: true
+      });
+      
+      console.log('✅ Onboarding marked as completed on server');
+      setShowOnboarding(false);
+    } catch (error) {
+      console.error('Failed to mark onboarding as completed:', error);
+      // Still hide the modal even if server update fails
+      setShowOnboarding(false);
+    }
   };
 
   const handleNavigateToProfile = () => {
@@ -84,7 +134,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
           setChildren(childrenData);
           
           // Check if this is a new user who should see onboarding
-          checkForNewUserOnboarding(childrenData);
+          await checkForNewUserOnboarding(childrenData);
         }
       } catch (error) {
         console.error('Failed to load children:', error);
@@ -168,6 +218,8 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
       }
     } else if (path === '/calendar') {
       setActiveTab('calendar');
+    } else if (path === '/clubs') {
+      setActiveTab('clubs');
     } else if (path === '/connections') {
       setActiveTab('connections');
     } else if (path === '/profile') {
@@ -384,6 +436,9 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
             });
           }}
         />;
+      case 'clubs':
+        console.log('🏢 Rendering ClubsScreen component');
+        return <ClubsScreen />;
       case 'connections':
         return <ConnectionsScreen 
           cameFromActivity={cameFromActivity}
@@ -441,7 +496,11 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
               <span className="burger-line"></span>
               <span className="burger-line"></span>
             </button>
-            <h1>Parent Activity App</h1>
+            <img 
+              src="/gruju-logo-white.png" 
+              alt="Gruju" 
+              className="dashboard-logo"
+            />
           </div>
           <div className="header-user">
             <NotificationBell />
@@ -473,6 +532,16 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
             }}
           >
             <span className="nav-label">Calendar</span>
+          </button>
+          
+          <button
+            className={`nav-item ${activeTab === 'clubs' ? 'active' : ''}`}
+            onClick={() => {
+              setCalendarInitialDate(undefined);
+              navigate('/clubs');
+            }}
+          >
+            <span className="nav-label">Browse Clubs</span>
           </button>
           
           <button
@@ -528,6 +597,13 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
               </button>
               
               <button
+                className={`nav-item ${activeTab === 'clubs' ? 'active' : ''}`}
+                onClick={() => handleMobileNavClick('clubs')}
+              >
+                <span className="nav-label">Browse Clubs</span>
+              </button>
+              
+              <button
                 className={`nav-item ${activeTab === 'connections' ? 'active' : ''}`}
                 onClick={() => handleMobileNavClick('connections')}
               >
@@ -560,6 +636,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
           {renderContent()}
         </main>
       </div>
+
 
       {/* Onboarding Flow for New Users */}
       {showOnboarding && (

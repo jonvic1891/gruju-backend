@@ -12,6 +12,15 @@ interface CalendarScreenProps {
   onNavigateToActivity?: (child: Child, activity: Activity) => void;
 }
 
+// Helper function to ensure URLs have proper protocol
+const ensureProtocol = (url: string): string => {
+  if (!url) return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  return `https://${url}`;
+};
+
 const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialViewMode = 'month', onNavigateToActivity }) => {
   console.log('🎯 CalendarScreen component rendering with initialDate:', initialDate);
   
@@ -1097,7 +1106,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
                               {/* Website link if present */}
                               {activity.website_url && (
                                 <div className="activity-url" style={{ marginTop: '4px' }}>
-                                  <a href={activity.website_url} target="_blank" rel="noopener noreferrer" 
+                                  <a href={ensureProtocol(activity.website_url)} target="_blank" rel="noopener noreferrer" 
                                      style={{ fontSize: '11px', color: childColor }}>
                                     🌐 Visit Website
                                   </a>
@@ -1198,7 +1207,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
                 <div className="detail-item">
                   <strong>Website:</strong>
                   <p>
-                    <a href={selectedActivity.website_url} target="_blank" rel="noopener noreferrer">
+                    <a href={ensureProtocol(selectedActivity.website_url)} target="_blank" rel="noopener noreferrer">
                       {selectedActivity.website_url}
                     </a>
                   </p>

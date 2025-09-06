@@ -42,7 +42,9 @@
       "Bash(git remote add:*)",
       "Bash(git remote rename:*)",
       "Bash(firebase hosting:sites:create:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Read(//home/jonathan/**)",
+      "Read(//home/**)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

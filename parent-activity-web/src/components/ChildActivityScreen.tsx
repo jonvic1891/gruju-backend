@@ -7,6 +7,30 @@ import TimePickerDropdown from './TimePickerDropdown';
 import CalendarDatePicker from './CalendarDatePicker';
 import './ChildActivityScreen.css';
 
+// Helper function to ensure URLs have proper protocol
+const ensureProtocol = (url: string): string => {
+  if (!url) return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  return `https://${url}`;
+};
+
+// Activity types for dropdown
+const ACTIVITY_TYPES = [
+  'Drama',
+  'Multi-Sport', 
+  'Football',
+  'Rugby',
+  'Athletics',
+  'Netball',
+  'Tech',
+  'Science',
+  'Craft',
+  'Cooking',
+  'Other'
+];
+
 interface ChildActivityScreenProps {
   child: Child;
   onBack: () => void;
@@ -71,6 +95,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     website_url: '',
     cost: '',
     max_participants: '',
+    activity_type: '',
     auto_notify_new_connections: false
   });
   const [addingActivity, setAddingActivity] = useState(false);
@@ -254,6 +279,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       website_url: '',
       cost: '',
       max_participants: '',
+      activity_type: '',
       auto_notify_new_connections: false
     });
     setSelectedDates([]);
@@ -435,6 +461,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           website_url: (activity as any).website_url || '',
           cost: (activity as any).cost ? String((activity as any).cost) : '',
           max_participants: (activity as any).max_participants ? String((activity as any).max_participants) : '',
+          activity_type: (activity as any).activity_type || '',
           auto_notify_new_connections: (activity as any).auto_notify_new_connections || false
         });
         
@@ -975,6 +1002,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         website_url: '',
         cost: '',
         max_participants: '',
+        activity_type: '',
         auto_notify_new_connections: false
       });
       setSelectedDates([]);
@@ -1212,6 +1240,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         website_url: '',
         cost: '',
         max_participants: '',
+        activity_type: '',
         auto_notify_new_connections: false
       });
       setSelectedDates([]);
@@ -1241,6 +1270,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       website_url: template.website_url || '',
       cost: template.cost ? template.cost.toString() : '',
       max_participants: template.max_participants ? template.max_participants.toString() : '',
+      activity_type: template.activity_type || '',
       auto_notify_new_connections: false
     });
     
@@ -1366,6 +1396,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       website_url: activity.website_url || '',
       cost: activity.cost ? activity.cost.toString() : '',
       max_participants: activity.max_participants ? activity.max_participants.toString() : '',
+      activity_type: (activity as any).activity_type || '',
       auto_notify_new_connections: (activity as any).auto_notify_new_connections || false
     });
 
@@ -1451,6 +1482,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       website_url: activity.website_url || '',
       cost: activity.cost ? activity.cost.toString() : '',
       max_participants: activity.max_participants ? activity.max_participants.toString() : '',
+      activity_type: (activity as any).activity_type || '',
       auto_notify_new_connections: (activity as any).auto_notify_new_connections || false
     });
     setAutoNotifyNewConnections((activity as any).auto_notify_new_connections || false);
@@ -1933,6 +1965,11 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       return;
     }
 
+    if (!newActivity.activity_type.trim()) {
+      alert('Please select an activity type');
+      return;
+    }
+
     let datesToCreate: string[] = [];
     
     if (isRecurringActivity) {
@@ -2291,7 +2328,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           description: newActivity.description || null,
           location: newActivity.location || null,
           website_url: newActivity.website_url || null,
-          activity_type: null, // Could be enhanced to detect or allow user to specify
+          activity_type: newActivity.activity_type || null,
           cost: newActivity.cost ? parseFloat(newActivity.cost) : null,
           max_participants: newActivity.max_participants ? parseInt(newActivity.max_participants) : null,
           typical_start_time: newActivity.start_time || null,
@@ -2313,6 +2350,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         website_url: '',
         cost: '',
         max_participants: '',
+        activity_type: '',
         auto_notify_new_connections: false
       });
       setSelectedDates([]);
@@ -2890,7 +2928,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 ) : (
                   <span className="readonly-value">
                     {selectedActivity.website_url ? (
-                      <a href={selectedActivity.website_url} target="_blank" rel="noopener noreferrer">
+                      <a href={ensureProtocol(selectedActivity.website_url)} target="_blank" rel="noopener noreferrer">
                         🌐 {selectedActivity.website_url}
                       </a>
                     ) : (
@@ -3848,6 +3886,17 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
               className="modal-input"
             />
+            <select
+              value={newActivity.activity_type}
+              onChange={(e) => setNewActivity({...newActivity, activity_type: e.target.value})}
+              className="modal-input"
+              style={{ marginBottom: '16px' }}
+            >
+              <option value="">Select Activity Type *</option>
+              {ACTIVITY_TYPES.map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
             <div className="number-row">
               <input
                 type="number"
@@ -4443,6 +4492,17 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
               className="modal-input"
             />
+            <select
+              value={newActivity.activity_type}
+              onChange={(e) => setNewActivity({...newActivity, activity_type: e.target.value})}
+              className="modal-input"
+              style={{ marginBottom: '16px' }}
+            >
+              <option value="">Select Activity Type *</option>
+              {ACTIVITY_TYPES.map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
             <div className="number-row">
               <input
                 type="number"
@@ -4479,6 +4539,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   website_url: '',
                   cost: '',
                   max_participants: '',
+                  activity_type: '',
                   auto_notify_new_connections: false
                 });
                 setAutoNotifyNewConnections(false);

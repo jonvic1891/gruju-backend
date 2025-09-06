@@ -10,6 +10,82 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Function to fetch website metadata
+async function fetchWebsiteMetadata(url) {
+    try {
+        console.log('🔍 Fetching metadata for:', url);
+        
+        // Ensure URL has protocol
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            url = 'https://' + url;
+        }
+        
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; Gruju/1.0; +https://gruju.com)'
+            },
+            timeout: 10000 // 10 second timeout
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const html = await response.text();
+        
+        // Extract metadata using regex (simple parsing)
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        const descriptionMatch = html.match(/<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"']+)["\'][^>]*>/i) ||
+                                 html.match(/<meta[^>]*content=["\']([^"']+)["\'][^>]*name=["\']description["\'][^>]*>/i);
+        
+        // Look for various favicon formats
+        const faviconMatches = [
+            html.match(/<link[^>]*rel=["\']icon["\'][^>]*href=["\']([^"']+)["\'][^>]*>/i),
+            html.match(/<link[^>]*rel=["\']shortcut icon["\'][^>]*href=["\']([^"']+)["\'][^>]*>/i),
+            html.match(/<link[^>]*rel=["\']apple-touch-icon["\'][^>]*href=["\']([^"']+)["\'][^>]*>/i)
+        ];
+        
+        let favicon = null;
+        for (const match of faviconMatches) {
+            if (match && match[1]) {
+                favicon = match[1];
+                // Convert relative URLs to absolute
+                if (favicon.startsWith('/')) {
+                    const urlObj = new URL(url);
+                    favicon = `${urlObj.protocol}//${urlObj.host}${favicon}`;
+                } else if (!favicon.startsWith('http')) {
+                    const urlObj = new URL(url);
+                    favicon = `${urlObj.protocol}//${urlObj.host}/${favicon}`;
+                }
+                break;
+            }
+        }
+        
+        // Fallback to default favicon.ico
+        if (!favicon) {
+            const urlObj = new URL(url);
+            favicon = `${urlObj.protocol}//${urlObj.host}/favicon.ico`;
+        }
+        
+        const metadata = {
+            title: titleMatch ? titleMatch[1].trim() : null,
+            description: descriptionMatch ? descriptionMatch[1].trim() : null,
+            favicon: favicon
+        };
+        
+        console.log('✅ Extracted metadata:', metadata);
+        return metadata;
+        
+    } catch (error) {
+        console.error('❌ Error fetching metadata for', url, ':', error.message);
+        return {
+            title: null,
+            description: null,
+            favicon: null
+        };
+    }
+}
+
 // Middleware
 const allowedOrigins = [
     'https://gruju-parent-activity-app.web.app',
@@ -539,6 +615,20 @@ async function runMigrations() {
             console.log('✅ Migration 20: Created clubs table and indexes');
         } catch (error) {
             console.log('ℹ️ Migration 20: Could not create clubs table:', error.message);
+        }
+        
+        // Migration 21: Add website metadata fields to clubs table
+        try {
+            await client.query(`
+                ALTER TABLE clubs ADD COLUMN IF NOT EXISTS website_title VARCHAR(500),
+                ADD COLUMN IF NOT EXISTS website_description TEXT,
+                ADD COLUMN IF NOT EXISTS website_favicon VARCHAR(1000),
+                ADD COLUMN IF NOT EXISTS metadata_fetched_at TIMESTAMP
+            `);
+            
+            console.log('✅ Migration 21: Added website metadata columns to clubs table');
+        } catch (error) {
+            console.log('ℹ️ Migration 21: Could not add website metadata columns:', error.message);
         }
         
     } catch (error) {
@@ -2350,19 +2440,44 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                 );
                 
                 if (existingClub.rows.length === 0) {
-                    // Create new club record
+                    // Fetch website metadata
+                    console.log('🌐 Fetching website metadata for new club...');
+                    const metadata = await fetchWebsiteMetadata(clubData.website_url);
+                    
+                    // Create new club record with metadata
                     await client.query(
-                        'INSERT INTO clubs (name, description, website_url, activity_type, location, cost, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())',
-                        [clubData.name, clubData.description, clubData.website_url, clubData.activity_type, clubData.location, clubData.cost]
+                        'INSERT INTO clubs (name, description, website_url, activity_type, location, cost, website_title, website_description, website_favicon, metadata_fetched_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW(), NOW())',
+                        [clubData.name, clubData.description, clubData.website_url, clubData.activity_type, clubData.location, clubData.cost, metadata.title, metadata.description, metadata.favicon]
                     );
-                    console.log('✅ Created club record:', clubData.name, 'for', clubData.activity_type);
+                    console.log('✅ Created club record with metadata:', clubData.name, 'for', clubData.activity_type);
                 } else {
-                    // Update existing club record with latest information
-                    await client.query(
-                        'UPDATE clubs SET name = $1, description = $2, location = $3, cost = $4, updated_at = NOW() WHERE id = $5',
-                        [clubData.name, clubData.description, clubData.location, clubData.cost, existingClub.rows[0].id]
+                    // Check if metadata needs refreshing (older than 24 hours or missing)
+                    const existingClubDetails = await client.query(
+                        'SELECT metadata_fetched_at FROM clubs WHERE id = $1',
+                        [existingClub.rows[0].id]
                     );
-                    console.log('✅ Updated club record:', clubData.name, 'for', clubData.activity_type);
+                    
+                    const shouldRefreshMetadata = !existingClubDetails.rows[0].metadata_fetched_at ||
+                        (new Date() - new Date(existingClubDetails.rows[0].metadata_fetched_at)) > 24 * 60 * 60 * 1000; // 24 hours
+                    
+                    if (shouldRefreshMetadata) {
+                        console.log('🌐 Refreshing website metadata for existing club...');
+                        const metadata = await fetchWebsiteMetadata(clubData.website_url);
+                        
+                        // Update existing club record with latest information and fresh metadata
+                        await client.query(
+                            'UPDATE clubs SET name = $1, description = $2, location = $3, cost = $4, website_title = $5, website_description = $6, website_favicon = $7, metadata_fetched_at = NOW(), updated_at = NOW() WHERE id = $8',
+                            [clubData.name, clubData.description, clubData.location, clubData.cost, metadata.title, metadata.description, metadata.favicon, existingClub.rows[0].id]
+                        );
+                        console.log('✅ Updated club record with fresh metadata:', clubData.name, 'for', clubData.activity_type);
+                    } else {
+                        // Update existing club record with latest information (keep existing metadata)
+                        await client.query(
+                            'UPDATE clubs SET name = $1, description = $2, location = $3, cost = $4, updated_at = NOW() WHERE id = $5',
+                            [clubData.name, clubData.description, clubData.location, clubData.cost, existingClub.rows[0].id]
+                        );
+                        console.log('✅ Updated club record (kept existing metadata):', clubData.name, 'for', clubData.activity_type);
+                    }
                 }
             } catch (clubError) {
                 console.error('⚠️ Error creating/updating club record:', clubError);
@@ -6517,7 +6632,7 @@ app.get('/api/clubs', authenticateToken, async (req, res) => {
     try {
         const { activity_type, search } = req.query;
         
-        let query = 'SELECT id, name, description, website_url, activity_type, location, cost, created_at FROM clubs';
+        let query = 'SELECT id, name, description, website_url, activity_type, location, cost, website_title, website_description, website_favicon, metadata_fetched_at, created_at FROM clubs';
         let params = [];
         let conditions = [];
         

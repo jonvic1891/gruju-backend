@@ -44,7 +44,7 @@ const AppContent = () => {
     return (
       <div className="app-loading">
         <div className="loading-spinner"></div>
-        <p>Loading Parent Activity App...</p>
+        <p>Loading...</p>
       </div>
     );
   }
@@ -58,6 +58,7 @@ const AppContent = () => {
           <Route path="/children/:childUuid/activities" element={<Dashboard initialTab="children" />} />
           <Route path="/children/:childUuid/activities/:activityUuid" element={<Dashboard initialTab="children" />} />
           <Route path="/calendar" element={<Dashboard initialTab="calendar" />} />
+          <Route path="/clubs" element={<Dashboard initialTab="clubs" />} />
           <Route path="/connections" element={<Dashboard initialTab="connections" />} />
           <Route path="/profile" element={<Dashboard initialTab="profile" />} />
           <Route path="/admin" element={<Dashboard initialTab="admin" />} />
@@ -77,13 +78,7 @@ const AppContent = () => {
   }
 
   console.log('User not authenticated, showing login screen');
-  return (
-    <div style={{ padding: '20px', textAlign: 'center' }}>
-      <h1>🚀 Parent Activity App</h1>
-      <p>React app is running! Please log in to continue.</p>
-      <LoginScreen />
-    </div>
-  );
+  return <LoginScreen />;
 };
 
 function App() {

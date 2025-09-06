@@ -99,7 +99,7 @@
 }
 
 .card-button {
-  background: #007bff;
+  background: #8B3FD9;
   color: white;
   border: none;
   border-radius: 8px;
@@ -145,7 +145,7 @@
 .stat-number {
   font-size: 32px;
   font-weight: bold;
-  color: #007bff;
+  color: #8B3FD9;
   margin-bottom: 4px;
 }
 

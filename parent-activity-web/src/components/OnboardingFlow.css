@@ -25,17 +25,27 @@
 }
 
 .progress-bar {
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  padding: 24px;
+  background: linear-gradient(135deg, #8B3FD9, #7A35C4);
+  padding: 48px 24px;
   position: relative;
   border-radius: 16px 16px 0 0;
 }
 
-.progress-steps {
+.progress-header {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: center;
   position: relative;
   z-index: 2;
+}
+
+.progress-logo {
+  flex-shrink: 0;
+}
+
+.progress-brand-logo {
+  height: 50px;
+  width: auto;
 }
 
 .progress-step {
@@ -61,7 +71,7 @@
 
 .progress-step.active .step-number {
   background: white;
-  color: #667eea;
+  color: #8B3FD9;
 }
 
 .progress-step.completed .step-number {
@@ -102,6 +112,7 @@
 .step-header {
   margin-bottom: 32px;
 }
+
 
 .step-header h2 {
   font-size: 28px;
@@ -161,12 +172,12 @@
 }
 
 .option-card:hover {
-  border-color: #667eea;
+  border-color: #8B3FD9;
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
 }
 
 .option-card.recommended {
-  border-color: #667eea;
+  border-color: #8B3FD9;
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
 }
 
@@ -189,7 +200,7 @@
 }
 
 .recommended-badge {
-  background: #667eea;
+  background: #8B3FD9;
   color: white;
   padding: 4px 8px;
   border-radius: 12px;
@@ -228,12 +239,12 @@
 }
 
 .option-button.primary {
-  background: #667eea;
+  background: #8B3FD9;
   color: white;
 }
 
 .option-button.primary:hover {
-  background: #5a6fd8;
+  background: #7A35C4;
 }
 
 .option-button.secondary {
@@ -274,7 +285,7 @@
 
 .onboarding-input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: #8B3FD9;
 }
 
 .invitation-preview {
@@ -399,7 +410,7 @@
 }
 
 .primary-button {
-  background: #667eea;
+  background: #8B3FD9;
   color: white;
   border: none;
   padding: 12px 24px;
@@ -410,7 +421,7 @@
 }
 
 .primary-button:hover {
-  background: #5a6fd8;
+  background: #7A35C4;
 }
 
 .primary-button:disabled {
@@ -453,5 +464,13 @@
   .primary-actions {
     width: 100%;
     justify-content: space-between;
+  }
+  
+  .progress-bar {
+    padding: 40px 20px;
+  }
+  
+  .progress-brand-logo {
+    height: 42px;
   }
 }
