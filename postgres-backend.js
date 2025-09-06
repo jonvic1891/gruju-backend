@@ -6677,4 +6677,52 @@ app.get('/api/clubs', authenticateToken, async (req, res) => {
     }
 });
 
+// Manual refresh metadata endpoint for testing
+app.post('/api/clubs/:clubId/refresh-metadata', authenticateToken, async (req, res) => {
+    try {
+        const { clubId } = req.params;
+        
+        console.log('🔄 Manual metadata refresh requested for club:', clubId);
+        
+        const client = await pool.connect();
+        
+        // Get club details
+        const clubQuery = await client.query(
+            'SELECT website_url FROM clubs WHERE id = $1',
+            [clubId]
+        );
+        
+        if (clubQuery.rows.length === 0) {
+            client.release();
+            return res.status(404).json({ success: false, error: 'Club not found' });
+        }
+        
+        const websiteUrl = clubQuery.rows[0].website_url;
+        console.log('🌐 Refreshing metadata for:', websiteUrl);
+        
+        // Fetch fresh metadata
+        const metadata = await fetchWebsiteMetadata(websiteUrl);
+        
+        // Update club record with fresh metadata
+        await client.query(
+            'UPDATE clubs SET website_title = $1, website_description = $2, website_favicon = $3, metadata_fetched_at = NOW(), updated_at = NOW() WHERE id = $4',
+            [metadata.title, metadata.description, metadata.favicon, clubId]
+        );
+        
+        client.release();
+        
+        console.log('✅ Metadata refreshed for club:', clubId);
+        
+        res.json({
+            success: true,
+            message: 'Metadata refreshed successfully',
+            metadata: metadata
+        });
+        
+    } catch (error) {
+        console.error('Refresh metadata error:', error);
+        res.status(500).json({ success: false, error: 'Failed to refresh metadata' });
+    }
+});
+
 startServer();
