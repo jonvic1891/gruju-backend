@@ -496,6 +496,51 @@ async function runMigrations() {
             }
         }
         
+        // Migration 19: Add activity_type column to activities table
+        try {
+            await client.query(`
+                ALTER TABLE activities 
+                ADD COLUMN IF NOT EXISTS activity_type VARCHAR(50)
+            `);
+            console.log('✅ Migration 19: Added activity_type column to activities table');
+        } catch (error) {
+            if (error.code === '42701') {
+                console.log('✅ Migration 19: activity_type column already exists');
+            } else {
+                console.log('ℹ️ Migration 19: Could not add activity_type column:', error.message);
+            }
+        }
+        
+        // Migration 20: Create clubs table for storing club information from activities
+        try {
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS clubs (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    website_url VARCHAR(500),
+                    activity_type VARCHAR(50),
+                    location VARCHAR(255),
+                    cost DECIMAL(10,2),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(website_url, activity_type)
+                )
+            `);
+            
+            // Create index for better performance on filtering
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_clubs_activity_type ON clubs(activity_type)
+            `);
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_clubs_website_url ON clubs(website_url)
+            `);
+            
+            console.log('✅ Migration 20: Created clubs table and indexes');
+        } catch (error) {
+            console.log('ℹ️ Migration 20: Could not create clubs table:', error.message);
+        }
+        
     } catch (error) {
         console.error('❌ Migration failed:', error);
         throw error;
@@ -2231,7 +2276,7 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         console.log('🔍 Request body keys:', Object.keys(req.body));
         console.log('🔍 joint_host_children in request:', req.body.joint_host_children);
         
-        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, joint_host_children, series_id, is_recurring, recurring_days, series_start_date } = req.body;
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, joint_host_children, series_id, is_recurring, recurring_days, series_start_date, activity_type } = req.body;
 
         console.log('🔍 joint_host_children after destructuring:', joint_host_children);
 
@@ -2275,8 +2320,8 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
 
         // ✅ SECURITY: Only return necessary fields with UUID
         const result = await client.query(
-            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, created_at, updated_at',
-            [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared, processedSeriesId, processedIsRecurring, processedRecurringDays, processedSeriesStartDate]
+            'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, activity_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, activity_type, created_at, updated_at',
+            [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared, processedSeriesId, processedIsRecurring, processedRecurringDays, processedSeriesStartDate, activity_type || null]
         );
 
         console.log('🎯 Primary activity created:', result.rows[0].uuid);
@@ -2285,6 +2330,45 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         console.log('🔍 DEBUG: childUuid parameter:', childUuid);
         console.log('🔍 DEBUG: primaryActivity child_uuid:', primaryActivity.child_uuid);
         const createdActivities = [primaryActivity];
+        
+        // Create or update club record if activity has website URL and activity type
+        if (website_url && website_url.trim() && activity_type && activity_type.trim()) {
+            try {
+                const clubData = {
+                    name: name.trim(),
+                    description: description || null,
+                    website_url: website_url.trim(),
+                    activity_type: activity_type.trim(),
+                    location: location || null,
+                    cost: processedCost
+                };
+                
+                // Check if club already exists with this website_url and activity_type
+                const existingClub = await client.query(
+                    'SELECT id FROM clubs WHERE website_url = $1 AND activity_type = $2',
+                    [clubData.website_url, clubData.activity_type]
+                );
+                
+                if (existingClub.rows.length === 0) {
+                    // Create new club record
+                    await client.query(
+                        'INSERT INTO clubs (name, description, website_url, activity_type, location, cost, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())',
+                        [clubData.name, clubData.description, clubData.website_url, clubData.activity_type, clubData.location, clubData.cost]
+                    );
+                    console.log('✅ Created club record:', clubData.name, 'for', clubData.activity_type);
+                } else {
+                    // Update existing club record with latest information
+                    await client.query(
+                        'UPDATE clubs SET name = $1, description = $2, location = $3, cost = $4, updated_at = NOW() WHERE id = $5',
+                        [clubData.name, clubData.description, clubData.location, clubData.cost, existingClub.rows[0].id]
+                    );
+                    console.log('✅ Updated club record:', clubData.name, 'for', clubData.activity_type);
+                }
+            } catch (clubError) {
+                console.error('⚠️ Error creating/updating club record:', clubError);
+                // Don't fail the activity creation if club creation fails
+            }
+        }
 
         // Create joint host activities if joint_host_children is provided
         if (joint_host_children && Array.isArray(joint_host_children) && joint_host_children.length > 0) {
@@ -2329,8 +2413,8 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
 
                     // Create activity for joint host child
                     const jointResult = await client.query(
-                        'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, created_at, updated_at',
-                        [jointChildId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared, processedSeriesId, processedIsRecurring, processedRecurringDays, processedSeriesStartDate]
+                        'INSERT INTO activities (child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, activity_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, series_id, is_recurring, recurring_days, series_start_date, activity_type, created_at, updated_at',
+                        [jointChildId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared, processedSeriesId, processedIsRecurring, processedRecurringDays, processedSeriesStartDate, activity_type || null]
                     );
 
                     console.log('✅ Joint host activity created:', jointResult.rows[0].uuid, 'for child:', jointChildUuid);
@@ -6425,6 +6509,56 @@ app.delete('/api/admin/delete-test-account', authenticateToken, async (req, res)
             error: 'Failed to delete test account',
             details: error.message
         });
+    }
+});
+
+// Get clubs data for browsing
+app.get('/api/clubs', authenticateToken, async (req, res) => {
+    try {
+        const { activity_type, search } = req.query;
+        
+        let query = 'SELECT id, name, description, website_url, activity_type, location, cost, created_at FROM clubs';
+        let params = [];
+        let conditions = [];
+        
+        // Filter by activity type if provided
+        if (activity_type && activity_type.trim()) {
+            conditions.push('activity_type = $' + (params.length + 1));
+            params.push(activity_type.trim());
+        }
+        
+        // Filter by search term if provided
+        if (search && search.trim()) {
+            const searchTerm = '%' + search.trim().toLowerCase() + '%';
+            conditions.push('(LOWER(name) LIKE $' + (params.length + 1) + ' OR LOWER(description) LIKE $' + (params.length + 1) + ' OR LOWER(activity_type) LIKE $' + (params.length + 1) + ' OR LOWER(location) LIKE $' + (params.length + 1) + ')');
+            params.push(searchTerm);
+        }
+        
+        // Add WHERE clause if we have conditions
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
+        
+        // Order by name
+        query += ' ORDER BY name ASC';
+        
+        console.log('🏢 Getting clubs with query:', query, 'params:', params);
+        
+        const client = await pool.connect();
+        const result = await client.query(query, params);
+        client.release();
+        
+        console.log('✅ Found', result.rows.length, 'clubs');
+        
+        res.json({
+            success: true,
+            data: result.rows,
+            total: result.rows.length
+        });
+        
+    } catch (error) {
+        console.error('Get clubs error:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch clubs' });
     }
 });
 
