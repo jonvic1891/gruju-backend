@@ -35,8 +35,40 @@ async function fetchWebsiteMetadata(url) {
         
         // Extract metadata using regex (simple parsing)
         const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-        const descriptionMatch = html.match(/<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"']+)["\'][^>]*>/i) ||
-                                 html.match(/<meta[^>]*content=["\']([^"']+)["\'][^>]*name=["\']description["\'][^>]*>/i);
+        let descriptionMatch = html.match(/<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"']+)["\'][^>]*>/i) ||
+                               html.match(/<meta[^>]*content=["\']([^"']+)["\'][^>]*name=["\']description["\'][^>]*>/i);
+        
+        // If no meta description found, try to extract from page content
+        let description = descriptionMatch ? descriptionMatch[1].trim() : null;
+        if (!description || description === titleMatch?.[1]?.trim()) {
+            // Try to find contact information and other useful content
+            const phoneMatch = html.match(/(?:\+44\s*\(?0?\)?\s*|0)([0-9\s\-\(\)]{10,15})/i);
+            const emailMatch = html.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+            
+            // Build description from available information
+            let contentParts = [];
+            
+            if (phoneMatch) {
+                contentParts.push(`Contact Phone: ${phoneMatch[0].trim()}`);
+            }
+            if (emailMatch) {
+                contentParts.push(`Contact Email: ${emailMatch[1].trim()}`);
+            }
+            
+            // Try to find other meaningful content in h1, h2, or p tags
+            const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+            const firstPMatch = html.match(/<p[^>]*>([^<]{20,200})<\/p>/i);
+            
+            if (contentParts.length === 0) {
+                if (firstPMatch) {
+                    contentParts.push(firstPMatch[1].trim().replace(/\s+/g, ' '));
+                } else if (h1Match && h1Match[1] !== titleMatch?.[1]) {
+                    contentParts.push(h1Match[1].trim());
+                }
+            }
+            
+            description = contentParts.length > 0 ? contentParts.join('. ') : null;
+        }
         
         // Look for various favicon formats
         const faviconMatches = [
@@ -69,7 +101,7 @@ async function fetchWebsiteMetadata(url) {
         
         const metadata = {
             title: titleMatch ? titleMatch[1].trim() : null,
-            description: descriptionMatch ? descriptionMatch[1].trim() : null,
+            description: description,
             favicon: favicon
         };
         
