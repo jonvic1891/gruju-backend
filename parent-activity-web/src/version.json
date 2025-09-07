@@ -1,4 +1,4 @@
 {
-  "version": "1.2.0",
-  "description": "FORCE UPDATE: ClubsScreen now uses ApiService instead of direct fetch"
+  "version": "1.3.0",
+  "description": "FORCE UPDATE: Google-style search results for club cards with rich metadata"
 }

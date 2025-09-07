@@ -25,6 +25,10 @@ interface Club {
   activity_type: string;
   location?: string;
   cost?: number;
+  website_title?: string;
+  website_description?: string;
+  website_favicon?: string;
+  metadata_fetched_at?: string;
   created_at: string;
 }
 
@@ -33,6 +37,7 @@ const ClubsScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [selectedType, setSelectedType] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [locationFilter, setLocationFilter] = useState<string>('');
 
   const apiService = ApiService.getInstance();
   
@@ -40,7 +45,7 @@ const ClubsScreen: React.FC = () => {
 
   useEffect(() => {
     loadClubs();
-  }, [selectedType, searchTerm]); // Reload when filters change
+  }, [selectedType, searchTerm, locationFilter]); // Reload when filters change
 
   const loadClubs = async () => {
     try {
@@ -48,7 +53,7 @@ const ClubsScreen: React.FC = () => {
       
       console.log('🏢 Loading clubs via ApiService:', { selectedType, searchTerm });
       
-      const response = await apiService.getClubs(selectedType, searchTerm);
+      const response = await apiService.getClubs(selectedType, searchTerm, locationFilter);
       
       if (response.success) {
         setClubs(response.data || []);
@@ -104,10 +109,33 @@ const ClubsScreen: React.FC = () => {
             ))}
           </select>
         </div>
+        
+        <div className="location-filter">
+          <input
+            type="text"
+            placeholder="🗺️ Filter by location..."
+            value={locationFilter}
+            onChange={(e) => setLocationFilter(e.target.value)}
+            className="location-input"
+          />
+        </div>
       </div>
 
       <div className="clubs-stats">
-        <p>Showing {clubs.length} clubs</p>
+        <p>Showing {clubs.length} clubs{(searchTerm || selectedType || locationFilter) && ' matching your filters'}</p>
+        {(searchTerm || selectedType || locationFilter) && (
+          <p className="active-filters">
+            {searchTerm && <span className="filter-tag">Search: "{searchTerm}"</span>}
+            {selectedType && <span className="filter-tag">Type: {selectedType}</span>}
+            {locationFilter && <span className="filter-tag">Location: "{locationFilter}"</span>}
+            <button 
+              onClick={() => { setSearchTerm(''); setSelectedType(''); setLocationFilter(''); }}
+              className="clear-filters-btn"
+            >
+              Clear all filters
+            </button>
+          </p>
+        )}
       </div>
 
       <div className="clubs-grid">
@@ -116,7 +144,7 @@ const ClubsScreen: React.FC = () => {
             <div className="no-clubs-icon">🔍</div>
             <h3>No clubs found</h3>
             <p>
-              {searchTerm || selectedType 
+              {searchTerm || selectedType || locationFilter
                 ? "Try adjusting your search or filter criteria"
                 : "No clubs are available at the moment"
               }
@@ -124,39 +152,52 @@ const ClubsScreen: React.FC = () => {
           </div>
         ) : (
           clubs.map(club => (
-            <div key={club.id} className="club-card">
-              <div className="club-header">
-                <h3 className="club-name">{club.name}</h3>
-                <span className="club-type">{club.activity_type}</span>
+            <div key={club.id} className="club-card" onClick={() => openWebsite(club.website_url)}>
+              <div className="club-favicon">
+                {club.website_favicon ? (
+                  <img 
+                    src={club.website_favicon} 
+                    alt="Website favicon" 
+                    className="favicon-img"
+                    onError={(e) => {
+                      // Fallback to globe icon if favicon fails to load
+                      e.currentTarget.style.display = 'none';
+                      const nextElement = e.currentTarget.nextElementSibling as HTMLElement;
+                      if (nextElement) {
+                        nextElement.style.display = 'block';
+                      }
+                    }}
+                  />
+                ) : null}
+                <div className="favicon-fallback">🌐</div>
               </div>
               
-              <div className="club-description">
-                <p>{club.description}</p>
-              </div>
-              
-              <div className="club-details">
-                {club.location && (
-                  <div className="club-detail">
-                    <span className="detail-label">📍</span>
-                    <span className="detail-value">{club.location}</span>
-                  </div>
-                )}
-                
-                <div className="club-detail">
-                  <span className="detail-label">💰</span>
-                  <span className="detail-value">
-                    {club.cost ? `£${club.cost.toFixed(2)}` : 'Free'}
-                  </span>
+              <div className="club-content">
+                <div className="club-header">
+                  <h3 className="club-title">
+                    {club.website_title || club.name}
+                  </h3>
+                  <span className="club-type">{club.activity_type}</span>
                 </div>
-              </div>
-              
-              <div className="club-actions">
-                <button
-                  onClick={() => openWebsite(club.website_url)}
-                  className="visit-website-btn"
-                >
-                  🌐 Visit Website
-                </button>
+                
+                <div className="club-url">
+                  {club.website_url}
+                </div>
+                
+                <div className="club-description">
+                  {club.website_description || club.description || 'No description available'}
+                </div>
+                
+                <div className="club-details">
+                  {club.location && (
+                    <span className="club-detail">📍 {club.location}</span>
+                  )}
+                  {club.cost !== undefined && club.cost !== null && (
+                    <span className="club-detail">
+                      💰 {club.cost > 0 ? `£${club.cost.toFixed(2)}` : 'Free'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ))

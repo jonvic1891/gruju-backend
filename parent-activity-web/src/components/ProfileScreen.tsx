@@ -12,6 +12,10 @@ const ProfileScreen = () => {
   const [username, setUsername] = useState(user?.username || '');
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(user?.phone || '');
+  const [addressLine1, setAddressLine1] = useState(user?.address_line_1 || '');
+  const [townCity, setTownCity] = useState(user?.town_city || '');
+  const [stateProvinceCountry, setStateProvinceCountry] = useState(user?.state_province_country || '');
+  const [postCode, setPostCode] = useState(user?.post_code || '');
   const [loading, setLoading] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -41,6 +45,10 @@ const ProfileScreen = () => {
       setUsername(user.username || '');
       setEmail(user.email || '');
       setPhone(user.phone || '');
+      setAddressLine1(user.address_line_1 || '');
+      setTownCity(user.town_city || '');
+      setStateProvinceCountry(user.state_province_country || '');
+      setPostCode(user.post_code || '');
     }
   }, [user]);
 
@@ -165,7 +173,11 @@ const ProfileScreen = () => {
       const response = await apiService.updateProfile({
         username: username.trim(),
         email: email.trim(),
-        phone: phone.trim()
+        phone: phone.trim(),
+        address_line_1: addressLine1.trim(),
+        town_city: townCity.trim(),
+        state_province_country: stateProvinceCountry.trim(),
+        post_code: postCode.trim()
       });
 
       if (response.success && response.data) {
@@ -189,6 +201,10 @@ const ProfileScreen = () => {
       setUsername(user.username);
       setEmail(user.email);
       setPhone(user.phone);
+      setAddressLine1(user.address_line_1 || '');
+      setTownCity(user.town_city || '');
+      setStateProvinceCountry(user.state_province_country || '');
+      setPostCode(user.post_code || '');
     }
     setEditing(false);
   };
@@ -304,6 +320,56 @@ const ProfileScreen = () => {
               />
             </div>
 
+            <div className="address-section">
+              <h4>Address Information</h4>
+              
+              <div className="form-group">
+                <label>Address Line 1</label>
+                <input
+                  type="text"
+                  value={addressLine1}
+                  onChange={(e) => setAddressLine1(e.target.value)}
+                  className="form-input"
+                  placeholder="Street address"
+                />
+              </div>
+
+              <div className="address-row">
+                <div className="form-group">
+                  <label>Town/City</label>
+                  <input
+                    type="text"
+                    value={townCity}
+                    onChange={(e) => setTownCity(e.target.value)}
+                    className="form-input"
+                    placeholder="Town or city"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Post Code</label>
+                  <input
+                    type="text"
+                    value={postCode}
+                    onChange={(e) => setPostCode(e.target.value)}
+                    className="form-input"
+                    placeholder="Post code"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>State/Province/Country</label>
+                <input
+                  type="text"
+                  value={stateProvinceCountry}
+                  onChange={(e) => setStateProvinceCountry(e.target.value)}
+                  className="form-input"
+                  placeholder="State, province, or country"
+                />
+              </div>
+            </div>
+
             <div className="form-actions">
               <button
                 onClick={handleCancelEdit}
@@ -347,6 +413,32 @@ const ProfileScreen = () => {
                 <label>Phone</label>
                 <div className="info-value">{user.phone}</div>
               </div>
+
+              {(user.address_line_1 || user.town_city || user.state_province_country || user.post_code) && (
+                <div className="address-info">
+                  <h4>Address</h4>
+                  {user.address_line_1 && (
+                    <div className="info-section">
+                      <label>Address</label>
+                      <div className="info-value">{user.address_line_1}</div>
+                    </div>
+                  )}
+                  {(user.town_city || user.post_code) && (
+                    <div className="info-section">
+                      <label>Town/City & Post Code</label>
+                      <div className="info-value">
+                        {user.town_city}{user.town_city && user.post_code && ', '}{user.post_code}
+                      </div>
+                    </div>
+                  )}
+                  {user.state_province_country && (
+                    <div className="info-section">
+                      <label>State/Province/Country</label>
+                      <div className="info-value">{user.state_province_country}</div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="info-section">
                 <label>Role</label>

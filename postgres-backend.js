@@ -662,6 +662,21 @@ async function runMigrations() {
         } catch (error) {
             console.log('ℹ️ Migration 21: Could not add website metadata columns:', error.message);
         }
+
+        // Migration 22: Add address fields to users table for parent location information
+        try {
+            await client.query(`
+                ALTER TABLE users 
+                ADD COLUMN IF NOT EXISTS address_line_1 VARCHAR(255),
+                ADD COLUMN IF NOT EXISTS town_city VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS state_province_country VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS post_code VARCHAR(20)
+            `);
+            
+            console.log('✅ Migration 22: Added address fields to users table');
+        } catch (error) {
+            console.log('ℹ️ Migration 22: Could not add address fields:', error.message);
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -1473,7 +1488,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
     try {
         const client = await pool.connect();
         const result = await client.query(
-            'SELECT id, username, email, phone, created_at, updated_at, onboarding_completed FROM users WHERE id = $1',
+            'SELECT id, username, email, phone, address_line_1, town_city, state_province_country, post_code, created_at, updated_at, onboarding_completed FROM users WHERE id = $1',
             [req.user.id]
         );
         client.release();
@@ -1495,7 +1510,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
 // Update user profile
 app.put('/api/users/profile', authenticateToken, async (req, res) => {
     try {
-        const { username, email, phone, onboarding_completed } = req.body;
+        const { username, email, phone, address_line_1, town_city, state_province_country, post_code, onboarding_completed } = req.body;
 
         // Validate input
         if (!username || !email || !phone) {
@@ -1515,9 +1530,30 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
             return res.status(409).json({ error: 'Email or phone number already exists' });
         }
 
-        // Update user - include onboarding_completed if provided
+        // Update user - include address fields and onboarding_completed if provided
         const updateFields = ['username = $1', 'email = $2', 'phone = $3', 'updated_at = NOW()'];
         const updateValues = [username, email, phone];
+        
+        // Add address fields if provided
+        if (address_line_1 !== undefined) {
+            updateFields.push(`address_line_1 = $${updateValues.length + 1}`);
+            updateValues.push(address_line_1 || null);
+        }
+        
+        if (town_city !== undefined) {
+            updateFields.push(`town_city = $${updateValues.length + 1}`);
+            updateValues.push(town_city || null);
+        }
+        
+        if (state_province_country !== undefined) {
+            updateFields.push(`state_province_country = $${updateValues.length + 1}`);
+            updateValues.push(state_province_country || null);
+        }
+        
+        if (post_code !== undefined) {
+            updateFields.push(`post_code = $${updateValues.length + 1}`);
+            updateValues.push(post_code || null);
+        }
         
         if (onboarding_completed !== undefined) {
             updateFields.push(`onboarding_completed = $${updateValues.length + 1}`);
@@ -1533,7 +1569,7 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
 
         // Get updated user data
         const updatedUser = await client.query(
-            'SELECT id, username, email, phone, created_at, updated_at, onboarding_completed FROM users WHERE id = $1',
+            'SELECT id, username, email, phone, address_line_1, town_city, state_province_country, post_code, created_at, updated_at, onboarding_completed FROM users WHERE id = $1',
             [req.user.id]
         );
         
@@ -6662,7 +6698,7 @@ app.delete('/api/admin/delete-test-account', authenticateToken, async (req, res)
 // Get clubs data for browsing
 app.get('/api/clubs', authenticateToken, async (req, res) => {
     try {
-        const { activity_type, search } = req.query;
+        const { activity_type, search, location } = req.query;
         
         let query = 'SELECT id, name, description, website_url, activity_type, location, cost, website_title, website_description, website_favicon, metadata_fetched_at, created_at FROM clubs';
         let params = [];
@@ -6681,6 +6717,13 @@ app.get('/api/clubs', authenticateToken, async (req, res) => {
             params.push(searchTerm);
         }
         
+        // Filter by location if provided
+        if (location && location.trim()) {
+            const locationTerm = '%' + location.trim().toLowerCase() + '%';
+            conditions.push('LOWER(location) LIKE $' + (params.length + 1));
+            params.push(locationTerm);
+        }
+        
         // Add WHERE clause if we have conditions
         if (conditions.length > 0) {
             query += ' WHERE ' + conditions.join(' AND ');
@@ -6689,7 +6732,7 @@ app.get('/api/clubs', authenticateToken, async (req, res) => {
         // Order by name
         query += ' ORDER BY name ASC';
         
-        console.log('🏢 Getting clubs with query:', query, 'params:', params);
+        console.log('🏢 Getting clubs with query:', query, 'params:', params, 'filters:', { activity_type, search, location });
         
         const client = await pool.connect();
         const result = await client.query(query, params);

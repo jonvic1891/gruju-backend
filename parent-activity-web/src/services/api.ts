@@ -185,7 +185,7 @@ class ApiService {
     return await this.request('get', '/api/users/profile');
   }
 
-  async updateProfile(profileData: { username: string; email: string; phone: string; onboarding_completed?: boolean }): Promise<ApiResponse<any>> {
+  async updateProfile(profileData: { username: string; email: string; phone: string; address_line_1?: string; town_city?: string; state_province_country?: string; post_code?: string; onboarding_completed?: boolean }): Promise<ApiResponse<any>> {
     const response = await this.request('put', '/api/users/profile', profileData);
     if (response.success && response.data) {
       // Update stored user data
@@ -669,13 +669,16 @@ class ApiService {
   }
 
   // Clubs API
-  async getClubs(activityType?: string, search?: string): Promise<ApiResponse<any[]>> {
+  async getClubs(activityType?: string, search?: string, location?: string): Promise<ApiResponse<any[]>> {
     const params = new URLSearchParams();
     if (activityType) {
       params.append('activity_type', activityType);
     }
     if (search?.trim()) {
       params.append('search', search.trim());
+    }
+    if (location?.trim()) {
+      params.append('location', location.trim());
     }
     
     const queryString = params.toString();

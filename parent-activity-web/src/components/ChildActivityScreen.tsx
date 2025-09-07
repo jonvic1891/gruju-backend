@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 // React Router hooks removed for navigation - but need useLocation for URL params
+import { useAuth } from '../contexts/AuthContext';
 import ApiService from '../services/api';
 import { Child, Activity } from '../types';
 import TimePickerDropdown from './TimePickerDropdown';
@@ -43,6 +44,23 @@ interface ChildActivityScreenProps {
 
 const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack, onDataChanged, onNavigateToConnections, onNavigateToActivity, initialActivityUuid, shouldRestoreActivityCreation }) => {
   const location = useLocation();
+  const { user } = useAuth();
+  
+  // Helper function to get initial activity state with user's location
+  const getInitialActivityState = () => ({
+    name: '',
+    description: '',
+    start_date: '',
+    end_date: '',
+    start_time: '',
+    end_time: '',
+    location: user?.town_city || '',
+    website_url: '',
+    cost: '',
+    max_participants: '',
+    activity_type: '',
+    auto_notify_new_connections: false
+  });
   
   // Parse URL parameters for initial calendar view and date
   const urlParams = new URLSearchParams(location.search);
@@ -84,20 +102,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [jointHostConnections, setJointHostConnections] = useState<{ [childUuid: string]: any[] }>({});
   const [pendingConnectionRequests, setPendingConnectionRequests] = useState<any[]>([]);
   const [activityDraft, setActivityDraft] = useState<any>(null);
-  const [newActivity, setNewActivity] = useState({
-    name: '',
-    description: '',
-    start_date: '',
-    end_date: '',
-    start_time: '',
-    end_time: '',
-    location: '',
-    website_url: '',
-    cost: '',
-    max_participants: '',
-    activity_type: '',
-    auto_notify_new_connections: false
-  });
+  const [newActivity, setNewActivity] = useState(getInitialActivityState());
   const [addingActivity, setAddingActivity] = useState(false);
   const [activityParticipants, setActivityParticipants] = useState<any>(null);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
@@ -206,19 +211,12 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         const draft = JSON.parse(draftStr);
         // Only restore if it's for the same child
         if (draft.childUuid === child.uuid) {
-          setNewActivity(draft.newActivity || {
-            name: '',
-            description: '',
-            start_date: '',
-            end_date: '',
-            start_time: '',
-            end_time: '',
-            location: '',
-            website_url: '',
-            cost: '',
-            max_participants: '',
-            auto_notify_new_connections: false
-          });
+          setNewActivity(draft.newActivity ? {
+            ...getInitialActivityState(),
+            ...draft.newActivity,
+            // Ensure location defaults to user's town_city if not already set
+            location: draft.newActivity.location || user?.town_city || ''
+          } : getInitialActivityState());
           setSelectedDates(draft.selectedDates || []);
           setIsSharedActivity(draft.isSharedActivity || false);
           setAutoNotifyNewConnections(draft.autoNotifyNewConnections || false);
@@ -268,20 +266,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
     
     // Reset form state
-    setNewActivity({
-      name: '',
-      description: '',
-      start_date: '',
-      end_date: '',
-      start_time: '',
-      end_time: '',
-      location: '',
-      website_url: '',
-      cost: '',
-      max_participants: '',
-      activity_type: '',
-      auto_notify_new_connections: false
-    });
+    setNewActivity(getInitialActivityState());
     setSelectedDates([]);
     setIsSharedActivity(false);
     setAutoNotifyNewConnections(false);
@@ -991,20 +976,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const handleAddActivity = () => {
     // Check if there's already a draft - if not, reset form state
     if (!activityDraft) {
-      setNewActivity({
-        name: '',
-        description: '',
-        start_date: '',
-        end_date: '',
-        start_time: '',
-        end_time: '',
-        location: '',
-        website_url: '',
-        cost: '',
-        max_participants: '',
-        activity_type: '',
-        auto_notify_new_connections: false
-      });
+      setNewActivity(getInitialActivityState());
       setSelectedDates([]);
       setIsSharedActivity(false);
       setAutoNotifyNewConnections(false);
@@ -1229,20 +1201,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       setSelectedTemplate(null);
       setTemplateConfirmationMessage('');
       // Reset form to empty state
-      setNewActivity({
-        name: '',
-        description: '',
-        start_date: '',
-        end_date: '',
-        start_time: '',
-        end_time: '',
-        location: '',
-        website_url: '',
-        cost: '',
-        max_participants: '',
-        activity_type: '',
-        auto_notify_new_connections: false
-      });
+      setNewActivity(getInitialActivityState());
       setSelectedDates([]);
       setIsSharedActivity(false);
       setAutoNotifyNewConnections(false);
@@ -1266,7 +1225,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         (template.typical_duration_hours ? 
           addHoursToTime(template.typical_start_time, template.typical_duration_hours) : 
           template.typical_start_time) : '',
-      location: template.location || '',
+      location: template.location || user?.town_city || '',
       website_url: template.website_url || '',
       cost: template.cost ? template.cost.toString() : '',
       max_participants: template.max_participants ? template.max_participants.toString() : '',
@@ -2339,20 +2298,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       }
 
       // Reset form
-      setNewActivity({
-        name: '',
-        description: '',
-        start_date: '',
-        end_date: '',
-        start_time: '',
-        end_time: '',
-        location: '',
-        website_url: '',
-        cost: '',
-        max_participants: '',
-        activity_type: '',
-        auto_notify_new_connections: false
-      });
+      setNewActivity(getInitialActivityState());
       setSelectedDates([]);
       setIsSharedActivity(false);
       setAutoNotifyNewConnections(false);
