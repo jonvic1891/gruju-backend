@@ -6639,8 +6639,8 @@ app.post('/api/admin/cleanup-pending-invitations', authenticateToken, async (req
     }
 });
 
-// Admin endpoint to update club location
-app.put('/api/admin/update-club-location', authenticateToken, async (req, res) => {
+// Temporary public endpoint to update club location (REMOVE AFTER USE)
+app.put('/api/temp-update-club-location', async (req, res) => {
     try {
         const { website_url, location } = req.body;
         
