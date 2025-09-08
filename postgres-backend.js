@@ -2513,6 +2513,9 @@ function getDateForWeekday(currentDate, targetDay) {
 }
 
 app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
+    console.log('🚨 ACTIVITY CREATION ENDPOINT HIT!');
+    console.log('🚨 Child ID:', req.params.childId);
+    console.log('🚨 User ID:', req.user?.id);
     try {
         // ✅ SECURITY: Expect UUID instead of sequential ID
         const childUuid = req.params.childId;
@@ -6694,8 +6697,11 @@ app.put('/api/admin/update-club-location', authenticateToken, async (req, res) =
 });
 
 // Admin endpoint to backfill club usage data from existing activities
-app.post('/api/admin/backfill-club-usage', async (req, res) => {
-    // Temporarily public for testing
+app.post('/api/admin/backfill-club-usage', authenticateToken, async (req, res) => {
+    // Check if user is admin
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ success: false, error: 'Admin access required' });
+    }
     
     try {
         const client = await pool.connect();
