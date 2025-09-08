@@ -7403,10 +7403,10 @@ app.post('/api/clubs/increment-usage', authenticateToken, async (req, res) => {
                 
                 if (existingUsage.rows.length === 0) {
                     usageResult = await client.query(`
-                        INSERT INTO club_usage (club_id, activity_id, usage_date, activity_start_date)
-                        VALUES ($1, $2, CURRENT_DATE, $3)
+                        INSERT INTO club_usage (club_id, activity_id, child_id, child_age, usage_date, activity_start_date)
+                        VALUES ($1, $2, NULL, $3, CURRENT_DATE, $4)
                         RETURNING *
-                    `, [clubId, activity_id, activity_start_date || new Date().toISOString().split('T')[0]]);
+                    `, [clubId, activity_id, child_age, activity_start_date || new Date().toISOString().split('T')[0]]);
                 }
             } else {
                 // If no activity_id, we need to generate a placeholder or skip this insert
