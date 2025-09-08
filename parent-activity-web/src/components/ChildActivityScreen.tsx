@@ -2199,6 +2199,31 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         console.log(`🔍 FULL RESPONSE DATA for ${date}:`, response.data);
         
         if (response.success) {
+          // Increment club usage if activity has website_url and activity_type
+          if (activityData.website_url && activityData.activity_type) {
+            try {
+              console.log('🏢 Incrementing club usage for:', {
+                website_url: activityData.website_url,
+                activity_type: activityData.activity_type,
+                location: activityData.location
+              });
+              
+              await apiService.incrementClubUsage({
+                website_url: activityData.website_url,
+                activity_type: activityData.activity_type,
+                location: activityData.location || undefined,
+                child_age: child.age || undefined,
+                activity_start_date: activityData.start_date,
+                activity_id: response.data?.id
+              });
+              
+              console.log('✅ Club usage incremented successfully');
+            } catch (clubError) {
+              console.warn('⚠️ Failed to increment club usage:', clubError);
+              // Don't fail activity creation if club increment fails
+            }
+          }
+
           // Check if this is a multi-host scenario with joint_activities
           const responseAny = response as any;
           if (responseAny.joint_activities && Array.isArray(responseAny.joint_activities) && responseAny.joint_activities.length > 0) {

@@ -655,6 +655,18 @@ class ApiService {
     return this.request('post', `/api/activity-templates/${templateUuid}/use`);
   }
 
+  // Club usage increment
+  async incrementClubUsage(data: {
+    website_url: string;
+    activity_type: string;
+    location?: string;
+    child_age?: number;
+    activity_start_date?: string;
+    activity_id?: number;
+  }): Promise<ApiResponse<any>> {
+    return this.request('post', '/api/clubs/increment-usage', data);
+  }
+
   // Notification dismissal
   async dismissNotification(notificationId: string, type?: string): Promise<ApiResponse<any>> {
     return this.request('post', '/api/notifications/dismiss', { notificationId, type });
