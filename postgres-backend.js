@@ -2517,21 +2517,21 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         // ✅ SECURITY: Expect UUID instead of sequential ID
         const childUuid = req.params.childId;
         
-        console.log('🎯 Activity creation request received:');
-        console.log('🔍 Child UUID (from params):', childUuid);
-        console.log('🔍 User ID:', req.user.id);
-        console.log('🔍 Request body keys:', Object.keys(req.body));
-        console.log('🔍 joint_host_children in request:', req.body.joint_host_children);
+        // console.log('🎯 Activity creation request received:');
+        // console.log('🔍 Child UUID (from params):', childUuid);
+        // console.log('🔍 User ID:', req.user.id);
+        // console.log('🔍 Request body keys:', Object.keys(req.body));
+        // console.log('🔍 joint_host_children in request:', req.body.joint_host_children);
         
         const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, joint_host_children, series_id, is_recurring, recurring_days, series_start_date, activity_type } = req.body;
 
-        console.log('🔍 joint_host_children after destructuring:', joint_host_children);
+        // console.log('🔍 joint_host_children after destructuring:', joint_host_children);
 
         if (!name || !name.trim() || !start_date) {
             return res.status(400).json({ success: false, error: 'Activity name and start date are required' });
         }
 
-        console.log('🔔 Creating activity with auto-notify:', auto_notify_new_connections);
+        // console.log('🔔 Creating activity with auto-notify:', auto_notify_new_connections);
 
         const client = await pool.connect();
         
@@ -2571,11 +2571,11 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
             [childId, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, auto_notify_new_connections || false, isShared, processedSeriesId, processedIsRecurring, processedRecurringDays, processedSeriesStartDate, activity_type || null]
         );
 
-        console.log('🎯 Primary activity created:', result.rows[0].uuid);
+        // console.log('🎯 Primary activity created:', result.rows[0].uuid);
         // Add child_uuid to the activity object (use the childUuid parameter from the URL)
         const primaryActivity = { ...result.rows[0], child_uuid: childUuid };
-        console.log('🔍 DEBUG: childUuid parameter:', childUuid);
-        console.log('🔍 DEBUG: primaryActivity child_uuid:', primaryActivity.child_uuid);
+        // console.log('🔍 DEBUG: childUuid parameter:', childUuid);
+        // console.log('🔍 DEBUG: primaryActivity child_uuid:', primaryActivity.child_uuid);
         const createdActivities = [primaryActivity];
         
         console.log('🔍 CLUB DEBUG: Checking club creation conditions:');
@@ -5245,8 +5245,8 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
         const groupedInvitations = new Map();
         const singleInvitations = [];
         
-        console.log(`🔔 Processing ${invitationsResult.rows.length} pending invitations for user ${userId}`);
-        console.log(`🔔 Sample invitations:`, invitationsResult.rows.slice(0, 3).map(inv => ({
+        // console.log(`🔔 Processing ${invitationsResult.rows.length} pending invitations for user ${userId}`);
+        // console.log(`🔔 Sample invitations:`, invitationsResult.rows.slice(0, 3).map(inv => ({
             activity_name: inv.activity_name,
             series_id: inv.series_id,
             status: inv.status
@@ -5266,14 +5266,14 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
                     displayName: invitation.activity_name
                 });
                 processedSeriesIds.add(seriesId);
-                console.log(`🔔 ✅ Added to grouped invitations: ${seriesId} (recurring series)`);
+                // console.log(`🔔 ✅ Added to grouped invitations: ${seriesId} (recurring series)`);
             } else if (!seriesId) {
                 singleInvitations.push(invitation);
-                console.log(`🔔 ➡️ Added to single invitations: "${invitation.activity_name}" (no series_id)`);
+                // console.log(`🔔 ➡️ Added to single invitations: "${invitation.activity_name}" (no series_id)`);
             }
         });
         
-        console.log(`🔔 Final grouping: ${groupedInvitations.size} recurring series, ${singleInvitations.length} single invitations`);
+        // console.log(`🔔 Final grouping: ${groupedInvitations.size} recurring series, ${singleInvitations.length} single invitations`);
         
         // Add single summary notification for all recurring activity groups
         if (groupedInvitations.size > 0) {
@@ -5418,7 +5418,7 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
         
         client.release();
         
-        console.log(`🔔 Constructed ${allNotifications.length} notifications for user ${userId} (${dismissedIds.size} were filtered out)`);
+        // console.log(`🔔 Constructed ${allNotifications.length} notifications for user ${userId} (${dismissedIds.size} were filtered out)`);
         
         res.json({ success: true, data: allNotifications });
         
