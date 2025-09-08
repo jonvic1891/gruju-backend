@@ -2590,6 +2590,12 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                     cost: processedCost
                 };
                 
+                console.log('🏢 Club creation check for:', { 
+                    website_url: clubData.website_url, 
+                    location: clubData.location, 
+                    activity_type: clubData.activity_type 
+                });
+                
                 // Check if club already exists with website_url, location, and activity_type (improved deduplication)
                 const existingClub = await client.query(`
                     SELECT id FROM clubs 
@@ -2606,7 +2612,7 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                     
                     // Get child age for tracking
                     const childAge = await client.query(
-                        'SELECT age FROM children WHERE id = $1', [childInternalId]
+                        'SELECT age FROM children WHERE id = $1', [childId]
                     );
                     const currentChildAge = childAge.rows.length > 0 ? childAge.rows[0].age : null;
                     
@@ -2640,7 +2646,7 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                     
                     // Get child age for tracking
                     const childAge = await client.query(
-                        'SELECT age FROM children WHERE id = $1', [childInternalId]
+                        'SELECT age FROM children WHERE id = $1', [childId]
                     );
                     const currentChildAge = childAge.rows.length > 0 ? childAge.rows[0].age : null;
                     
@@ -2686,7 +2692,7 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                 
                 // Record detailed usage in club_usage table with actual activity start date
                 try {
-                    const childAge = await client.query('SELECT age FROM children WHERE id = $1', [childInternalId]);
+                    const childAge = await client.query('SELECT age FROM children WHERE id = $1', [childId]);
                     const currentChildAge = childAge.rows.length > 0 ? childAge.rows[0].age : null;
                     
                     await client.query(`
@@ -2695,7 +2701,7 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                         ON CONFLICT (club_id, activity_id, child_id, activity_start_date) DO UPDATE SET
                             child_age = EXCLUDED.child_age,
                             usage_date = EXCLUDED.usage_date
-                    `, [clubId, activityResult.rows[0].id, childInternalId, currentChildAge, start_date]);
+                    `, [clubId, result.rows[0].id, childId, currentChildAge, start_date]);
                     
                     console.log('📊 Recorded club usage for tracking with activity date:', start_date);
                 } catch (usageError) {

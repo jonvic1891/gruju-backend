@@ -1152,15 +1152,29 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           setAutoNotifyNewConnections(draft.autoNotifyNewConnections || false);
           setSelectedConnectedChildren(draft.selectedConnectedChildren || []);
           
-          // Apply the selected club data to the appropriate field
+          // Apply the selected club data - set the requested field plus location and activity_type
           const fieldType = draft.fieldTypeForReturn;
-          if (fieldType === 'location' && clubData.location) {
-            setNewActivity(prev => ({...prev, location: clubData.location}));
-          } else if (fieldType === 'website_url' && clubData.website_url) {
-            setNewActivity(prev => ({...prev, website_url: clubData.website_url}));
+          const updates: any = {};
+          
+          // Always set location and activity_type from club data
+          if (clubData.location) {
+            updates.location = clubData.location;
+          }
+          if (clubData.activity_type) {
+            updates.activity_type = clubData.activity_type;
           }
           
-          console.log('✅ Applied club data to field:', fieldType, clubData);
+          // Set the specific field that was browsed for
+          if (fieldType === 'website_url' && clubData.website_url) {
+            updates.website_url = clubData.website_url;
+          }
+          
+          // Apply all updates at once
+          if (Object.keys(updates).length > 0) {
+            setNewActivity(prev => ({...prev, ...updates}));
+          }
+          
+          console.log('✅ Applied club data:', { fieldType, updates, clubData });
           
           // Clean up
           localStorage.removeItem(draftKey);

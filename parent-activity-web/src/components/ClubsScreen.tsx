@@ -107,7 +107,8 @@ const ClubsScreen: React.FC = () => {
         id: club.id,
         name: club.name,
         location: club.location || '',
-        website_url: club.website_url || ''
+        website_url: club.website_url || '',
+        activity_type: club.activity_type || ''
       };
       
       console.log('🎯 Selecting club for activity creation:', clubData);
