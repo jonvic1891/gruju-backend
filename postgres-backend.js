@@ -6639,8 +6639,12 @@ app.post('/api/admin/cleanup-pending-invitations', authenticateToken, async (req
     }
 });
 
-// Temporary public endpoint to update club location (REMOVE AFTER USE)
-app.put('/api/temp-update-club-location', async (req, res) => {
+// Admin endpoint to update club location
+app.put('/api/admin/update-club-location', authenticateToken, async (req, res) => {
+    // Check if user is admin
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ success: false, error: 'Admin access required' });
+    }
     try {
         const { website_url, location } = req.body;
         
