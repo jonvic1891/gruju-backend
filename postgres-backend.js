@@ -2320,7 +2320,7 @@ app.put('/api/activities/:activityId', authenticateToken, async (req, res) => {
     console.log(`🚀 PUT /api/activities/${req.params.activityId} - Direct endpoint hit`);
     try {
         const { activityId } = req.params;
-        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared } = req.body;
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, activity_type } = req.body;
         
         const client = await pool.connect();
         
@@ -2351,16 +2351,13 @@ app.put('/api/activities/:activityId', authenticateToken, async (req, res) => {
                 const processedIsShared = is_shared !== undefined ? is_shared : true;
                 
                 const createResult = await client.query(
-                    `INSERT INTO activities (uuid, child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at)
-                     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
-                     RETURNING id, uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at`,
-                    [childCheck.rows[0].id, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, processedAutoNotify, processedIsShared]
+                    `INSERT INTO activities (uuid, child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, activity_type, created_at, updated_at)
+                     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+                     RETURNING id, uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, activity_type, created_at, updated_at`,
+                    [childCheck.rows[0].id, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, processedAutoNotify, processedIsShared, activity_type || null]
                 );
                 
                 console.log('🚨 PUT ENDPOINT: Activity created, checking club logic');
-                
-                // Add club logic (extract activity_type from request body if it exists)
-                const { activity_type } = req.body;
                 console.log('🔍 CLUB DEBUG PUT: Checking club creation conditions:');
                 console.log('   website_url:', website_url, 'truthy:', !!website_url, 'trimmed:', website_url?.trim());
                 console.log('   activity_type:', activity_type, 'truthy:', !!activity_type, 'trimmed:', activity_type?.trim());
