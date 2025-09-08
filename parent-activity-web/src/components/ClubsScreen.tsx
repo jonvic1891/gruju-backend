@@ -263,7 +263,7 @@ const ClubsScreen: React.FC = () => {
                   )}
                   {club.usage_count && club.usage_count > 0 && (
                     <span className="club-detail">
-                      👥 Used by {club.usage_count} {club.usage_count === 1 ? 'family' : 'families'}
+                      👥 {club.usage_count} {club.usage_count === 1 ? 'booking' : 'bookings'} (6 months)
                     </span>
                   )}
                   {club.min_child_age && club.max_child_age && (

@@ -720,6 +720,7 @@ async function runMigrations() {
                     child_id INTEGER NOT NULL REFERENCES children(id),
                     child_age INTEGER,
                     usage_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                    activity_start_date DATE NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(club_id, activity_id)
                 )
@@ -732,10 +733,38 @@ async function runMigrations() {
             await client.query(`
                 CREATE INDEX IF NOT EXISTS idx_club_usage_date ON club_usage(usage_date)
             `);
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_club_usage_activity_date ON club_usage(activity_start_date)
+            `);
             
             console.log('✅ Migration 24: Created club_usage table for tracking usage history');
         } catch (error) {
             console.log('ℹ️ Migration 24: Could not create club_usage table:', error.message);
+        }
+
+        // Migration 25: Fix club_usage table to properly track activity dates for time-frame analysis
+        try {
+            // Add activity_start_date column if it doesn't exist
+            await client.query(`
+                ALTER TABLE club_usage 
+                ADD COLUMN IF NOT EXISTS activity_start_date DATE
+            `);
+            
+            // Drop the unique constraint that prevents tracking multiple sessions
+            await client.query(`
+                ALTER TABLE club_usage 
+                DROP CONSTRAINT IF EXISTS club_usage_club_id_activity_id_key
+            `);
+            
+            // Add new constraint that allows multiple entries but prevents exact duplicates
+            await client.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_club_usage_unique_entry 
+                ON club_usage (club_id, activity_id, child_id, activity_start_date)
+            `);
+            
+            console.log('✅ Migration 25: Fixed club_usage table for proper time-frame tracking');
+        } catch (error) {
+            console.log('ℹ️ Migration 25: Could not fix club_usage table:', error.message);
         }
         
     } catch (error) {
@@ -2655,20 +2684,20 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                     }
                 }
                 
-                // Record detailed usage in club_usage table
+                // Record detailed usage in club_usage table with actual activity start date
                 try {
                     const childAge = await client.query('SELECT age FROM children WHERE id = $1', [childInternalId]);
                     const currentChildAge = childAge.rows.length > 0 ? childAge.rows[0].age : null;
                     
                     await client.query(`
-                        INSERT INTO club_usage (club_id, activity_id, child_id, child_age, usage_date)
-                        VALUES ($1, $2, $3, $4, CURRENT_DATE)
-                        ON CONFLICT (club_id, activity_id) DO UPDATE SET
+                        INSERT INTO club_usage (club_id, activity_id, child_id, child_age, usage_date, activity_start_date)
+                        VALUES ($1, $2, $3, $4, CURRENT_DATE, $5)
+                        ON CONFLICT (club_id, activity_id, child_id, activity_start_date) DO UPDATE SET
                             child_age = EXCLUDED.child_age,
                             usage_date = EXCLUDED.usage_date
-                    `, [clubId, activityResult.rows[0].id, childInternalId, currentChildAge]);
+                    `, [clubId, activityResult.rows[0].id, childInternalId, currentChildAge, start_date]);
                     
-                    console.log('📊 Recorded club usage for tracking');
+                    console.log('📊 Recorded club usage for tracking with activity date:', start_date);
                 } catch (usageError) {
                     console.error('⚠️ Error recording club usage:', usageError);
                 }
@@ -6825,10 +6854,25 @@ app.get('/api/clubs', authenticateToken, async (req, res) => {
     try {
         const { activity_type, search, location } = req.query;
         
-        let query = `SELECT id, name, description, website_url, activity_type, location, cost, 
-                     website_title, website_description, website_favicon, metadata_fetched_at, created_at,
-                     usage_count, first_used_date, last_used_date, min_child_age, max_child_age 
-                     FROM clubs`;
+        // Updated query to calculate 6-month usage from actual activity dates
+        let query = `
+            SELECT c.id, c.name, c.description, c.website_url, c.activity_type, c.location, c.cost, 
+                   c.website_title, c.website_description, c.website_favicon, c.metadata_fetched_at, c.created_at,
+                   c.min_child_age, c.max_child_age,
+                   COALESCE(usage_stats.usage_count_6m, 0) as usage_count,
+                   usage_stats.first_used_date, 
+                   usage_stats.last_used_date
+            FROM clubs c
+            LEFT JOIN (
+                SELECT 
+                    cu.club_id,
+                    COUNT(DISTINCT cu.activity_id) as usage_count_6m,
+                    MIN(cu.activity_start_date) as first_used_date,
+                    MAX(cu.activity_start_date) as last_used_date
+                FROM club_usage cu 
+                WHERE cu.activity_start_date >= CURRENT_DATE - INTERVAL '6 months'
+                GROUP BY cu.club_id
+            ) usage_stats ON c.id = usage_stats.club_id`;
         let params = [];
         let conditions = [];
         
