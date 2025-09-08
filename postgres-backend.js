@@ -2317,6 +2317,7 @@ app.put('/api/children/:childUuid', authenticateToken, async (req, res) => {
 
 // Update endpoint that frontend expects - PUT /api/activities/:uuid (must be before GET route)
 app.put('/api/activities/:activityId', authenticateToken, async (req, res) => {
+    console.log(`🚀 PUT /api/activities/${req.params.activityId} - Direct endpoint hit`);
     try {
         const { activityId } = req.params;
         const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared } = req.body;
@@ -2628,6 +2629,7 @@ function getDateForWeekday(currentDate, targetDay) {
 }
 
 app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
+    console.log(`🚀 POST /api/activities/${req.params.childId} - Direct endpoint hit`);
     console.log('🚨 ACTIVITY CREATION ENDPOINT HIT!');
     console.log('🚨 Child ID:', req.params.childId);
     console.log('🚨 User ID:', req.user?.id);
