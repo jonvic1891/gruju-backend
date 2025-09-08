@@ -7,7 +7,7 @@ async function testClubIncrement() {
         // Login as roberts10@example.com (has Emilia 10)
         console.log('🔐 Logging in...');
         const loginResponse = await axios.post(`${BASE_URL}/api/auth/login`, {
-            email: 'roberts10@example.com',
+            email: 'johnson@example.com',
             password: 'Password123!'
         });
         

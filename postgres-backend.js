@@ -135,13 +135,10 @@ app.use(cors({
     credentials: true
 }));
 
-// Router-level debugging - log all PUT requests to activities endpoint
+// Router-level debugging - log PUT requests only
 app.use((req, res, next) => {
-    if (req.method === 'PUT' && req.url.includes('/api/activities/')) {
-        console.log('🌐 ROUTER DEBUG: PUT request to activities endpoint');
-        console.log('   URL:', req.url);
-        console.log('   Method:', req.method);
-        console.log('   User-Agent:', req.headers['user-agent']?.substring(0, 50));
+    if (req.method === 'PUT') {
+        console.log(`🌐 PUT REQUEST: ${req.url}`);
     }
     next();
 });
