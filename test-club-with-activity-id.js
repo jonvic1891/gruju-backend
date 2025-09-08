@@ -11,8 +11,8 @@ async function testClubWithActivityId() {
             "activity_type": "Sports",
             "location": "Test Location",
             "child_age": 8,
-            "activity_start_date": "2025-09-20",
-            "activity_id": 12345
+            "activity_start_date": "2025-09-20"
+            // No activity_id - testing without it
         }, {
             headers: { 
                 'Authorization': `Bearer ${token}`,

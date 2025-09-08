@@ -2214,7 +2214,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 location: activityData.location || undefined,
                 child_age: child.age || undefined,
                 activity_start_date: activityData.start_date,
-                activity_id: response.data?.id
+                activity_uuid: response.data?.data?.uuid
               });
               
               console.log('✅ Club usage incremented successfully');

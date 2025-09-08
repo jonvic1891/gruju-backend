@@ -7338,13 +7338,25 @@ app.get('/api/clubs', authenticateToken, async (req, res) => {
 // Increment club usage and update metadata
 app.post('/api/clubs/increment-usage', authenticateToken, async (req, res) => {
     try {
-        const { website_url, activity_type, location, child_age, activity_start_date, activity_id } = req.body;
+        const { website_url, activity_type, location, child_age, activity_start_date, activity_id, activity_uuid } = req.body;
         
         if (!website_url || !activity_type) {
             return res.status(400).json({ success: false, error: 'website_url and activity_type are required' });
         }
 
         const client = await pool.connect();
+        
+        // Convert activity_uuid to activity_id if needed
+        let resolvedActivityId = activity_id;
+        if (activity_uuid && !activity_id) {
+            const activityQuery = await client.query('SELECT id FROM activities WHERE uuid = $1', [activity_uuid]);
+            if (activityQuery.rows.length > 0) {
+                resolvedActivityId = activityQuery.rows[0].id;
+                console.log('🔄 Converted activity UUID to ID:', { uuid: activity_uuid, id: resolvedActivityId });
+            } else {
+                console.warn('⚠️ Activity UUID not found:', activity_uuid);
+            }
+        }
         
         try {
             // Find or create club
@@ -7396,17 +7408,21 @@ app.post('/api/clubs/increment-usage', authenticateToken, async (req, res) => {
             // Create usage record (this will increment the count via the existing query logic)
             // Check if this activity_id already has a usage record for this club to avoid duplicates
             let usageResult = { rowCount: 0 };
-            if (activity_id) {
+            if (resolvedActivityId) {
                 const existingUsage = await client.query(`
                     SELECT id FROM club_usage WHERE club_id = $1 AND activity_id = $2
-                `, [clubId, activity_id]);
+                `, [clubId, resolvedActivityId]);
                 
                 if (existingUsage.rows.length === 0) {
                     usageResult = await client.query(`
                         INSERT INTO club_usage (club_id, activity_id, child_id, child_age, usage_date, activity_start_date)
                         VALUES ($1, $2, NULL, $3, CURRENT_DATE, $4)
                         RETURNING *
-                    `, [clubId, activity_id, child_age, activity_start_date || new Date().toISOString().split('T')[0]]);
+                    `, [clubId, resolvedActivityId, child_age, activity_start_date || new Date().toISOString().split('T')[0]]);
+                    
+                    console.log('✅ Inserted club usage record:', { club_id: clubId, activity_id: resolvedActivityId });
+                } else {
+                    console.log('ℹ️ Club usage record already exists for this activity');
                 }
             } else {
                 // If no activity_id, we need to generate a placeholder or skip this insert

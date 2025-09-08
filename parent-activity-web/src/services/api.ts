@@ -662,7 +662,7 @@ class ApiService {
     location?: string;
     child_age?: number;
     activity_start_date?: string;
-    activity_id?: number;
+    activity_uuid?: string;
   }): Promise<ApiResponse<any>> {
     return this.request('post', '/api/clubs/increment-usage', data);
   }
