@@ -137,12 +137,19 @@ app.use(cors({
 
 app.use(express.json());
 
-// Router-level debugging - log all activity requests (after body parsing)
+// Router-level debugging - log ALL requests with activity-related data
 app.use((req, res, next) => {
-    if (req.url.includes('/api/activities') && (req.method === 'PUT' || req.method === 'POST')) {
-        console.log(`🎯 ACTIVITY REQUEST: ${req.method} ${req.url}`);
-        if (req.body && (req.body.website_url || req.body.activity_type)) {
-            console.log(`   📊 Body: website_url=${req.body.website_url}, activity_type=${req.body.activity_type}`);
+    // Log any request that might create activities
+    if (req.method === 'POST' || req.method === 'PUT') {
+        if (req.url.includes('/api/activities') || 
+            (req.body && (req.body.name || req.body.website_url || req.body.activity_type))) {
+            console.log(`🔥 POTENTIAL ACTIVITY REQUEST: ${req.method} ${req.url}`);
+            if (req.body) {
+                console.log(`   📋 Body keys: ${Object.keys(req.body).join(', ')}`);
+                if (req.body.name) console.log(`   📝 Name: ${req.body.name}`);
+                if (req.body.website_url) console.log(`   🌐 URL: ${req.body.website_url}`);
+                if (req.body.activity_type) console.log(`   🎯 Type: ${req.body.activity_type}`);
+            }
         }
     }
     next();
@@ -3167,8 +3174,9 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
                     const existingClub = await client.query(`
                         SELECT id FROM clubs 
                         WHERE COALESCE(website_url, '') = COALESCE($1, '') 
-                        AND activity_type = $2
-                    `, [website_url.trim(), activity_type.trim()]);
+                        AND COALESCE(location, '') = COALESCE($2, '') 
+                        AND activity_type = $3
+                    `, [website_url.trim(), location || '', activity_type.trim()]);
                     
                     let clubId;
                     if (existingClub.rows.length === 0) {
