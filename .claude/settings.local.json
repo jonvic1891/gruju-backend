@@ -45,7 +45,8 @@
       "Bash(chmod:*)",
       "Read(//home/jonathan/**)",
       "Read(//home/**)",
-      "Bash(heroku pg:psql:*)"
+      "Bash(heroku pg:psql:*)",
+      "Bash(firebase use:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

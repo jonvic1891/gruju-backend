@@ -7394,12 +7394,28 @@ app.post('/api/clubs/increment-usage', authenticateToken, async (req, res) => {
             }
             
             // Create usage record (this will increment the count via the existing query logic)
-            const usageResult = await client.query(`
-                INSERT INTO club_usage (club_id, activity_id, usage_date, activity_start_date)
-                VALUES ($1, $2, CURRENT_DATE, $3)
-                ON CONFLICT (club_id, activity_id) DO NOTHING
-                RETURNING *
-            `, [clubId, activity_id || null, activity_start_date || new Date().toISOString().split('T')[0]]);
+            // Check if this activity_id already has a usage record for this club to avoid duplicates
+            let usageResult = { rowCount: 0 };
+            if (activity_id) {
+                const existingUsage = await client.query(`
+                    SELECT id FROM club_usage WHERE club_id = $1 AND activity_id = $2
+                `, [clubId, activity_id]);
+                
+                if (existingUsage.rows.length === 0) {
+                    usageResult = await client.query(`
+                        INSERT INTO club_usage (club_id, activity_id, usage_date, activity_start_date)
+                        VALUES ($1, $2, CURRENT_DATE, $3)
+                        RETURNING *
+                    `, [clubId, activity_id, activity_start_date || new Date().toISOString().split('T')[0]]);
+                }
+            } else {
+                // If no activity_id, just create a usage record with unique timestamp
+                usageResult = await client.query(`
+                    INSERT INTO club_usage (club_id, activity_id, usage_date, activity_start_date)
+                    VALUES ($1, NULL, CURRENT_DATE, $2)
+                    RETURNING *
+                `, [clubId, activity_start_date || new Date().toISOString().split('T')[0]]);
+            }
             
             console.log('✅ Club usage incremented:', { club_id: clubId, inserted: usageResult.rowCount > 0 });
             

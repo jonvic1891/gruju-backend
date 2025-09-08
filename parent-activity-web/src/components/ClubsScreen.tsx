@@ -75,20 +75,22 @@ const ClubsScreen: React.FC = () => {
     try {
       setLoading(true);
       
-      console.log('🏢 Loading clubs via ApiService:', { selectedType, searchTerm });
+      console.log('🏢 Loading clubs via ApiService:', { selectedType, searchTerm, locationFilter });
       
       const response = await apiService.getClubs(selectedType, searchTerm, locationFilter);
       
       if (response.success) {
-        setClubs(response.data || []);
-        console.log('✅ Loaded', response.data?.length || 0, 'clubs from ApiService');
+        const clubsData = response.data || [];
+        setClubs(clubsData);
+        console.log('✅ Loaded', clubsData.length, 'clubs from ApiService');
       } else {
+        console.error('❌ API response error:', response.error);
         throw new Error(response.error || 'Failed to load clubs');
       }
       
     } catch (error) {
-      console.error('Error loading clubs:', error);
-      // Fall back to empty array on error
+      console.error('❌ Error loading clubs:', error);
+      // Fall back to empty array on error but show user-friendly message
       setClubs([]);
     } finally {
       setLoading(false);
@@ -194,7 +196,13 @@ const ClubsScreen: React.FC = () => {
       </div>
 
       <div className="clubs-grid">
-        {clubs.length === 0 ? (
+        {loading ? (
+          <div className="no-clubs">
+            <div className="no-clubs-icon">⏳</div>
+            <h3>Loading clubs...</h3>
+            <p>Please wait while we fetch the latest club information.</p>
+          </div>
+        ) : clubs.length === 0 ? (
           <div className="no-clubs">
             <div className="no-clubs-icon">🔍</div>
             <h3>No clubs found</h3>

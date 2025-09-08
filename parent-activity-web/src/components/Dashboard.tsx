@@ -219,6 +219,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
     } else if (path === '/calendar') {
       setActiveTab('calendar');
     } else if (path === '/clubs') {
+      console.log('📍 Setting activeTab to clubs for /clubs path');
       setActiveTab('clubs');
     } else if (path === '/connections') {
       setActiveTab('connections');
@@ -438,7 +439,18 @@ const Dashboard: React.FC<DashboardProps> = ({ initialTab = 'children' }) => {
         />;
       case 'clubs':
         console.log('🏢 Rendering ClubsScreen component');
-        return <ClubsScreen />;
+        try {
+          return <ClubsScreen />;
+        } catch (error) {
+          console.error('❌ Error rendering ClubsScreen:', error);
+          return (
+            <div style={{ padding: '20px', textAlign: 'center', color: 'red' }}>
+              <h2>❌ Error Loading Clubs</h2>
+              <p>There was an error loading the clubs screen. Please try refreshing the page.</p>
+              <button onClick={() => window.location.reload()}>Reload Page</button>
+            </div>
+          );
+        }
       case 'connections':
         return <ConnectionsScreen 
           cameFromActivity={cameFromActivity}
