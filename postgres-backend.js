@@ -2940,6 +2940,10 @@ app.get('/api/calendar/activities', authenticateToken, async (req, res) => {
 
 // Update activity
 app.put('/api/activities/update/:activityId', authenticateToken, async (req, res) => {
+    console.log('🚨 ACTIVITY UPDATE ENDPOINT HIT!');
+    console.log('🚨 Activity ID:', req.params.activityId);
+    console.log('🚨 User ID:', req.user?.id);
+    console.log('🚨 Request body keys:', Object.keys(req.body || {}));
     try {
         const { activityId } = req.params;
         const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants } = req.body;
