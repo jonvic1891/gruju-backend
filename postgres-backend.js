@@ -2365,9 +2365,19 @@ app.put('/api/activities/:activityId', authenticateToken, async (req, res) => {
                 );
                 
                 console.log('🚨 PUT ENDPOINT: Activity created, checking club logic');
-                console.log('🔍 CLUB DEBUG PUT: Checking club creation conditions:');
-                console.log('   website_url:', website_url, 'truthy:', !!website_url, 'trimmed:', website_url?.trim());
-                console.log('   activity_type:', activity_type, 'truthy:', !!activity_type, 'trimmed:', activity_type?.trim());
+                
+                // Call club usage function 
+                const activityDbId = createResult.rows[0].id;
+                await createOrUpdateClubUsage(
+                    client, 
+                    activityDbId, 
+                    name, 
+                    website_url, 
+                    activity_type, 
+                    location, 
+                    start_date, 
+                    processedCost
+                );
                 
                 // Create or update club record if activity has website URL and activity type
                 if (website_url && website_url.trim() && activity_type && activity_type.trim()) {
@@ -6251,6 +6261,54 @@ app.post('/api/activity-templates/:templateUuid/use', authenticateToken, async (
 });
 
 // Start server
+async function createOrUpdateClubUsage(client, activityId, name, website_url, activity_type, location, start_date, cost) {
+    console.log('🏢 Creating/updating club usage for:', { name, website_url, activity_type, location });
+    
+    if (!website_url || !website_url.trim() || !activity_type || !activity_type.trim()) {
+        console.log('❌ Missing website_url or activity_type - skipping club logic');
+        return;
+    }
+
+    try {
+        // Find or create club record
+        const existingClub = await client.query(`
+            SELECT id FROM clubs 
+            WHERE COALESCE(website_url, '') = COALESCE($1, '') 
+            AND COALESCE(location, '') = COALESCE($2, '') 
+            AND activity_type = $3
+        `, [website_url.trim(), location || '', activity_type.trim()]);
+        
+        let clubId;
+        if (existingClub.rows.length === 0) {
+            // Create new club
+            console.log('🏢 Creating new club record');
+            const newClubResult = await client.query(`
+                INSERT INTO clubs (name, website_url, activity_type, location, cost, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+                RETURNING id
+            `, [name.trim(), website_url.trim(), activity_type.trim(), location || null, cost || null]);
+            clubId = newClubResult.rows[0].id;
+            console.log('✅ Created club record:', name.trim());
+        } else {
+            clubId = existingClub.rows[0].id;
+            console.log('✅ Found existing club:', clubId);
+        }
+        
+        // Create or update club_usage record
+        await client.query(`
+            INSERT INTO club_usage (club_id, activity_id, usage_date, activity_start_date)
+            VALUES ($1, $2, CURRENT_DATE, $3)
+            ON CONFLICT (club_id, activity_id) DO UPDATE SET
+                usage_date = CURRENT_DATE,
+                activity_start_date = EXCLUDED.activity_start_date
+        `, [clubId, activityId, start_date]);
+        console.log('✅ Created/updated club_usage record');
+        
+    } catch (error) {
+        console.error('❌ Club usage error:', error);
+    }
+}
+
 async function startServer() {
     try {
         await initializeDatabase();
