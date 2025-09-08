@@ -7431,10 +7431,35 @@ app.post('/api/clubs/increment-usage', authenticateToken, async (req, res) => {
                 usageResult = { rowCount: 1 }; // Mark as successful
             }
             
-            console.log('✅ Club usage incremented:', { club_id: clubId, inserted: usageResult.rowCount > 0 });
+            // Get the current usage count to return in response
+            const usageCountQuery = await client.query(`
+                SELECT COUNT(DISTINCT cu.activity_id) as usage_count
+                FROM club_usage cu
+                WHERE cu.club_id = $1
+                AND cu.activity_start_date >= CURRENT_DATE - INTERVAL '6 months'
+            `, [clubId]);
+            
+            const newUsageCount = parseInt(usageCountQuery.rows[0]?.usage_count || 0);
+            const oldUsageCount = resolvedActivityId && usageResult.rowCount > 0 ? newUsageCount - 1 : newUsageCount;
+            
+            console.log('✅ Club usage incremented:', { 
+                club_id: clubId, 
+                inserted: usageResult.rowCount > 0,
+                old_count: oldUsageCount,
+                new_count: newUsageCount,
+                activity_id: resolvedActivityId 
+            });
             
             client.release();
-            res.json({ success: true, club_id: clubId, usage_incremented: usageResult.rowCount > 0 });
+            res.json({ 
+                success: true, 
+                club_id: clubId, 
+                usage_incremented: usageResult.rowCount > 0,
+                old_usage_count: oldUsageCount,
+                new_usage_count: newUsageCount,
+                activity_id: resolvedActivityId,
+                activity_uuid: activity_uuid
+            });
             
         } catch (error) {
             client.release();
