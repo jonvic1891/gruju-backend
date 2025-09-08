@@ -2340,9 +2340,112 @@ app.put('/api/activities/:activityId', authenticateToken, async (req, res) => {
                 const createResult = await client.query(
                     `INSERT INTO activities (uuid, child_id, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at)
                      VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
-                     RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at`,
+                     RETURNING id, uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, auto_notify_new_connections, is_shared, created_at, updated_at`,
                     [childCheck.rows[0].id, name.trim(), description || null, start_date, processedEndDate, processedStartTime, processedEndTime, location || null, website_url || null, processedCost, processedMaxParticipants, processedAutoNotify, processedIsShared]
                 );
+                
+                console.log('🚨 PUT ENDPOINT: Activity created, checking club logic');
+                
+                // Add club logic (extract activity_type from request body if it exists)
+                const { activity_type } = req.body;
+                console.log('🔍 CLUB DEBUG PUT: Checking club creation conditions:');
+                console.log('   website_url:', website_url, 'truthy:', !!website_url, 'trimmed:', website_url?.trim());
+                console.log('   activity_type:', activity_type, 'truthy:', !!activity_type, 'trimmed:', activity_type?.trim());
+                
+                // Create or update club record if activity has website URL and activity type
+                if (website_url && website_url.trim() && activity_type && activity_type.trim()) {
+                    console.log('✅ CLUB DEBUG PUT: Conditions met, entering club logic');
+                    try {
+                        const clubData = {
+                            name: name.trim(),
+                            description: description || null,
+                            website_url: website_url.trim(),
+                            activity_type: activity_type.trim(),
+                            location: location || null,
+                            cost: processedCost
+                        };
+                        
+                        console.log('🏢 PUT Club creation check for:', { 
+                            website_url: clubData.website_url, 
+                            location: clubData.location, 
+                            activity_type: clubData.activity_type 
+                        });
+                        
+                        // Check if club already exists
+                        const existingClub = await client.query(`
+                            SELECT id FROM clubs 
+                            WHERE COALESCE(website_url, '') = COALESCE($1, '') 
+                            AND COALESCE(location, '') = COALESCE($2, '') 
+                            AND activity_type = $3
+                        `, [clubData.website_url, clubData.location, clubData.activity_type]);
+                        
+                        let clubId;
+                        if (existingClub.rows.length === 0) {
+                            // Fetch website metadata
+                            const metadata = await fetchWebsiteMetadata(clubData.website_url);
+                            
+                            // Get child age for tracking
+                            const childAge = await client.query('SELECT age FROM children WHERE id = $1', [childCheck.rows[0].id]);
+                            const currentChildAge = childAge.rows.length > 0 ? childAge.rows[0].age : null;
+                            
+                            // Create new club record
+                            const newClubResult = await client.query(`
+                                INSERT INTO clubs (
+                                    name, description, website_url, activity_type, location, cost, 
+                                    website_title, website_description, website_favicon, metadata_fetched_at,
+                                    usage_count, first_used_date, last_used_date, 
+                                    min_child_age, max_child_age, created_at, updated_at
+                                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), 1, CURRENT_DATE, CURRENT_DATE, $10, $10, NOW(), NOW())
+                                RETURNING id
+                            `, [
+                                clubData.name, clubData.description, clubData.website_url, clubData.activity_type, 
+                                clubData.location, clubData.cost, metadata.title, metadata.description, metadata.favicon,
+                                currentChildAge
+                            ]);
+                            clubId = newClubResult.rows[0].id;
+                            console.log('✅ PUT Created club record:', clubData.name, 'for', clubData.activity_type);
+                        } else {
+                            clubId = existingClub.rows[0].id;
+                            
+                            // Update usage stats
+                            const childAge = await client.query('SELECT age FROM children WHERE id = $1', [childCheck.rows[0].id]);
+                            const currentChildAge = childAge.rows.length > 0 ? childAge.rows[0].age : null;
+                            
+                            await client.query(`
+                                UPDATE clubs SET 
+                                    name = $1, description = $2, location = $3, cost = $4, updated_at = NOW(),
+                                    usage_count = usage_count + 1, last_used_date = CURRENT_DATE,
+                                    first_used_date = COALESCE(first_used_date, CURRENT_DATE)
+                                WHERE id = $5
+                            `, [clubData.name, clubData.description, clubData.location, clubData.cost, clubId]);
+                            console.log('✅ PUT Updated club usage:', clubData.name, 'for', clubData.activity_type);
+                        }
+                        
+                        // Record detailed usage in club_usage table
+                        try {
+                            const childAge = await client.query('SELECT age FROM children WHERE id = $1', [childCheck.rows[0].id]);
+                            const currentChildAge = childAge.rows.length > 0 ? childAge.rows[0].age : null;
+                            
+                            await client.query(`
+                                INSERT INTO club_usage (club_id, activity_id, child_id, child_age, usage_date, activity_start_date)
+                                VALUES ($1, $2, $3, $4, CURRENT_DATE, $5)
+                                ON CONFLICT (club_id, activity_id, child_id, activity_start_date) DO UPDATE SET
+                                    child_age = EXCLUDED.child_age,
+                                    usage_date = EXCLUDED.usage_date
+                            `, [clubId, createResult.rows[0].id, childCheck.rows[0].id, currentChildAge, start_date]);
+                            
+                            console.log('📊 PUT Recorded club usage for tracking');
+                        } catch (usageError) {
+                            console.error('⚠️ PUT Error recording club usage:', usageError);
+                        }
+                    } catch (clubError) {
+                        console.error('❌ CLUB DEBUG PUT: Error in club creation/update:', clubError);
+                    }
+                } else {
+                    console.log('❌ CLUB DEBUG PUT: Conditions NOT met, skipping club logic');
+                    console.log('   website_url check:', website_url && website_url.trim());
+                    console.log('   activity_type check:', activity_type && activity_type.trim());
+                }
                 
                 client.release();
                 return res.json({ success: true, data: createResult.rows[0] });
