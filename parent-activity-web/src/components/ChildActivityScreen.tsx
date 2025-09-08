@@ -1157,9 +1157,14 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           const updates: any = {};
           
           // Always set location and activity_type from club data
-          if (clubData.location) {
+          // For location: use club location if available, otherwise fall back to user's town_city
+          if (clubData.location && clubData.location.trim()) {
             updates.location = clubData.location;
+          } else if (user?.town_city) {
+            updates.location = user.town_city;
+            console.log('🏠 Club has no location, using user town_city:', user.town_city);
           }
+          
           if (clubData.activity_type) {
             updates.activity_type = clubData.activity_type;
           }
@@ -1225,7 +1230,16 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           type={fieldType === 'website_url' ? 'url' : 'text'}
           placeholder={placeholder}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            const inputValue = e.target.value;
+            onChange(inputValue);
+            
+            // Auto-set location to user's town_city when typing website URL
+            if (fieldType === 'website_url' && inputValue.trim() && !newActivity.location.trim() && user?.town_city) {
+              console.log('🌐 Website URL detected, auto-setting location to user town_city:', user.town_city);
+              setNewActivity(prev => ({...prev, location: user.town_city || ''}));
+            }
+          }}
           className={className}
         />
       );
@@ -1238,7 +1252,16 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             type={fieldType === 'website_url' ? 'url' : 'text'}
             placeholder={placeholder}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => {
+              const inputValue = e.target.value;
+              onChange(inputValue);
+              
+              // Auto-set location to user's town_city when typing website URL
+              if (fieldType === 'website_url' && inputValue.trim() && !newActivity.location.trim() && user?.town_city) {
+                console.log('🌐 Website URL detected, auto-setting location to user town_city:', user.town_city);
+                setNewActivity(prev => ({...prev, location: user.town_city || ''}));
+              }
+            }}
             className={`${className} split-text-input`}
           />
           <button

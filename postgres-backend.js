@@ -6639,6 +6639,38 @@ app.post('/api/admin/cleanup-pending-invitations', authenticateToken, async (req
     }
 });
 
+// Admin endpoint to update club location
+app.put('/api/admin/update-club-location', authenticateToken, async (req, res) => {
+    try {
+        const { website_url, location } = req.body;
+        
+        if (!website_url || !location) {
+            return res.status(400).json({ success: false, error: 'website_url and location are required' });
+        }
+        
+        const client = await pool.connect();
+        
+        // Update club location
+        const result = await client.query(
+            'UPDATE clubs SET location = $1, updated_at = NOW() WHERE website_url = $2 AND (location IS NULL OR location = \'\') RETURNING *',
+            [location, website_url]
+        );
+        
+        client.release();
+        
+        console.log(`🔧 Updated ${result.rows.length} club records with location:`, location);
+        
+        res.json({
+            success: true,
+            message: `Updated ${result.rows.length} club records`,
+            updated: result.rows
+        });
+    } catch (error) {
+        console.error('Error updating club location:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Temporary cleanup endpoint for testing
 app.delete('/api/admin/cleanup-recent-requests', authenticateToken, async (req, res) => {
     try {
