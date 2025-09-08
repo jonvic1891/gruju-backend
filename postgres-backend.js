@@ -3060,7 +3060,7 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
     console.log('🚨 Request body keys:', Object.keys(req.body || {}));
     try {
         const { activityId } = req.params;
-        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants } = req.body;
+        const { name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, activity_type } = req.body;
         
         console.log('🔍 Update activity request:', {
             activityId,
@@ -3125,6 +3125,7 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
             website_url || null, 
             processedCost, 
             processedMaxParticipants, 
+            activity_type || null,
             activityId
         ];
         
@@ -3138,8 +3139,8 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
             `UPDATE activities SET 
                 name = $1, description = $2, start_date = $3, end_date = $4, 
                 start_time = $5, end_time = $6, location = $7, website_url = $8, 
-                cost = $9, max_participants = $10, updated_at = NOW()
-             WHERE uuid = $11 RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, updated_at`,
+                cost = $9, max_participants = $10, activity_type = $11, updated_at = NOW()
+             WHERE uuid = $12 RETURNING uuid, name, description, start_date, end_date, start_time, end_time, location, website_url, cost, max_participants, activity_type, updated_at`,
             updateParams
         );
         
@@ -3147,6 +3148,60 @@ app.put('/api/activities/update/:activityId', authenticateToken, async (req, res
             rowsAffected: result.rowCount,
             returningData: result.rows[0]
         });
+        
+        // Add club logic after successful update
+        console.log('🏢 UPDATE ENDPOINT: Activity updated, checking club logic');
+        console.log('🔍 CLUB DEBUG UPDATE: Checking club creation conditions:');
+        console.log('   website_url:', website_url, 'truthy:', !!website_url, 'trimmed:', website_url?.trim());
+        console.log('   activity_type:', activity_type, 'truthy:', !!activity_type, 'trimmed:', activity_type?.trim());
+        
+        if (result.rowCount > 0 && website_url && website_url.trim() && activity_type && activity_type.trim()) {
+            console.log('✅ CLUB DEBUG UPDATE: Conditions met, entering club logic');
+            try {
+                // Get the activity ID for club_usage table
+                const activityIdResult = await client.query('SELECT id FROM activities WHERE uuid = $1', [activityId]);
+                const activityDbId = activityIdResult.rows[0]?.id;
+                
+                if (activityDbId) {
+                    // Find or create club record
+                    const existingClub = await client.query(`
+                        SELECT id FROM clubs 
+                        WHERE COALESCE(website_url, '') = COALESCE($1, '') 
+                        AND activity_type = $2
+                    `, [website_url.trim(), activity_type.trim()]);
+                    
+                    let clubId;
+                    if (existingClub.rows.length === 0) {
+                        // Create new club
+                        console.log('🏢 UPDATE: Creating new club record');
+                        const newClubResult = await client.query(`
+                            INSERT INTO clubs (name, website_url, activity_type, location, cost, created_at, updated_at)
+                            VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+                            RETURNING id
+                        `, [name.trim(), website_url.trim(), activity_type.trim(), location || null, processedCost]);
+                        clubId = newClubResult.rows[0].id;
+                        console.log('✅ UPDATE: Created club record:', name.trim());
+                    } else {
+                        clubId = existingClub.rows[0].id;
+                        console.log('✅ UPDATE: Found existing club:', clubId);
+                    }
+                    
+                    // Create or update club_usage record
+                    await client.query(`
+                        INSERT INTO club_usage (club_id, activity_id, usage_date, activity_start_date)
+                        VALUES ($1, $2, CURRENT_DATE, $3)
+                        ON CONFLICT (club_id, activity_id) DO UPDATE SET
+                            usage_date = CURRENT_DATE,
+                            activity_start_date = EXCLUDED.activity_start_date
+                    `, [clubId, activityDbId, start_date]);
+                    console.log('✅ UPDATE: Created/updated club_usage record');
+                }
+            } catch (clubError) {
+                console.error('❌ UPDATE: Club logic error:', clubError);
+            }
+        } else {
+            console.log('❌ CLUB DEBUG UPDATE: Conditions not met - no club logic executed');
+        }
         
         client.release();
         res.json({ success: true, data: result.rows[0] });
