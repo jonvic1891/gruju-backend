@@ -44,7 +44,8 @@
       "Bash(firebase hosting:sites:create:*)",
       "Bash(chmod:*)",
       "Read(//home/jonathan/**)",
-      "Read(//home/**)"
+      "Read(//home/**)",
+      "Bash(heroku pg:psql:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"
