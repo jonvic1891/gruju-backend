@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ApiService from '../services/api';
 import './ClubsScreen.css';
 
@@ -38,6 +39,7 @@ interface Club {
 }
 
 const ClubsScreen: React.FC = () => {
+  const navigate = useNavigate();
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedType, setSelectedType] = useState<string>('');
@@ -113,9 +115,10 @@ const ClubsScreen: React.FC = () => {
       
       console.log('🎯 Selecting club for activity creation:', clubData);
       
-      // Return to activity creation with club data
+      // Return to activity creation with club data using React Router
       const returnUrlWithData = `${returnUrl}?clubData=${encodeURIComponent(JSON.stringify(clubData))}`;
-      window.location.href = returnUrlWithData;
+      console.log('🔙 Navigating back to:', returnUrlWithData);
+      navigate(returnUrlWithData.replace(window.location.origin, ''));
     } else {
       // Normal browsing mode - open website
       openWebsite(club.website_url);

@@ -2596,6 +2596,8 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                     activity_type: clubData.activity_type 
                 });
                 
+                console.log('🔍 Searching for existing club with exact match...');
+                
                 // Check if club already exists with website_url, location, and activity_type (improved deduplication)
                 const existingClub = await client.query(`
                     SELECT id FROM clubs 
@@ -2603,6 +2605,12 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                     AND COALESCE(location, '') = COALESCE($2, '') 
                     AND activity_type = $3
                 `, [clubData.website_url, clubData.location, clubData.activity_type]);
+                
+                console.log(`🔍 Found ${existingClub.rows.length} matching clubs for:`, {
+                    url: clubData.website_url,
+                    location: clubData.location, 
+                    type: clubData.activity_type
+                });
                 
                 let clubId;
                 if (existingClub.rows.length === 0) {
