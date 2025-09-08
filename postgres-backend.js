@@ -5247,10 +5247,10 @@ app.get('/api/notifications/bell', authenticateToken, async (req, res) => {
         
         // console.log(`🔔 Processing ${invitationsResult.rows.length} pending invitations for user ${userId}`);
         // console.log(`🔔 Sample invitations:`, invitationsResult.rows.slice(0, 3).map(inv => ({
-            activity_name: inv.activity_name,
-            series_id: inv.series_id,
-            status: inv.status
-        })));
+        //     activity_name: inv.activity_name,
+        //     series_id: inv.series_id,
+        //     status: inv.status
+        // })));
         
         invitationsResult.rows.forEach(invitation => {
             const seriesId = invitation.series_id;
