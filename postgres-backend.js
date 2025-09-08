@@ -7335,6 +7335,87 @@ app.get('/api/clubs', authenticateToken, async (req, res) => {
 });
 
 // Manual refresh metadata endpoint for testing
+// Increment club usage and update metadata
+app.post('/api/clubs/increment-usage', authenticateToken, async (req, res) => {
+    try {
+        const { website_url, activity_type, location, child_age, activity_start_date, activity_id } = req.body;
+        
+        if (!website_url || !activity_type) {
+            return res.status(400).json({ success: false, error: 'website_url and activity_type are required' });
+        }
+
+        const client = await pool.connect();
+        
+        try {
+            // Find or create club
+            const existingClub = await client.query(`
+                SELECT id, min_child_age, max_child_age FROM clubs 
+                WHERE COALESCE(website_url, '') = COALESCE($1, '') 
+                AND COALESCE(location, '') = COALESCE($2, '') 
+                AND activity_type = $3
+            `, [website_url.trim(), location || '', activity_type.trim()]);
+            
+            let clubId;
+            if (existingClub.rows.length === 0) {
+                // Create new club
+                const metadata = await fetchWebsiteMetadata(website_url);
+                
+                const newClubResult = await client.query(`
+                    INSERT INTO clubs (
+                        name, website_url, activity_type, location,
+                        website_title, website_description, website_favicon, metadata_fetched_at,
+                        min_child_age, max_child_age, created_at, updated_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $8, NOW(), NOW())
+                    RETURNING id
+                `, [
+                    metadata.title || website_url, website_url.trim(), activity_type.trim(), 
+                    location || null, metadata.title, metadata.description, metadata.favicon, 
+                    child_age || null
+                ]);
+                clubId = newClubResult.rows[0].id;
+                console.log('✅ Created new club:', clubId);
+            } else {
+                clubId = existingClub.rows[0].id;
+                
+                // Update age range if child_age provided
+                if (child_age) {
+                    const currentMin = existingClub.rows[0].min_child_age;
+                    const currentMax = existingClub.rows[0].max_child_age;
+                    const newMin = currentMin ? Math.min(currentMin, child_age) : child_age;
+                    const newMax = currentMax ? Math.max(currentMax, child_age) : child_age;
+                    
+                    await client.query(`
+                        UPDATE clubs SET 
+                            min_child_age = $1, max_child_age = $2, updated_at = NOW()
+                        WHERE id = $3
+                    `, [newMin, newMax, clubId]);
+                    console.log('✅ Updated club age range:', { min: newMin, max: newMax });
+                }
+            }
+            
+            // Create usage record (this will increment the count via the existing query logic)
+            const usageResult = await client.query(`
+                INSERT INTO club_usage (club_id, activity_id, usage_date, activity_start_date)
+                VALUES ($1, $2, CURRENT_DATE, $3)
+                ON CONFLICT (club_id, activity_id) DO NOTHING
+                RETURNING *
+            `, [clubId, activity_id || null, activity_start_date || new Date().toISOString().split('T')[0]]);
+            
+            console.log('✅ Club usage incremented:', { club_id: clubId, inserted: usageResult.rowCount > 0 });
+            
+            client.release();
+            res.json({ success: true, club_id: clubId, usage_incremented: usageResult.rowCount > 0 });
+            
+        } catch (error) {
+            client.release();
+            throw error;
+        }
+    } catch (error) {
+        console.error('❌ Club increment error:', error);
+        res.status(500).json({ success: false, error: 'Failed to increment club usage' });
+    }
+});
+
 app.post('/api/clubs/:clubId/refresh-metadata', authenticateToken, async (req, res) => {
     try {
         const { clubId } = req.params;
