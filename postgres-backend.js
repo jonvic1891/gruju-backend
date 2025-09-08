@@ -2578,8 +2578,13 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
         console.log('🔍 DEBUG: primaryActivity child_uuid:', primaryActivity.child_uuid);
         const createdActivities = [primaryActivity];
         
+        console.log('🔍 CLUB DEBUG: Checking club creation conditions:');
+        console.log('   website_url:', website_url, 'truthy:', !!website_url, 'trimmed:', website_url?.trim());
+        console.log('   activity_type:', activity_type, 'truthy:', !!activity_type, 'trimmed:', activity_type?.trim());
+        
         // Create or update club record if activity has website URL and activity type
         if (website_url && website_url.trim() && activity_type && activity_type.trim()) {
+            console.log('✅ CLUB DEBUG: Conditions met, entering club logic');
             try {
                 const clubData = {
                     name: name.trim(),
@@ -2716,9 +2721,14 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                     console.error('⚠️ Error recording club usage:', usageError);
                 }
             } catch (clubError) {
-                console.error('⚠️ Error creating/updating club record:', clubError);
+                console.error('❌ CLUB DEBUG: Error in club creation/update:', clubError);
+                console.error('❌ CLUB DEBUG: Stack trace:', clubError.stack);
                 // Don't fail the activity creation if club creation fails
             }
+        } else {
+            console.log('❌ CLUB DEBUG: Conditions NOT met, skipping club logic');
+            console.log('   website_url check:', website_url && website_url.trim());
+            console.log('   activity_type check:', activity_type && activity_type.trim());
         }
 
         // Create joint host activities if joint_host_children is provided
