@@ -7360,12 +7360,29 @@ app.post('/api/clubs/increment-usage', authenticateToken, async (req, res) => {
         
         try {
             // Find or create club
+            const searchParams = [website_url.trim(), location || '', activity_type.trim()];
+            console.log('🔍 Searching for club with params:', {
+                website_url: searchParams[0],
+                location: searchParams[1], 
+                activity_type: searchParams[2]
+            });
+            
             const existingClub = await client.query(`
-                SELECT id, min_child_age, max_child_age FROM clubs 
+                SELECT id, min_child_age, max_child_age, website_url, location, activity_type FROM clubs 
                 WHERE COALESCE(website_url, '') = COALESCE($1, '') 
                 AND COALESCE(location, '') = COALESCE($2, '') 
                 AND activity_type = $3
-            `, [website_url.trim(), location || '', activity_type.trim()]);
+            `, searchParams);
+            
+            console.log('🔍 Found', existingClub.rows.length, 'matching clubs');
+            if (existingClub.rows.length > 0) {
+                console.log('🔍 First matching club:', {
+                    id: existingClub.rows[0].id,
+                    website_url: existingClub.rows[0].website_url,
+                    location: existingClub.rows[0].location,
+                    activity_type: existingClub.rows[0].activity_type
+                });
+            }
             
             let clubId;
             if (existingClub.rows.length === 0) {
