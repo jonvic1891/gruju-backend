@@ -5,6 +5,10 @@ export interface User {
   username: string;
   email: string;
   phone: string;
+  address_line_1?: string;
+  town_city?: string;
+  state_province_country?: string;
+  post_code?: string;
   role: 'user' | 'admin' | 'super_admin';
   created_at: string;
   updated_at: string;

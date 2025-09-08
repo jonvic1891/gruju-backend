@@ -6,8 +6,14 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isPendingRegistration: boolean;
+  showAddressModal: boolean;
+  pendingUserData: any;
+  pendingToken: string;
   login: (credentials: LoginRequest) => Promise<{ success: boolean; error?: string }>;
-  register: (userData: RegisterRequest) => Promise<{ success: boolean; error?: string }>;
+  register: (userData: RegisterRequest) => Promise<{ success: boolean; error?: string; user?: any; token?: string }>;
+  completeRegistration: (userData: any, token: string) => void;
+  setShowAddressModal: (show: boolean) => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -21,6 +27,10 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPendingRegistration, setIsPendingRegistration] = useState(false);
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [pendingUserData, setPendingUserData] = useState<any>(null);
+  const [pendingToken, setPendingToken] = useState<string>('');
   const apiService = ApiService.getInstance();
 
   // Enhanced debug logging
@@ -28,6 +38,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     isAuthenticated: !!user,
     isLoading,
+    isPendingRegistration,
+    showAddressModal,
     timestamp: new Date().toISOString()
   });
 
@@ -65,17 +77,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       }
 
-      // Verify the token with the server
-      console.log('checkAuthStatus: Verifying token with server');
-      const response = await apiService.verifyToken();
-      console.log('checkAuthStatus: Token verification response:', response);
+      // Get full profile data from the server
+      console.log('checkAuthStatus: Getting profile data from server');
+      const response = await apiService.getProfile();
+      console.log('checkAuthStatus: Profile response:', response);
       
-      if (response.success && response.data?.user) {
-        console.log('checkAuthStatus: Token verified, setting user:', response.data.user);
-        setUser(response.data.user);
-        localStorage.setItem('userData', JSON.stringify(response.data.user));
+      if (response.success && response.data) {
+        console.log('checkAuthStatus: Got profile data, setting user:', response.data);
+        setUser(response.data);
+        localStorage.setItem('userData', JSON.stringify(response.data));
       } else {
-        console.log('checkAuthStatus: Token invalid, clearing auth data');
+        console.log('checkAuthStatus: Failed to get profile, clearing auth data');
         // Token is invalid, clear it
         localStorage.removeItem('authToken');
         localStorage.removeItem('userData');
@@ -115,26 +127,52 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const register = async (userData: RegisterRequest): Promise<{ success: boolean; error?: string }> => {
+  const register = async (userData: RegisterRequest): Promise<{ success: boolean; error?: string; user?: any; token?: string }> => {
     try {
       setIsLoading(true);
+      console.log('🔐 AuthContext: Starting registration for:', userData.email);
       
       const response = await apiService.register(userData);
+      console.log('🔐 AuthContext: API register response:', response);
       
       if (response.success && response.data) {
-        setUser(response.data.user);
-        return { success: true };
+        console.log('✅ AuthContext: Registration successful, user:', response.data.user);
+        // Set the token in API service immediately so address modal can make authenticated requests
+        apiService.setToken(response.data.token);
+        // Set pending registration flag and address modal data
+        setPendingUserData(response.data.user);
+        setPendingToken(response.data.token);
+        setShowAddressModal(true);
+        setIsPendingRegistration(true);
+        setIsLoading(false);
+        return { success: true, user: response.data.user, token: response.data.token };
       } else {
+        console.error('❌ AuthContext: Registration failed:', response.error);
+        setIsLoading(false);
         return { success: false, error: response.error || 'Registration failed' };
       }
     } catch (error) {
+      console.error('❌ AuthContext: Registration exception:', error);
+      setIsLoading(false);
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Registration failed' 
       };
-    } finally {
-      setIsLoading(false);
     }
+    // Note: Don't set isLoading(false) here for success case - will be done in completeRegistration
+  };
+
+  const completeRegistration = (userData: any, token: string) => {
+    console.log('✅ AuthContext: Completing registration with user:', userData);
+    // Set token in API service and localStorage
+    apiService.setToken(token);
+    localStorage.setItem('authToken', token);
+    localStorage.setItem('userData', JSON.stringify(userData));
+    setUser(userData);
+    setIsPendingRegistration(false);
+    setShowAddressModal(false);
+    setPendingUserData(null);
+    setPendingToken('');
   };
 
   const logout = async () => {
@@ -156,10 +194,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const refreshUser = async () => {
     try {
-      const response = await apiService.verifyToken();
-      if (response.success && response.data?.user) {
-        setUser(response.data.user);
-        localStorage.setItem('userData', JSON.stringify(response.data.user));
+      console.log('🔄 AuthContext: Refreshing user profile data');
+      const response = await apiService.getProfile();
+      if (response.success && response.data) {
+        console.log('✅ AuthContext: Got updated profile data:', response.data);
+        setUser(response.data);
+        localStorage.setItem('userData', JSON.stringify(response.data));
+      } else {
+        console.error('❌ AuthContext: Failed to get profile data:', response.error);
       }
     } catch (error) {
       console.error('Failed to refresh user:', error);
@@ -170,8 +212,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     isAuthenticated: !!user,
     isLoading,
+    isPendingRegistration,
+    showAddressModal,
+    pendingUserData,
+    pendingToken,
     login,
     register,
+    completeRegistration,
+    setShowAddressModal,
     logout,
     refreshUser,
   };

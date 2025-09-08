@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import PhoneInput from './PhoneInput';
+import AddressModal from './AddressModal';
 import { validatePhoneNumber } from '../utils/phoneValidation';
 import './LoginScreen.css';
 
@@ -17,19 +18,64 @@ const LoginScreen = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [phone, setPhone] = useState('');
   const [loginWithPhone, setLoginWithPhone] = useState(false);
-  const { login, register, isLoading } = useAuth();
+  const { login, register, completeRegistration, isLoading, showAddressModal, pendingUserData, pendingToken, setShowAddressModal } = useAuth();
   const navigate = useNavigate();
 
-  // Clear all form fields when switching between login and register modes
+  // Debug logging for modal state
+  console.log('🔍 LoginScreen state:', {
+    showAddressModal,
+    pendingUserData: !!pendingUserData,
+    pendingToken: !!pendingToken,
+    isRegisterMode,
+    isLoading,
+    timestamp: new Date().toISOString()
+  });
+
+  // Debug logging for state changes
   useEffect(() => {
-    setEmail('');
-    setPassword('');
-    setFirstName('');
-    setLastName('');
-    setConfirmPassword('');
-    setPhone('');
-    setLoginWithPhone(false);
+    console.log('🔄 showAddressModal changed to:', showAddressModal);
+  }, [showAddressModal]);
+
+  useEffect(() => {
+    console.log('🔄 isRegisterMode changed to:', isRegisterMode);
   }, [isRegisterMode]);
+
+  const handleAddressModalClose = () => {
+    console.log('📍 Address modal closed (skipped)');
+    // Complete registration even if address modal is closed without saving
+    if (pendingUserData && pendingToken) {
+      console.log('✅ Completing registration after address modal close');
+      completeRegistration(pendingUserData, pendingToken);
+    }
+    // Navigate to children page which will show onboarding
+    navigate('/children', { replace: true });
+  };
+
+  const handleAddressModalSaved = () => {
+    console.log('📍 Address modal saved');
+    // Complete registration after saving address
+    if (pendingUserData && pendingToken) {
+      console.log('✅ Completing registration after address save');
+      completeRegistration(pendingUserData, pendingToken);
+    }
+    // Navigate to children page which will show onboarding
+    navigate('/children', { replace: true });
+  };
+
+  // Clear all form fields when switching between login and register modes
+  // BUT don't clear if we're showing the address modal (pending registration)
+  useEffect(() => {
+    console.log('🔄 isRegisterMode changed:', { isRegisterMode, showAddressModal });
+    if (!showAddressModal) { // Only clear fields if we're not showing the address modal
+      setEmail('');
+      setPassword('');
+      setFirstName('');
+      setLastName('');
+      setConfirmPassword('');
+      setPhone('');
+      setLoginWithPhone(false);
+    }
+  }, [isRegisterMode, showAddressModal]);
 
   const demoAccounts = [
     {
@@ -111,9 +157,17 @@ const LoginScreen = () => {
       }
       
       const result = await register({ username: `${firstName} ${lastName}`, email, phone, password });
-      if (result.success) {
-        navigate('/children', { replace: true });
+      console.log('🔐 Registration result:', result);
+      
+      if (result.success && result.user && result.token) {
+        console.log('✅ Registration successful, address modal should be showing from AuthContext');
+        
+        // Force a small delay to check state
+        setTimeout(() => {
+          console.log('📍 Delayed check - showAddressModal should be true now');
+        }, 100);
       } else {
+        console.error('❌ Registration failed:', result.error);
         alert(`Registration Failed: ${result.error}`);
       }
     } else {
@@ -162,7 +216,7 @@ const LoginScreen = () => {
           />
         </div>
 
-        <form onSubmit={handleSubmit} className="form" key={isRegisterMode ? 'register' : 'login'}>
+        <form onSubmit={handleSubmit} className="form">
           <h2>{isRegisterMode ? 'Register' : 'Login'}</h2>
           
           {isRegisterMode && (
@@ -332,6 +386,15 @@ const LoginScreen = () => {
           )}
         </div>
       </div>
+
+      <AddressModal
+        isOpen={showAddressModal}
+        onClose={handleAddressModalClose}
+        onSaved={handleAddressModalSaved}
+        title="Please Provide Your Address"
+        description="Please provide your address so we can match you to activities in your area."
+        canSkip={true}
+      />
     </div>
   );
 };

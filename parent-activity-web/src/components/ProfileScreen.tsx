@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import ApiService from '../services/api';
 import PhoneInput from './PhoneInput';
+import AddressModal from './AddressModal';
 import { validatePhoneNumber } from '../utils/phoneValidation';
 import { Parent } from '../types';
 import './ProfileScreen.css';
@@ -36,6 +37,8 @@ const ProfileScreen = () => {
   const [showParentPassword, setShowParentPassword] = useState(false);
   const [showParentConfirmPassword, setShowParentConfirmPassword] = useState(false);
   const [addingParent, setAddingParent] = useState(false);
+  const [showNewParentAddressModal, setShowNewParentAddressModal] = useState(false);
+  const [newParentDetails, setNewParentDetails] = useState<{email: string, name: string} | null>(null);
   
   const apiService = ApiService.getInstance();
 
@@ -67,6 +70,42 @@ const ProfileScreen = () => {
       }
     } catch (error) {
       console.error('Failed to load parents:', error);
+    }
+  };
+
+  const handleEditProfile = async () => {
+    try {
+      setLoading(true);
+      console.log('🔄 Loading latest profile data for editing');
+      
+      // Fetch latest profile data from backend
+      const response = await apiService.getProfile();
+      if (response.success && response.data) {
+        const profileData = response.data;
+        console.log('✅ Latest profile data:', profileData);
+        
+        // Update form fields with latest data
+        setUsername(profileData.username || '');
+        setEmail(profileData.email || '');
+        setPhone(profileData.phone || '');
+        setAddressLine1(profileData.address_line_1 || '');
+        setTownCity(profileData.town_city || '');
+        setStateProvinceCountry(profileData.state_province_country || '');
+        setPostCode(profileData.post_code || '');
+        
+        // Also refresh the user context with latest data
+        await refreshUser();
+      } else {
+        console.error('Failed to load profile data:', response.error);
+        alert('Failed to load latest profile data');
+      }
+      
+      setEditing(true);
+    } catch (error) {
+      console.error('Error loading profile data:', error);
+      alert('Failed to load profile data');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -117,7 +156,9 @@ const ProfileScreen = () => {
       });
 
       if (response.success) {
-        alert('Parent added successfully!');
+        const parentName = `${newParentFirstName.trim()} ${newParentLastName.trim()}`;
+        
+        // Clear form and close modal
         setNewParentFirstName('');
         setNewParentLastName('');
         setNewParentEmail('');
@@ -126,7 +167,16 @@ const ProfileScreen = () => {
         setNewParentConfirmPassword('');
         setNewParentRole('parent');
         setShowAddParentModal(false);
-        loadParents(); // Reload the parents list
+        
+        // Reload parents list
+        loadParents();
+        
+        // Show address modal for new parent
+        setNewParentDetails({
+          email: newParentEmail.trim(),
+          name: parentName
+        });
+        setShowNewParentAddressModal(true);
       } else {
         alert(`Failed to add parent: ${response.error || 'Unknown error'}`);
       }
@@ -269,6 +319,23 @@ const ProfileScreen = () => {
     if (window.confirm('Are you sure you want to logout?')) {
       logout();
     }
+  };
+
+  const handleNewParentAddressModalClose = () => {
+    setShowNewParentAddressModal(false);
+    setNewParentDetails(null);
+    // Reload parents list even if address wasn't saved
+    loadParents();
+    alert('Parent added successfully! They can update their address when they first log in.');
+  };
+
+  const handleNewParentAddressModalSaved = () => {
+    setShowNewParentAddressModal(false);
+    const parentName = newParentDetails?.name || 'Parent';
+    setNewParentDetails(null);
+    // Reload parents list
+    loadParents();
+    alert(`${parentName} added successfully! Note: The address was saved to your account. They should add their own address when they log in.`);
   };
 
   if (!user) {
@@ -452,10 +519,11 @@ const ProfileScreen = () => {
             </div>
 
             <button
-              onClick={() => setEditing(true)}
+              onClick={handleEditProfile}
+              disabled={loading}
               className="edit-btn"
             >
-              Edit Profile
+              {loading ? 'Loading...' : 'Edit Profile'}
             </button>
           </div>
         )}
@@ -713,6 +781,15 @@ const ProfileScreen = () => {
           </div>
         </div>
       )}
+
+      <AddressModal
+        isOpen={showNewParentAddressModal}
+        onClose={handleNewParentAddressModalClose}
+        onSaved={handleNewParentAddressModalSaved}
+        title={`${newParentDetails?.name || 'New Parent'} Added Successfully!`}
+        description="Would you like to add their address information now? This helps with local activity suggestions. They can also add this themselves when they first log in."
+        canSkip={true}
+      />
     </div>
   );
 };

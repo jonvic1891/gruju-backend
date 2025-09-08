@@ -34,6 +34,10 @@ class ApiService {
     return ApiService.instance;
   }
 
+  public setToken(token: string): void {
+    this.token = token;
+  }
+
   private getAuthHeaders() {
     return this.token ? { Authorization: `Bearer ${this.token}` } : {};
   }
@@ -146,11 +150,7 @@ class ApiService {
 
   async register(userData: RegisterRequest): Promise<ApiResponse<AuthResponse>> {
     const response = await this.request<AuthResponse>('post', '/api/auth/register', userData);
-    if (response.success && response.data) {
-      this.token = response.data.token;
-      localStorage.setItem('authToken', response.data.token);
-      localStorage.setItem('userData', JSON.stringify(response.data.user));
-    }
+    // Don't automatically set token/localStorage - let AuthContext handle it
     return response;
   }
 

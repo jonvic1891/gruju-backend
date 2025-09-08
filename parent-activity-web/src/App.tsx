@@ -7,7 +7,7 @@ import './App.css';
 import versionInfo from './version.json';
 
 const AppContent = () => {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, isPendingRegistration } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -16,6 +16,7 @@ const AppContent = () => {
     isAuthenticated, 
     isLoading, 
     user,
+    isPendingRegistration,
     timestamp: new Date().toISOString()
   });
 
@@ -33,13 +34,15 @@ const AppContent = () => {
       isAuthenticated,
       isLoading,
       user,
+      isPendingRegistration,
       localStorageToken: localStorage.getItem('authToken') ? 'present' : 'missing',
       localStorageUserData: localStorage.getItem('userData') ? 'present' : 'missing'
     });
-  }, [isAuthenticated, isLoading, user]);
+  }, [isAuthenticated, isLoading, user, isPendingRegistration]);
 
 
-  if (isLoading) {
+  // Show loading only if we're actually loading and NOT in pending registration state
+  if (isLoading && !isPendingRegistration) {
     console.log('Showing loading screen');
     return (
       <div className="app-loading">

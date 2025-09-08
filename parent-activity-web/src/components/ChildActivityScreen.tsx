@@ -47,20 +47,30 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const { user } = useAuth();
   
   // Helper function to get initial activity state with user's location
-  const getInitialActivityState = () => ({
-    name: '',
-    description: '',
-    start_date: '',
-    end_date: '',
-    start_time: '',
-    end_time: '',
-    location: user?.town_city || '',
-    website_url: '',
-    cost: '',
-    max_participants: '',
-    activity_type: '',
-    auto_notify_new_connections: false
-  });
+  const getInitialActivityState = () => {
+    console.log('🏠 ChildActivityScreen: Getting initial activity state with user data:', {
+      user: user,
+      town_city: user?.town_city,
+      address_line_1: user?.address_line_1,
+      state_province_country: user?.state_province_country,
+      post_code: user?.post_code
+    });
+    
+    return {
+      name: '',
+      description: '',
+      start_date: '',
+      end_date: '',
+      start_time: '',
+      end_time: '',
+      location: user?.town_city || '',
+      website_url: '',
+      cost: '',
+      max_participants: '',
+      activity_type: '',
+      auto_notify_new_connections: false
+    };
+  };
   
   // Parse URL parameters for initial calendar view and date
   const urlParams = new URLSearchParams(location.search);
@@ -116,6 +126,10 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [pendingTemplateData, setPendingTemplateData] = useState<any>(null);
   const [templateConfirmationMessage, setTemplateConfirmationMessage] = useState<string>('');
+  
+  // Clubs data for URL/Location selection
+  const [clubs, setClubs] = useState<any[]>([]);
+  const [loadingClubs, setLoadingClubs] = useState<boolean>(false);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [templateDialogMessage, setTemplateDialogMessage] = useState('');
   const [dialogTemplateData, setDialogTemplateData] = useState<any>(null);
@@ -290,9 +304,13 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     loadActivityTemplates();
     loadActivityTypes();
     loadParentChildren();
+    loadClubs();
     
     // Check if there's a saved draft to restore
     restoreActivityDraft();
+    
+    // Check if returning from club selection
+    checkForClubSelection();
   }, [child.uuid]);
 
   // Check for month changes when user navigates or toggles calendar
@@ -1093,6 +1111,133 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       console.error('💥 Error loading activity types:', error);
       setActivityTypes([]);
     }
+  };
+
+  const loadClubs = async () => {
+    try {
+      setLoadingClubs(true);
+      const response = await apiService.getClubs();
+      if (response.success && response.data) {
+        setClubs(response.data);
+        console.log('📍 Loaded clubs for activity creation:', response.data.length);
+      }
+    } catch (error) {
+      console.error('Failed to load clubs:', error);
+    } finally {
+      setLoadingClubs(false);
+    }
+  };
+
+  const checkForClubSelection = () => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const selectedClubData = urlParams.get('clubData');
+      
+      if (selectedClubData) {
+        const clubData = JSON.parse(decodeURIComponent(selectedClubData));
+        console.log('🎯 Returning from club selection with:', clubData);
+        
+        // Restore the activity draft first
+        const draftKey = `activityDraft_${child.uuid}`;
+        const savedDraft = localStorage.getItem(draftKey);
+        
+        if (savedDraft) {
+          const draft = JSON.parse(savedDraft);
+          console.log('📂 Restoring activity draft after club selection:', draft);
+          
+          // Restore the activity form
+          setNewActivity(draft.newActivity || getInitialActivityState());
+          setSelectedDates(draft.selectedDates || []);
+          setIsSharedActivity(draft.isSharedActivity || false);
+          setAutoNotifyNewConnections(draft.autoNotifyNewConnections || false);
+          setSelectedConnectedChildren(draft.selectedConnectedChildren || []);
+          
+          // Apply the selected club data to the appropriate field
+          const fieldType = draft.fieldTypeForReturn;
+          if (fieldType === 'location' && clubData.location) {
+            setNewActivity(prev => ({...prev, location: clubData.location}));
+          } else if (fieldType === 'website_url' && clubData.website_url) {
+            setNewActivity(prev => ({...prev, website_url: clubData.website_url}));
+          }
+          
+          console.log('✅ Applied club data to field:', fieldType, clubData);
+          
+          // Clean up
+          localStorage.removeItem(draftKey);
+        }
+        
+        // Clean URL
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, '', cleanUrl);
+      }
+    } catch (error) {
+      console.error('Error processing club selection:', error);
+    }
+  };
+
+  // Helper function to create split input field (text input + optional club browse button)
+  const renderClubSplitInput = (
+    value: string,
+    onChange: (value: string) => void,
+    placeholder: string,
+    fieldType: 'location' | 'website_url',
+    className: string = 'modal-input',
+    showBrowseButton: boolean = true
+  ) => {
+    const handleBrowseClubs = () => {
+      // Save current activity state as draft before navigating
+      const activityDraft = {
+        childUuid: child.uuid,
+        newActivity: newActivity,
+        selectedDates: selectedDates,
+        isSharedActivity: isSharedActivity,
+        autoNotifyNewConnections: autoNotifyNewConnections,
+        selectedConnectedChildren: selectedConnectedChildren,
+        fieldTypeForReturn: fieldType // Remember which field we're filling
+      };
+      
+      localStorage.setItem(`activityDraft_${child.uuid}`, JSON.stringify(activityDraft));
+      console.log('💾 Saved activity draft before club selection:', activityDraft);
+      
+      // Navigate to club selection page with return context
+      const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/clubs?select=${fieldType}&return=${returnUrl}`;
+    };
+
+    if (!showBrowseButton) {
+      // Return regular input without browse button
+      return (
+        <input
+          type={fieldType === 'website_url' ? 'url' : 'text'}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={className}
+        />
+      );
+    }
+
+    return (
+      <div className="club-split-input">
+        <div className="split-input-container">
+          <input
+            type={fieldType === 'website_url' ? 'url' : 'text'}
+            placeholder={placeholder}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className={`${className} split-text-input`}
+          />
+          <button
+            type="button"
+            onClick={handleBrowseClubs}
+            className="browse-clubs-btn"
+            title={`Browse clubs for ${fieldType === 'location' ? 'location' : 'website'}`}
+          >
+            🔍 Browse
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const loadParentChildren = async () => {
@@ -2847,30 +2992,15 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               </div>
 
               <div className="form-row">
-                <label><strong>Location:</strong></label>
-                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
-                  <input
-                    type="text"
-                    value={newActivity.location}
-                    onChange={(e) => setNewActivity({...newActivity, location: e.target.value})}
-                    className="inline-edit-input"
-                    placeholder="Activity location"
-                  />
-                ) : (
-                  <span className="readonly-value">📍 {selectedActivity.location || 'No location specified'}</span>
-                )}
-              </div>
-
-              <div className="form-row">
                 <label><strong>Website:</strong></label>
                 {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
-                  <input
-                    type="url"
-                    value={newActivity.website_url}
-                    onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
-                    className="inline-edit-input"
-                    placeholder="Website URL"
-                  />
+                  renderClubSplitInput(
+                    newActivity.website_url,
+                    (value) => setNewActivity({...newActivity, website_url: value}),
+                    "Website URL",
+                    "website_url",
+                    "inline-edit-input"
+                  )
                 ) : (
                   <span className="readonly-value">
                     {selectedActivity.website_url ? (
@@ -2881,6 +3011,22 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                       'No website'
                     )}
                   </span>
+                )}
+              </div>
+
+              <div className="form-row">
+                <label><strong>Location:</strong></label>
+                {selectedActivity.is_host && !(selectedActivity as any).isPendingInvitation && !(selectedActivity as any).isAcceptedInvitation && !(selectedActivity as any).isRejectedInvitation ? (
+                  renderClubSplitInput(
+                    newActivity.location,
+                    (value) => setNewActivity({...newActivity, location: value}),
+                    "Activity location",
+                    "location",
+                    "inline-edit-input",
+                    false
+                  )
+                ) : (
+                  <span className="readonly-value">📍 {selectedActivity.location || 'No location specified'}</span>
                 )}
               </div>
 
@@ -3818,20 +3964,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 />
               </div>
             </div>
-            <input
-              type="text"
-              placeholder="Location"
-              value={newActivity.location}
-              onChange={(e) => setNewActivity({...newActivity, location: e.target.value})}
-              className="modal-input"
-            />
-            <input
-              type="url"
-              placeholder="Website URL"
-              value={newActivity.website_url}
-              onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
-              className="modal-input"
-            />
+            {renderClubSplitInput(
+              newActivity.website_url,
+              (value) => setNewActivity({...newActivity, website_url: value}),
+              "Website URL",
+              "website_url",
+              "modal-input"
+            )}
+            {renderClubSplitInput(
+              newActivity.location,
+              (value) => setNewActivity({...newActivity, location: value}),
+              "Location",
+              "location",
+              "modal-input",
+              false
+            )}
             <select
               value={newActivity.activity_type}
               onChange={(e) => setNewActivity({...newActivity, activity_type: e.target.value})}
@@ -4424,20 +4571,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 />
               </div>
             </div>
-            <input
-              type="text"
-              placeholder="Location"
-              value={newActivity.location}
-              onChange={(e) => setNewActivity({...newActivity, location: e.target.value})}
-              className="modal-input"
-            />
-            <input
-              type="url"
-              placeholder="Website URL"
-              value={newActivity.website_url}
-              onChange={(e) => setNewActivity({...newActivity, website_url: e.target.value})}
-              className="modal-input"
-            />
+            {renderClubSplitInput(
+              newActivity.website_url,
+              (value) => setNewActivity({...newActivity, website_url: value}),
+              "Website URL",
+              "website_url",
+              "modal-input"
+            )}
+            {renderClubSplitInput(
+              newActivity.location,
+              (value) => setNewActivity({...newActivity, location: value}),
+              "Location",
+              "location",
+              "modal-input",
+              false
+            )}
             <select
               value={newActivity.activity_type}
               onChange={(e) => setNewActivity({...newActivity, activity_type: e.target.value})}
@@ -4481,7 +4629,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   end_date: '',
                   start_time: '',
                   end_time: '',
-                  location: '',
+                  location: user?.town_city || '',
                   website_url: '',
                   cost: '',
                   max_participants: '',

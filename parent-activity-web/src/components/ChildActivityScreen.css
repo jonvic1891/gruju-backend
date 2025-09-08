@@ -1712,3 +1712,48 @@ input[type="url"], input[type="tel"], textarea, select {
   resize: vertical;
   min-height: 60px;
 }
+
+/* Club split input styles */
+.club-split-input {
+  position: relative;
+  width: 100%;
+}
+
+.split-input-container {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.split-text-input {
+  flex: 1;
+  min-width: 0; /* Allow shrinking */
+}
+
+.browse-clubs-btn {
+  background: linear-gradient(135deg, #8B3FD9, #764ba2);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-width: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.browse-clubs-btn:hover {
+  background: linear-gradient(135deg, #764ba2, #667eea);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 63, 217, 0.3);
+}
+
+.browse-clubs-btn:active {
+  transform: translateY(0);
+}

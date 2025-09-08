@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ApiService from '../services/api';
 import './OnboardingFlow.css';
 
 interface OnboardingFlowProps {
@@ -9,14 +10,42 @@ interface OnboardingFlowProps {
 
 const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onNavigateToProfile }) => {
   const [userInfo, setUserInfo] = useState<any>(null);
+  const [parentCount, setParentCount] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+  const apiService = ApiService.getInstance();
 
   useEffect(() => {
-    // Get current user info for personalization
-    const userData = localStorage.getItem('userData');
-    if (userData) {
-      setUserInfo(JSON.parse(userData));
-    }
-  }, []);
+    const loadData = async () => {
+      try {
+        // Get current user info for personalization
+        const userData = localStorage.getItem('userData');
+        if (userData) {
+          setUserInfo(JSON.parse(userData));
+        }
+
+        // Check how many parents exist
+        const parentsResponse = await apiService.getParents();
+        if (parentsResponse.success && parentsResponse.data) {
+          const parents = parentsResponse.data;
+          setParentCount(parents.length);
+          console.log('🏠 OnboardingFlow: Parent count:', parents.length);
+          
+          // If there are already 2 or more parents, skip onboarding and go straight to completion
+          if (parents.length >= 2) {
+            console.log('🏠 OnboardingFlow: Multiple parents exist, completing onboarding automatically');
+            onComplete();
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load onboarding data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [onComplete]);
 
   const handleAddParent = () => {
     // Navigate to profile screen and trigger add parent modal
@@ -83,6 +112,38 @@ const OnboardingFlow: React.FC<OnboardingFlowProps> = ({ onComplete, onNavigateT
     </div>
   );
 
+
+  if (loading) {
+    return (
+      <div className="onboarding-overlay">
+        <div className="onboarding-container">
+          <div className="progress-bar">
+            <div className="progress-header">
+              <div className="progress-logo">
+                <img 
+                  src="/gruju-logo-white.png" 
+                  alt="Gruju" 
+                  className="progress-brand-logo"
+                  onError={(e) => {
+                    console.error('Progress logo failed to load:', e);
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="onboarding-content">
+            <div className="onboarding-step">
+              <div className="step-header">
+                <h2>Loading...</h2>
+                <p>Checking your account setup...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="onboarding-overlay">

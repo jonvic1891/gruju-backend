@@ -677,6 +677,66 @@ async function runMigrations() {
         } catch (error) {
             console.log('ℹ️ Migration 22: Could not add address fields:', error.message);
         }
+
+        // Migration 23: Modify clubs table for better deduplication and add usage tracking
+        try {
+            // Drop the old unique constraint that only included website_url and activity_type
+            await client.query(`
+                ALTER TABLE clubs DROP CONSTRAINT IF EXISTS clubs_website_url_activity_type_key
+            `);
+            
+            // Add usage tracking columns to clubs table
+            await client.query(`
+                ALTER TABLE clubs 
+                ADD COLUMN IF NOT EXISTS usage_count INTEGER DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS first_used_date DATE,
+                ADD COLUMN IF NOT EXISTS last_used_date DATE,
+                ADD COLUMN IF NOT EXISTS min_child_age INTEGER,
+                ADD COLUMN IF NOT EXISTS max_child_age INTEGER
+            `);
+            
+            // Add new unique constraint that includes location for better deduplication
+            await client.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_clubs_unique_website_location_type 
+                ON clubs (
+                    COALESCE(website_url, ''), 
+                    COALESCE(location, ''), 
+                    activity_type
+                )
+            `);
+            
+            console.log('✅ Migration 23: Enhanced clubs table with usage tracking and better deduplication');
+        } catch (error) {
+            console.log('ℹ️ Migration 23: Could not enhance clubs table:', error.message);
+        }
+
+        // Migration 24: Create club usage tracking table for detailed usage history
+        try {
+            await client.query(`
+                CREATE TABLE IF NOT EXISTS club_usage (
+                    id SERIAL PRIMARY KEY,
+                    club_id INTEGER NOT NULL REFERENCES clubs(id),
+                    activity_id INTEGER NOT NULL REFERENCES activities(id),
+                    child_id INTEGER NOT NULL REFERENCES children(id),
+                    child_age INTEGER,
+                    usage_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(club_id, activity_id)
+                )
+            `);
+            
+            // Create indexes for better performance
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_club_usage_club_id ON club_usage(club_id)
+            `);
+            await client.query(`
+                CREATE INDEX IF NOT EXISTS idx_club_usage_date ON club_usage(usage_date)
+            `);
+            
+            console.log('✅ Migration 24: Created club_usage table for tracking usage history');
+        } catch (error) {
+            console.log('ℹ️ Migration 24: Could not create club_usage table:', error.message);
+        }
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
@@ -2501,51 +2561,116 @@ app.post('/api/activities/:childId', authenticateToken, async (req, res) => {
                     cost: processedCost
                 };
                 
-                // Check if club already exists with this website_url and activity_type
-                const existingClub = await client.query(
-                    'SELECT id FROM clubs WHERE website_url = $1 AND activity_type = $2',
-                    [clubData.website_url, clubData.activity_type]
-                );
+                // Check if club already exists with website_url, location, and activity_type (improved deduplication)
+                const existingClub = await client.query(`
+                    SELECT id FROM clubs 
+                    WHERE COALESCE(website_url, '') = COALESCE($1, '') 
+                    AND COALESCE(location, '') = COALESCE($2, '') 
+                    AND activity_type = $3
+                `, [clubData.website_url, clubData.location, clubData.activity_type]);
                 
+                let clubId;
                 if (existingClub.rows.length === 0) {
                     // Fetch website metadata
                     console.log('🌐 Fetching website metadata for new club...');
                     const metadata = await fetchWebsiteMetadata(clubData.website_url);
                     
-                    // Create new club record with metadata
-                    await client.query(
-                        'INSERT INTO clubs (name, description, website_url, activity_type, location, cost, website_title, website_description, website_favicon, metadata_fetched_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW(), NOW())',
-                        [clubData.name, clubData.description, clubData.website_url, clubData.activity_type, clubData.location, clubData.cost, metadata.title, metadata.description, metadata.favicon]
+                    // Get child age for tracking
+                    const childAge = await client.query(
+                        'SELECT age FROM children WHERE id = $1', [childInternalId]
                     );
-                    console.log('✅ Created club record with metadata:', clubData.name, 'for', clubData.activity_type);
+                    const currentChildAge = childAge.rows.length > 0 ? childAge.rows[0].age : null;
+                    
+                    // Create new club record with metadata and initial usage tracking
+                    const newClubResult = await client.query(`
+                        INSERT INTO clubs (
+                            name, description, website_url, activity_type, location, cost, 
+                            website_title, website_description, website_favicon, metadata_fetched_at,
+                            usage_count, first_used_date, last_used_date, 
+                            min_child_age, max_child_age, created_at, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), 1, CURRENT_DATE, CURRENT_DATE, $10, $10, NOW(), NOW())
+                        RETURNING id
+                    `, [
+                        clubData.name, clubData.description, clubData.website_url, clubData.activity_type, 
+                        clubData.location, clubData.cost, metadata.title, metadata.description, metadata.favicon,
+                        currentChildAge
+                    ]);
+                    clubId = newClubResult.rows[0].id;
+                    console.log('✅ Created club record with metadata and usage tracking:', clubData.name, 'for', clubData.activity_type);
                 } else {
+                    clubId = existingClub.rows[0].id;
+                    
                     // Check if metadata needs refreshing (older than 24 hours or missing)
                     const existingClubDetails = await client.query(
-                        'SELECT metadata_fetched_at FROM clubs WHERE id = $1',
-                        [existingClub.rows[0].id]
+                        'SELECT metadata_fetched_at, usage_count, min_child_age, max_child_age FROM clubs WHERE id = $1',
+                        [clubId]
                     );
                     
                     const shouldRefreshMetadata = !existingClubDetails.rows[0].metadata_fetched_at ||
                         (new Date() - new Date(existingClubDetails.rows[0].metadata_fetched_at)) > 24 * 60 * 60 * 1000; // 24 hours
                     
+                    // Get child age for tracking
+                    const childAge = await client.query(
+                        'SELECT age FROM children WHERE id = $1', [childInternalId]
+                    );
+                    const currentChildAge = childAge.rows.length > 0 ? childAge.rows[0].age : null;
+                    
+                    // Calculate new min/max ages
+                    const currentMin = existingClubDetails.rows[0].min_child_age;
+                    const currentMax = existingClubDetails.rows[0].max_child_age;
+                    const newMin = currentChildAge && currentMin ? Math.min(currentMin, currentChildAge) : (currentChildAge || currentMin);
+                    const newMax = currentChildAge && currentMax ? Math.max(currentMax, currentChildAge) : (currentChildAge || currentMax);
+                    
                     if (shouldRefreshMetadata) {
                         console.log('🌐 Refreshing website metadata for existing club...');
                         const metadata = await fetchWebsiteMetadata(clubData.website_url);
                         
-                        // Update existing club record with latest information and fresh metadata
-                        await client.query(
-                            'UPDATE clubs SET name = $1, description = $2, location = $3, cost = $4, website_title = $5, website_description = $6, website_favicon = $7, metadata_fetched_at = NOW(), updated_at = NOW() WHERE id = $8',
-                            [clubData.name, clubData.description, clubData.location, clubData.cost, metadata.title, metadata.description, metadata.favicon, existingClub.rows[0].id]
-                        );
-                        console.log('✅ Updated club record with fresh metadata:', clubData.name, 'for', clubData.activity_type);
+                        // Update existing club record with latest information, fresh metadata, and updated usage stats
+                        await client.query(`
+                            UPDATE clubs SET 
+                                name = $1, description = $2, location = $3, cost = $4, 
+                                website_title = $5, website_description = $6, website_favicon = $7, 
+                                metadata_fetched_at = NOW(), updated_at = NOW(),
+                                usage_count = usage_count + 1, last_used_date = CURRENT_DATE,
+                                first_used_date = COALESCE(first_used_date, CURRENT_DATE),
+                                min_child_age = $8, max_child_age = $9
+                            WHERE id = $10
+                        `, [
+                            clubData.name, clubData.description, clubData.location, clubData.cost, 
+                            metadata.title, metadata.description, metadata.favicon,
+                            newMin, newMax, clubId
+                        ]);
+                        console.log('✅ Updated club record with fresh metadata and usage tracking:', clubData.name, 'for', clubData.activity_type);
                     } else {
-                        // Update existing club record with latest information (keep existing metadata)
-                        await client.query(
-                            'UPDATE clubs SET name = $1, description = $2, location = $3, cost = $4, updated_at = NOW() WHERE id = $5',
-                            [clubData.name, clubData.description, clubData.location, clubData.cost, existingClub.rows[0].id]
-                        );
-                        console.log('✅ Updated club record (kept existing metadata):', clubData.name, 'for', clubData.activity_type);
+                        // Update existing club record with latest information and usage stats (keep existing metadata)
+                        await client.query(`
+                            UPDATE clubs SET 
+                                name = $1, description = $2, location = $3, cost = $4, updated_at = NOW(),
+                                usage_count = usage_count + 1, last_used_date = CURRENT_DATE,
+                                first_used_date = COALESCE(first_used_date, CURRENT_DATE),
+                                min_child_age = $5, max_child_age = $6
+                            WHERE id = $7
+                        `, [clubData.name, clubData.description, clubData.location, clubData.cost, newMin, newMax, clubId]);
+                        console.log('✅ Updated club record with usage tracking (kept existing metadata):', clubData.name, 'for', clubData.activity_type);
                     }
+                }
+                
+                // Record detailed usage in club_usage table
+                try {
+                    const childAge = await client.query('SELECT age FROM children WHERE id = $1', [childInternalId]);
+                    const currentChildAge = childAge.rows.length > 0 ? childAge.rows[0].age : null;
+                    
+                    await client.query(`
+                        INSERT INTO club_usage (club_id, activity_id, child_id, child_age, usage_date)
+                        VALUES ($1, $2, $3, $4, CURRENT_DATE)
+                        ON CONFLICT (club_id, activity_id) DO UPDATE SET
+                            child_age = EXCLUDED.child_age,
+                            usage_date = EXCLUDED.usage_date
+                    `, [clubId, activityResult.rows[0].id, childInternalId, currentChildAge]);
+                    
+                    console.log('📊 Recorded club usage for tracking');
+                } catch (usageError) {
+                    console.error('⚠️ Error recording club usage:', usageError);
                 }
             } catch (clubError) {
                 console.error('⚠️ Error creating/updating club record:', clubError);
@@ -6700,7 +6825,10 @@ app.get('/api/clubs', authenticateToken, async (req, res) => {
     try {
         const { activity_type, search, location } = req.query;
         
-        let query = 'SELECT id, name, description, website_url, activity_type, location, cost, website_title, website_description, website_favicon, metadata_fetched_at, created_at FROM clubs';
+        let query = `SELECT id, name, description, website_url, activity_type, location, cost, 
+                     website_title, website_description, website_favicon, metadata_fetched_at, created_at,
+                     usage_count, first_used_date, last_used_date, min_child_age, max_child_age 
+                     FROM clubs`;
         let params = [];
         let conditions = [];
         

@@ -30,6 +30,11 @@ interface Club {
   website_favicon?: string;
   metadata_fetched_at?: string;
   created_at: string;
+  usage_count?: number;
+  first_used_date?: string;
+  last_used_date?: string;
+  min_child_age?: number;
+  max_child_age?: number;
 }
 
 const ClubsScreen: React.FC = () => {
@@ -38,12 +43,29 @@ const ClubsScreen: React.FC = () => {
   const [selectedType, setSelectedType] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [locationFilter, setLocationFilter] = useState<string>('');
+  
+  // Selection mode for activity creation flow
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectionFieldType, setSelectionFieldType] = useState<'location' | 'website_url' | ''>('');
+  const [returnUrl, setReturnUrl] = useState<string>('');
 
   const apiService = ApiService.getInstance();
   
-  console.log('🏢 ClubsScreen component rendered', { clubs: clubs.length, loading });
+  console.log('🏢 ClubsScreen component rendered', { clubs: clubs.length, loading, isSelectionMode });
 
   useEffect(() => {
+    // Check if we're in selection mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const selectParam = urlParams.get('select');
+    const returnParam = urlParams.get('return');
+    
+    if (selectParam && returnParam) {
+      setIsSelectionMode(true);
+      setSelectionFieldType(selectParam as 'location' | 'website_url');
+      setReturnUrl(decodeURIComponent(returnParam));
+      console.log('🎯 ClubsScreen in selection mode:', { selectParam, returnParam });
+    }
+    
     loadClubs();
   }, [selectedType, searchTerm, locationFilter]); // Reload when filters change
 
@@ -78,12 +100,41 @@ const ClubsScreen: React.FC = () => {
     window.open(url, '_blank');
   };
 
+  const handleClubSelection = (club: Club) => {
+    if (isSelectionMode && returnUrl) {
+      // Prepare club data for return
+      const clubData = {
+        id: club.id,
+        name: club.name,
+        location: club.location || '',
+        website_url: club.website_url || ''
+      };
+      
+      console.log('🎯 Selecting club for activity creation:', clubData);
+      
+      // Return to activity creation with club data
+      const returnUrlWithData = `${returnUrl}?clubData=${encodeURIComponent(JSON.stringify(clubData))}`;
+      window.location.href = returnUrlWithData;
+    } else {
+      // Normal browsing mode - open website
+      openWebsite(club.website_url);
+    }
+  };
+
 
   return (
-    <div className="clubs-screen">
+    <div className="clubs-screen" data-selection-mode={isSelectionMode}>
       <div className="clubs-header">
-        <h2>Browse Clubs & Activities</h2>
-        <p>Discover local clubs and activities for your children</p>
+        {isSelectionMode ? (
+          <>
+            <h2>Select Club for Activity</h2>
+          </>
+        ) : (
+          <>
+            <h2>Browse Clubs & Activities</h2>
+            <p>Discover local clubs and activities for your children</p>
+          </>
+        )}
       </div>
 
       <div className="clubs-filters">
@@ -151,8 +202,21 @@ const ClubsScreen: React.FC = () => {
             </p>
           </div>
         ) : (
-          clubs.map(club => (
-            <div key={club.id} className="club-card" onClick={() => openWebsite(club.website_url)}>
+          clubs
+            .filter(club => {
+              // In selection mode, only show clubs with the required field
+              if (isSelectionMode) {
+                if (selectionFieldType === 'location' && !club.location) {
+                  return false;
+                }
+                if (selectionFieldType === 'website_url' && !club.website_url) {
+                  return false;
+                }
+              }
+              return true;
+            })
+            .map(club => (
+            <div key={club.id} className="club-card" onClick={() => handleClubSelection(club)}>
               <div className="club-favicon">
                 {club.website_favicon ? (
                   <img 
@@ -195,6 +259,16 @@ const ClubsScreen: React.FC = () => {
                   {club.cost !== undefined && club.cost !== null && (
                     <span className="club-detail">
                       💰 {club.cost > 0 ? `£${club.cost.toFixed(2)}` : 'Free'}
+                    </span>
+                  )}
+                  {club.usage_count && club.usage_count > 0 && (
+                    <span className="club-detail">
+                      👥 Used by {club.usage_count} {club.usage_count === 1 ? 'family' : 'families'}
+                    </span>
+                  )}
+                  {club.min_child_age && club.max_child_age && (
+                    <span className="club-detail">
+                      🎂 Suitable for ages {club.min_child_age === club.max_child_age ? club.min_child_age : `${club.min_child_age}-${club.max_child_age}`}
                     </span>
                   )}
                 </div>

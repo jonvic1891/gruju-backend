@@ -1,0 +1,197 @@
+.address-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.address-modal {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.address-modal-header {
+  padding: 24px 24px 16px 24px;
+  text-align: center;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.address-modal-header h2 {
+  margin: 0 0 8px 0;
+  color: #2c3e50;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.address-modal-header p {
+  margin: 0;
+  color: #6c757d;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.address-modal-content {
+  padding: 24px;
+}
+
+.address-modal-content .form-group {
+  margin-bottom: 20px;
+}
+
+.address-modal-content .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: #343a40;
+  font-size: 14px;
+}
+
+.address-modal-content .form-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.2s;
+  background: white;
+}
+
+.address-modal-content .form-input:focus {
+  outline: none;
+  border-color: #8B3FD9;
+  box-shadow: 0 0 0 3px rgba(139, 63, 217, 0.1);
+}
+
+.address-modal-content .form-input:required {
+  border-left: 4px solid #8B3FD9;
+}
+
+.address-modal-content .address-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+}
+
+.address-modal-note {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 20px;
+}
+
+.address-modal-note p {
+  margin: 0;
+  color: #6c757d;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.address-modal-actions {
+  padding: 20px 24px 24px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  border-top: 1px solid #e9ecef;
+}
+
+.skip-btn {
+  background: none;
+  border: 2px solid #6c757d;
+  color: #6c757d;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.skip-btn:hover {
+  background: #6c757d;
+  color: white;
+}
+
+.skip-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.save-btn {
+  background: linear-gradient(135deg, #8B3FD9, #7A35C4);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+  min-width: 120px;
+}
+
+.save-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .address-modal-overlay {
+    padding: 16px;
+  }
+
+  .address-modal {
+    max-width: 100%;
+  }
+
+  .address-modal-header {
+    padding: 20px 20px 16px 20px;
+  }
+
+  .address-modal-header h2 {
+    font-size: 20px;
+  }
+
+  .address-modal-header p {
+    font-size: 14px;
+  }
+
+  .address-modal-content {
+    padding: 20px;
+  }
+
+  .address-modal-content .address-row {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .address-modal-actions {
+    padding: 16px 20px 20px 20px;
+    flex-direction: column-reverse;
+  }
+
+  .skip-btn,
+  .save-btn {
+    width: 100%;
+  }
+}
