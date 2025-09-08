@@ -135,7 +135,9 @@ app.use(cors({
     credentials: true
 }));
 
-// Router-level debugging - log all activity requests
+app.use(express.json());
+
+// Router-level debugging - log all activity requests (after body parsing)
 app.use((req, res, next) => {
     if (req.url.includes('/api/activities') && (req.method === 'PUT' || req.method === 'POST')) {
         console.log(`🎯 ACTIVITY REQUEST: ${req.method} ${req.url}`);
@@ -145,8 +147,6 @@ app.use((req, res, next) => {
     }
     next();
 });
-
-app.use(express.json());
 
 // PostgreSQL Database Configuration
 const pool = new Pool({
