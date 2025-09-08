@@ -269,7 +269,7 @@ const ClubsScreen: React.FC = () => {
                   )}
                   {club.min_child_age && club.max_child_age && (
                     <span className="club-detail">
-                      🎂 Suitable for ages {club.min_child_age === club.max_child_age ? club.min_child_age : `${club.min_child_age}-${club.max_child_age}`}
+                      🎂 Booked by children ages {club.min_child_age === club.max_child_age ? club.min_child_age : `${club.min_child_age}-${club.max_child_age}`}
                     </span>
                   )}
                 </div>

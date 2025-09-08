@@ -6675,6 +6675,117 @@ app.put('/api/admin/update-club-location', authenticateToken, async (req, res) =
     }
 });
 
+// Admin endpoint to backfill club usage data from existing activities
+app.post('/api/admin/backfill-club-usage', authenticateToken, async (req, res) => {
+    // Check if user is admin
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ success: false, error: 'Admin access required' });
+    }
+    
+    try {
+        const client = await pool.connect();
+        
+        console.log('🔄 Starting club usage backfill from existing activities...');
+        
+        // Get all activities that have website_url and activity_type
+        const activities = await client.query(`
+            SELECT a.id, a.website_url, a.activity_type, a.location, a.start_date, a.child_id,
+                   c.age as child_age
+            FROM activities a
+            JOIN children c ON a.child_id = c.id
+            WHERE a.website_url IS NOT NULL 
+            AND a.website_url != ''
+            AND a.activity_type IS NOT NULL
+            AND a.activity_type != ''
+            ORDER BY a.start_date
+        `);
+        
+        console.log(`📊 Found ${activities.rows.length} activities to process`);
+        let processed = 0;
+        let skipped = 0;
+        
+        for (const activity of activities.rows) {
+            try {
+                // Find or create matching club
+                const club = await client.query(`
+                    SELECT id FROM clubs 
+                    WHERE COALESCE(website_url, '') = COALESCE($1, '') 
+                    AND COALESCE(location, '') = COALESCE($2, '') 
+                    AND activity_type = $3
+                `, [activity.website_url, activity.location, activity.activity_type]);
+                
+                if (club.rows.length === 0) {
+                    console.log(`⚠️ No matching club found for activity ${activity.id}`);
+                    skipped++;
+                    continue;
+                }
+                
+                const clubId = club.rows[0].id;
+                
+                // Insert usage record (ignore conflicts)
+                await client.query(`
+                    INSERT INTO club_usage (club_id, activity_id, child_id, child_age, usage_date, activity_start_date)
+                    VALUES ($1, $2, $3, $4, CURRENT_DATE, $5)
+                    ON CONFLICT (club_id, activity_id, child_id, activity_start_date) DO NOTHING
+                `, [clubId, activity.id, activity.child_id, activity.child_age, activity.start_date]);
+                
+                processed++;
+                
+                if (processed % 50 === 0) {
+                    console.log(`📈 Processed ${processed} activities...`);
+                }
+                
+            } catch (activityError) {
+                console.error(`Error processing activity ${activity.id}:`, activityError);
+                skipped++;
+            }
+        }
+        
+        // Update club summary stats
+        console.log('🔄 Updating club summary statistics...');
+        await client.query(`
+            UPDATE clubs SET 
+                usage_count = subq.usage_count_6m,
+                first_used_date = subq.first_used_date,
+                last_used_date = subq.last_used_date,
+                min_child_age = subq.min_child_age,
+                max_child_age = subq.max_child_age,
+                updated_at = NOW()
+            FROM (
+                SELECT 
+                    cu.club_id,
+                    COUNT(DISTINCT cu.activity_id) as usage_count_6m,
+                    MIN(cu.activity_start_date) as first_used_date,
+                    MAX(cu.activity_start_date) as last_used_date,
+                    MIN(cu.child_age) FILTER (WHERE cu.child_age IS NOT NULL) as min_child_age,
+                    MAX(cu.child_age) FILTER (WHERE cu.child_age IS NOT NULL) as max_child_age
+                FROM club_usage cu 
+                WHERE cu.activity_start_date >= CURRENT_DATE - INTERVAL '6 months'
+                GROUP BY cu.club_id
+            ) subq
+            WHERE clubs.id = subq.club_id
+        `);
+        
+        client.release();
+        
+        console.log(`✅ Backfill completed: ${processed} processed, ${skipped} skipped`);
+        
+        res.json({
+            success: true,
+            message: `Backfill completed successfully`,
+            stats: {
+                total_activities: activities.rows.length,
+                processed: processed,
+                skipped: skipped
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error during club usage backfill:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Temporary cleanup endpoint for testing
 app.delete('/api/admin/cleanup-recent-requests', authenticateToken, async (req, res) => {
     try {
