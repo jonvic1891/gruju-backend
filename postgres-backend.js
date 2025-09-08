@@ -135,10 +135,13 @@ app.use(cors({
     credentials: true
 }));
 
-// Router-level debugging - log PUT requests only
+// Router-level debugging - log all activity requests
 app.use((req, res, next) => {
-    if (req.method === 'PUT') {
-        console.log(`🌐 PUT REQUEST: ${req.url}`);
+    if (req.url.includes('/api/activities') && (req.method === 'PUT' || req.method === 'POST')) {
+        console.log(`🎯 ACTIVITY REQUEST: ${req.method} ${req.url}`);
+        if (req.body && (req.body.website_url || req.body.activity_type)) {
+            console.log(`   📊 Body: website_url=${req.body.website_url}, activity_type=${req.body.activity_type}`);
+        }
     }
     next();
 });
