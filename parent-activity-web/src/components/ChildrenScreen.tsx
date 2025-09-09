@@ -805,10 +805,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
           try {
             console.log('🏢 INVITATION ACCEPT: Attempting to increment club usage for accepted invitation');
             
-            // Find the invited child UUID from the invitation
-            const invitedChildUuid = currentInvitation.invited_child_uuid;
-            
-            if (currentInvitation.website_url && currentInvitation.activity_type && invitedChildUuid) {
+            if (currentInvitation.website_url && currentInvitation.activity_type && currentInvitation.activity_uuid) {
               const clubUsageData = {
                 website_url: currentInvitation.website_url,
                 activity_type: currentInvitation.activity_type,
@@ -816,12 +813,9 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 activity_uuid: currentInvitation.activity_uuid
               };
               
-              console.log('🏢 INVITATION ACCEPT: Calling club increment API:', {
-                childUuid: invitedChildUuid,
-                clubUsageData
-              });
+              console.log('🏢 INVITATION ACCEPT: Calling club increment API:', clubUsageData);
               
-              const clubResponse = await apiService.incrementClubUsage(invitedChildUuid, clubUsageData);
+              const clubResponse = await apiService.incrementClubUsage(clubUsageData);
               if (clubResponse.success) {
                 console.log('✅ INVITATION ACCEPT: Club usage incremented successfully');
               } else {

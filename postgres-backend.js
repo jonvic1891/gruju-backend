@@ -5114,7 +5114,7 @@ app.get('/api/calendar/invitations', authenticateToken, async (req, res) => {
         
         const query = `
             SELECT DISTINCT a.uuid as activity_uuid, a.name as activity_name, a.start_date, a.end_date, a.start_time, a.end_time, 
-                    a.website_url, a.created_at, a.updated_at, a.description as activity_description, 
+                    a.website_url, a.activity_type, a.created_at, a.updated_at, a.description as activity_description, 
                     a.location, a.cost, a.series_id, a.is_recurring, a.recurring_days, a.series_start_date,
                     c.name as child_name, c.uuid as child_uuid,
                     u.username as host_parent_username,
