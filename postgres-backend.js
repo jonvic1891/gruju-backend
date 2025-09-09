@@ -6899,6 +6899,48 @@ app.post('/api/admin/cleanup-pending-invitations', authenticateToken, async (req
     }
 });
 
+// Admin endpoint to fix webinv30 activities (remove incorrect recurring flags)
+app.post('/api/admin/fix-webinv30-activities', authenticateToken, async (req, res) => {
+    // Check if user is admin
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ success: false, error: 'Admin access required' });
+    }
+    
+    try {
+        console.log('🔧 Admin fix: correcting webinv30 activities to be non-recurring');
+        
+        const client = await pool.connect();
+        
+        // Update webinv30 activities to have correct flags for individual date selection
+        const updateResult = await client.query(`
+            UPDATE activities 
+            SET is_recurring = false, 
+                recurring_days = NULL, 
+                series_id = NULL
+            WHERE name = 'webinv30'
+            RETURNING uuid, name, start_date, is_recurring, series_id, recurring_days
+        `);
+        
+        console.log(`✅ Fixed ${updateResult.rows.length} webinv30 activities`);
+        
+        client.release();
+        
+        res.json({
+            success: true,
+            message: `Fixed ${updateResult.rows.length} webinv30 activities to be individual (non-recurring)`,
+            updatedActivities: updateResult.rows
+        });
+        
+    } catch (error) {
+        console.error('❌ Fix webinv30 activities failed:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to fix webinv30 activities',
+            details: error.message 
+        });
+    }
+});
+
 // Admin endpoint to update club location
 app.put('/api/admin/update-club-location', authenticateToken, async (req, res) => {
     // Check if user is admin

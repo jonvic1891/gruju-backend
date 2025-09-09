@@ -337,7 +337,7 @@ const ConnectionsScreen: React.FC<ConnectionsScreenProps> = ({ cameFromActivity 
         const targetChildObj = selectedParent.children.find(child => child.uuid === targetChildUuid);
         
         const requestData = {
-          target_parent_id: selectedParent.user_uuid || selectedParent.id,
+          target_parent_uuid: selectedParent.user_uuid,
           child_uuid: myChildObj?.uuid,
           target_child_uuid: targetChildObj?.uuid,
           message: connectionMessage.trim() || undefined,

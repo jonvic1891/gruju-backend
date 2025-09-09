@@ -400,10 +400,16 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
         // Filter for pending invitations only and group by child
         invitationsResponse.data.forEach((invitation: any) => {
           if (invitation.status === 'pending' && invitation.invited_child_name) {
-            // Find child by name (matching logic from original function)
+            // Find child by name (API returns invited_child_name, not invited_child_uuid)
             const matchingChild = childrenData.find(child => 
               child.name === invitation.invited_child_name
             );
+            
+            console.log(`🔍 ChildrenScreen invitation matching for "${invitation.activity_name}":`, {
+              invited_child_name: invitation.invited_child_name,
+              matchingChild: matchingChild ? `${matchingChild.name} (${matchingChild.uuid})` : 'NOT FOUND',
+              status: invitation.status
+            });
             
             if (matchingChild) {
               // Convert to ActivityInvitation format (matching the interface)
@@ -424,8 +430,8 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                 host_family_name: invitation.host_family_name,
                 host_parent_name: invitation.host_parent_username,
                 host_parent_email: invitation.host_parent_email,
-                invited_child_uuid: matchingChild.uuid,
-                invited_child_name: invitation.invited_child_name,
+                invited_child_uuid: matchingChild.uuid, // Use the matched child's UUID
+                invited_child_name: matchingChild.name, // Use the matched child's name
                 message: invitation.invitation_message,
                 created_at: invitation.created_at || new Date().toISOString(),
                 viewed_at: invitation.viewed_at,
@@ -442,6 +448,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
         
         setChildInvitations(invitationsByChild);
         console.log(`📧 Loaded invitations for ${Object.keys(invitationsByChild).length} children`);
+        console.log(`📧 ChildrenScreen invitationsByChild final state:`, invitationsByChild);
       } else {
         console.error('Failed to load invitations:', invitationsResponse.error);
         setChildInvitations({});
@@ -1322,8 +1329,24 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                         
                         console.log(`🔍 FILTERING invitation "${activityName}": series_id="${currentSeriesId}", host="${hostParentName}"`);
                         
-                        // Check if series_id is valid (not null, undefined, or the string "undefined")
-                        if (currentSeriesId && currentSeriesId !== 'undefined') {
+                        // Check if this is truly a recurring activity (has series_id AND recurring_days)
+                        const isRecurring = (invitation as any).is_recurring;
+                        const recurringDays = (invitation as any).recurring_days;
+                        const isTrulyRecurring = currentSeriesId && 
+                                               currentSeriesId !== 'undefined' && 
+                                               isRecurring && 
+                                               recurringDays && 
+                                               Array.isArray(recurringDays) && 
+                                               recurringDays.length > 0;
+                        
+                        console.log(`🔍 RECURRING CHECK for "${activityName}":`, {
+                          series_id: currentSeriesId,
+                          is_recurring: isRecurring,
+                          recurring_days: recurringDays,
+                          isTrulyRecurring: isTrulyRecurring
+                        });
+                        
+                        if (isTrulyRecurring) {
                           console.log(`  ✅ Using series_id grouping for "${activityName}"`);
                           // Use series_id for grouping (preferred method)
                           const seriesInvitations = allInvitations.filter(other => 
@@ -1390,14 +1413,23 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                       // ✅ RECURRING ACTIVITIES: Apply same logic as NotificationBell
                       const currentChildInvitations = childInvitations[child.uuid] || [];
                       
-                      // Check if this is part of a recurring series using series_id
+                      // Check if this is part of a truly recurring series (same logic as filtering)
                       const currentSeriesId = (invitation as any).series_id;
-                      const seriesInvitations = currentSeriesId 
+                      const isRecurring = (invitation as any).is_recurring;
+                      const recurringDays = (invitation as any).recurring_days;
+                      const isTrulyRecurring = currentSeriesId && 
+                                             currentSeriesId !== 'undefined' && 
+                                             isRecurring && 
+                                             recurringDays && 
+                                             Array.isArray(recurringDays) && 
+                                             recurringDays.length > 0;
+                      
+                      const seriesInvitations = isTrulyRecurring 
                         ? currentChildInvitations.filter(inv => (inv as any).series_id === currentSeriesId)
-                        : [invitation]; // Single invitation if no series_id
+                        : [invitation]; // Single invitation if not truly recurring
                       
                       let displayMessage = '';
-                      if (seriesInvitations.length > 1) {
+                      if (isTrulyRecurring && seriesInvitations.length > 1) {
                         // This is a recurring activity - show grouped message
                         const firstInvitation = seriesInvitations[0];
                         const startDate = new Date(firstInvitation.start_date);

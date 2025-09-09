@@ -832,6 +832,32 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         console.error('Failed to load activities:', activitiesResponse.error);
         setActivities([]);
       }
+
+      // Load pending invitations for the calendar display
+      console.log('🔔 Loading pending invitations for calendar...');
+      try {
+        const pendingResponse = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
+        if (pendingResponse.success && pendingResponse.data) {
+          // Filter pending invitations for this specific child
+          const childPendingInvitations = pendingResponse.data.filter((invitation: any) => 
+            invitation.invited_child_name === child.name
+          );
+          console.log(`🔔 Found ${childPendingInvitations.length} pending invitations for ${child.name}:`, 
+            childPendingInvitations.map(inv => ({ 
+              name: inv.activity_name, 
+              date: inv.start_date,
+              uuid: inv.invitation_uuid 
+            }))
+          );
+          setPendingInvitations(childPendingInvitations);
+        } else {
+          console.log('🔔 No pending invitations or failed to load');
+          setPendingInvitations([]);
+        }
+      } catch (error) {
+        console.error('Failed to load pending invitations:', error);
+        setPendingInvitations([]);
+      }
       
     } catch (error) {
       console.error('Load activities error:', error);
@@ -1114,7 +1140,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               name: item.connected_child_name || item.child_name || item.name,
               parentName: item.connected_parent_name || item.parent_name || item.parentname,
               parentUuid: item.connected_parent_uuid || item.parent_uuid || item.parentuuid,
-              parent_id: item.connected_parent_id || item.parent_id,
               family_name: item.connected_family_name || item.family_name
             });
           } else if (status === 'pending') {
@@ -1124,7 +1149,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               target_parent_name: item.connected_parent_name || item.parent_name,
               target_child_uuid: item.connected_child_uuid || item.child_uuid || item.uuid,
               target_parent_uuid: item.connected_parent_uuid || item.parent_uuid,
-              target_parent_id: item.connected_parent_id || item.parent_id,
               target_family_name: item.connected_family_name || item.family_name,
               status: 'pending'
             });
@@ -1495,7 +1519,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               name: item.connected_child_name || item.child_name || item.name,
               parentName: item.connected_parent_name || item.parent_name || item.parentname,
               parentUuid: item.connected_parent_uuid || item.parent_uuid || item.parentuuid,
-              parent_id: item.connected_parent_id || item.parent_id,
               family_name: item.connected_family_name || item.family_name,
               status: status
             });
@@ -1506,7 +1529,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               name: item.connected_child_name || item.child_name || item.name,
               parentName: item.connected_parent_name || item.parent_name || item.parentname,
               parentUuid: item.connected_parent_uuid || item.parent_uuid || item.parentuuid,
-              parent_id: item.connected_parent_id || item.parent_id,
               family_name: item.connected_family_name || item.family_name,
               status: 'pending'
             });
@@ -1901,7 +1923,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         console.log('🔍 Found connectedChild:', connectedChild);
         
         if (connectedChild) {
-          const parentId = connectedChild.parent_id || connectedChild.parentUuid;
+          const parentId = connectedChild.parentUuid;
           
           if (parentId) {
             if (isRecurringActivity) {
@@ -1941,7 +1963,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               return apiService.sendActivityInvitation(selectedActivity.uuid || selectedActivity.activity_uuid || String(selectedActivity.id), parentId, childIdStr);
             }
           } else {
-            console.error('❌ No parent ID found for connectedChild:', connectedChild);
+            console.error('❌ No parent UUID found for connectedChild:', connectedChild);
           }
         } else {
           console.error('❌ Connected child not found for UUID:', childIdStr);
@@ -2477,8 +2499,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                         name: item.connected_child_name || item.child_name || item.name,
                         parentName: item.connected_parent_name || item.parent_name || item.parentname,
                         parentUuid: item.connected_parent_uuid || item.parent_uuid || item.parentuuid,
-                        parent_id: item.connected_parent_id || item.parent_id,
-                        family_name: item.connected_family_name || item.family_name,
+                                  family_name: item.connected_family_name || item.family_name,
                         status: status
                       });
                     }
@@ -2573,7 +2594,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   console.error(`❌ Parent UUID is missing for connected child:`, connectedChild);
                   console.error(`❌ Available parent fields:`, {
                     parentUuid: connectedChild.parentUuid,
-                    parent_id: connectedChild.parent_id,
                     parentName: connectedChild.parentName
                   });
                 }
@@ -2586,7 +2606,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   try {
                     await apiService.sendActivityInvitation(
                       hostActivity.uuid || String(hostActivity.id),
-                      connectedChild.parentUuid || connectedChild.parent_id,
+                      connectedChild.parentUuid,
                       actualChildId,
                       `${hostChild.name} would like to invite your child to join: ${hostActivity.name}`
                     );
@@ -3351,8 +3371,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                             const targetParentUuid = request.target_parent_uuid;
                             const isAlreadyConnected = connectedChildren.some(child => 
                               child.uuid === targetChildUuid || 
-                              child.parent_uuid === targetParentUuid ||
-                              child.parent_id === request.target_parent_id
+                              child.parentUuid === targetParentUuid
                             );
                             const isAlreadyInvited = activityParticipants?.participants?.some((p: any) => 
                               p.child_uuid === targetChildUuid
@@ -3381,8 +3400,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                             const targetParentUuid = request.target_parent_uuid;
                             const isAlreadyConnected = connectedChildren.some(child => 
                               child.uuid === targetChildUuid || 
-                              child.parent_uuid === targetParentUuid ||
-                              child.parent_id === request.target_parent_id
+                              child.parentUuid === targetParentUuid
                             );
                             const isAlreadyInvited = activityParticipants?.participants?.some((p: any) => 
                               p.child_uuid === targetChildUuid
@@ -5027,8 +5045,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                     return apiService.createPendingInvitations(invitingActivity.uuid || invitingActivity.activity_uuid || String(invitingActivity.id), [pendingId]);
                   } else {
                     const connectedChild = connectedChildren.find(c => c.uuid === childIdStr);
-                    if (connectedChild && connectedChild.parent_id) {
-                      return apiService.sendActivityInvitation(invitingActivity.uuid || invitingActivity.activity_uuid || String(invitingActivity.id), connectedChild.parent_id, childIdStr);
+                    if (connectedChild && connectedChild.parentUuid) {
+                      return apiService.sendActivityInvitation(invitingActivity.uuid || invitingActivity.activity_uuid || String(invitingActivity.id), connectedChild.parentUuid, childIdStr);
                     }
                   }
                 });

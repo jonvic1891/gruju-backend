@@ -404,7 +404,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({ initialDate, initialVie
       
       if (hasNotifications) {
         const latestNotification = dayNotifications[0];
-        const isIncoming = latestNotification.target_parent_id === user?.id; // Current user is the target
+        const isIncoming = latestNotification.target_parent_uuid === user?.uuid; // Current user is the target
         primaryIcon = getNotificationIcon(latestNotification.status, isIncoming);
         primaryColor = getNotificationColor(latestNotification.status, isIncoming);
       } else if (hasActivities) {
