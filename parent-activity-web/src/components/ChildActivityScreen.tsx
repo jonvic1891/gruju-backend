@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 // React Router hooks removed for navigation - but need useLocation for URL params
 import { useAuth } from '../contexts/AuthContext';
 import ApiService from '../services/api';
@@ -44,6 +44,7 @@ interface ChildActivityScreenProps {
 
 const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack, onDataChanged, onNavigateToConnections, onNavigateToActivity, initialActivityUuid, shouldRestoreActivityCreation }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   
   // Helper function to get initial activity state with user's location
@@ -450,33 +451,112 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       if (activity) {
         // For initial activity navigation from URL, go to detail page (same as clicking activity)
         console.log('✅ Setting selected activity and navigating to detail page');
-        setSelectedActivity(activity);
         
-        // Populate newActivity state with selected activity data (same as in handleActivityClick)
-        setNewActivity({
-          name: activity.name || '',
-          description: activity.description || '',
-          start_date: activity.start_date ? activity.start_date.split('T')[0] : '',
-          end_date: activity.end_date ? activity.end_date.split('T')[0] : '',
-          start_time: activity.start_time || '',
-          end_time: activity.end_time || '',
-          location: activity.location || '',
-          website_url: (activity as any).website_url || '',
-          cost: (activity as any).cost ? String((activity as any).cost) : '',
-          max_participants: (activity as any).max_participants ? String((activity as any).max_participants) : '',
-          activity_type: (activity as any).activity_type || '',
-          auto_notify_new_connections: (activity as any).auto_notify_new_connections || false
-        });
+        // Check if this activity has a pending invitation (same logic as handleActivityClick)
+        const checkAndSetActivity = async () => {
+          let enhancedActivity = { ...activity };
+          
+          if (!activity.isPendingInvitation && !activity.isAcceptedInvitation && !activity.isDeclinedInvitation) {
+            try {
+              // Check pending invitations to see if current user has an invitation for this activity
+              const today = new Date();
+              const oneYearLater = new Date();
+              oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+              const startDate = today.toISOString().split('T')[0];
+              const endDate = oneYearLater.toISOString().split('T')[0];
+              
+              const pendingResponse = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
+              console.log('🔍 URL INVITATION DEBUG: Checking for pending invitations for activity:', activity.name, activity.uuid || activity.activity_uuid);
+              console.log('📋 URL INVITATION DEBUG: Pending invitations response:', pendingResponse);
+              
+              if (pendingResponse.success && pendingResponse.data) {
+                // Look for a pending invitation that matches this activity
+                const matchingInvitation = pendingResponse.data.find((inv: any) => {
+                  // First try to match by activity UUID if available
+                  if (activity.uuid && inv.activity_uuid) {
+                    return inv.activity_uuid === activity.uuid;
+                  }
+                  if (activity.activity_uuid && inv.activity_uuid) {
+                    return inv.activity_uuid === activity.activity_uuid;
+                  }
+                  // Fallback to matching by name, date, and time
+                  return inv.activity_name === activity.name && 
+                         inv.start_date === activity.start_date &&
+                         inv.start_time === activity.start_time;
+                });
+                
+                console.log('🎯 URL INVITATION DEBUG: Matching invitation found:', matchingInvitation);
+                console.log('🎯 URL INVITATION DEBUG: matchingInvitation.invitation_uuid:', matchingInvitation?.invitation_uuid);
+                console.log('🎯 URL INVITATION DEBUG: matchingInvitation.uuid:', matchingInvitation?.uuid);
+                console.log('🎯 URL INVITATION DEBUG: matchingInvitation keys:', Object.keys(matchingInvitation || {}));
+                
+                if (matchingInvitation) {
+                  // Convert this activity to a pending invitation format
+                  enhancedActivity = {
+                    ...activity,
+                    isPendingInvitation: true,
+                    invitationUuid: matchingInvitation.uuid,
+                    invitation_message: matchingInvitation.invitation_message,
+                    host_child_name: matchingInvitation.host_child_name,
+                    host_parent_name: matchingInvitation.host_parent_username,
+                    activity_uuid: matchingInvitation.activity_uuid
+                  } as any;
+                  console.log('🎯 URL INVITATION DEBUG: Enhanced activity with pending invitation data:', enhancedActivity);
+                } else {
+                  console.log('❌ URL INVITATION DEBUG: No matching invitation found for activity');
+                  console.log('📋 URL INVITATION DEBUG: Available invitations:', pendingResponse.data.map((inv: any) => ({
+                    name: inv.activity_name,
+                    uuid: inv.activity_uuid,
+                    date: inv.start_date,
+                    time: inv.start_time
+                  })));
+                  console.log('🎯 URL INVITATION DEBUG: Activity details:', {
+                    name: activity.name,
+                    uuid: activity.uuid,
+                    activity_uuid: activity.activity_uuid,
+                    date: activity.start_date,
+                    time: activity.start_time
+                  });
+                }
+              }
+            } catch (error) {
+              console.error('Failed to check for pending invitations during URL navigation:', error);
+            }
+          }
+          
+          console.log('🎯 URL INVITATION DEBUG: Final enhanced activity before setting:', enhancedActivity);
+          console.log('🎯 URL INVITATION DEBUG: Enhanced activity invitationUuid:', enhancedActivity.invitationUuid);
+          console.log('🎯 URL INVITATION DEBUG: Enhanced activity isPendingInvitation:', enhancedActivity.isPendingInvitation);
+          setSelectedActivity(enhancedActivity);
+          
+          // Populate newActivity state with enhanced activity data
+          setNewActivity({
+            name: enhancedActivity.name || '',
+            description: enhancedActivity.description || '',
+            start_date: enhancedActivity.start_date ? enhancedActivity.start_date.split('T')[0] : '',
+            end_date: enhancedActivity.end_date ? enhancedActivity.end_date.split('T')[0] : '',
+            start_time: enhancedActivity.start_time || '',
+            end_time: enhancedActivity.end_time || '',
+            location: enhancedActivity.location || '',
+            website_url: (enhancedActivity as any).website_url || '',
+            cost: (enhancedActivity as any).cost ? String((enhancedActivity as any).cost) : '',
+            max_participants: (enhancedActivity as any).max_participants ? String((enhancedActivity as any).max_participants) : '',
+            activity_type: (enhancedActivity as any).activity_type || '',
+            auto_notify_new_connections: (enhancedActivity as any).auto_notify_new_connections || false
+          });
+          
+          // Load participants for the activity
+          const activityUuid = (enhancedActivity as any).activity_uuid || (enhancedActivity as any).uuid;
+          if (activityUuid) {
+            console.log('🔄 Loading participants for activity UUID:', activityUuid);
+            loadActivityParticipants(activityUuid);
+          }
+          
+          setCurrentPage('activity-detail');
+          console.log('📄 Force set currentPage to activity-detail');
+        };
         
-        // Load participants for the activity (same as in handleActivityClick)
-        const activityUuid = (activity as any).activity_uuid || (activity as any).uuid;
-        if (activityUuid) {
-          console.log('🔄 Loading participants for activity UUID:', activityUuid);
-          loadActivityParticipants(activityUuid);
-        }
-        
-        setCurrentPage('activity-detail');
-        console.log('📄 Force set currentPage to activity-detail');
+        checkAndSetActivity();
         
         // Load connections data for activity detail page if the activity is hosted by this child
         if (selectedActivity?.is_host) {
@@ -644,7 +724,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             is_shared: true,
             invitation_status: 'rejected',
             invited_child_uuid: child.uuid,
-            invitationUuid: invitation.invitation_uuid,
+            invitationUuid: invitation.uuid,
             isRejectedInvitation: true,
             host_parent_name: invitation.host_parent_username
           }));
@@ -763,7 +843,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
 
   const handleInvitationResponse = async (invitationUuid: string, action: 'accept' | 'reject') => {
     try {
-      console.log(`🔍 INVITATION RESPONSE DEBUG for UUID: ${invitationUuid}`);
       console.log(`🔍 All activities:`, activities.map(a => ({
         name: a.name,
         activity_uuid: (a as any).activity_uuid,
@@ -812,22 +891,18 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           let seriesInvitations = [];
           
           if (seriesId && seriesId !== 'undefined' && seriesId !== null) {
-            // Use series_id for precise grouping
+            // Only treat as series if there's an actual series_id (recurring activities)
             seriesInvitations = invitationsResponse.data.filter((inv: any) => 
               inv.series_id === seriesId &&
               inv.invited_child_id === currentInvitation.invited_child_id &&
               inv.status === 'pending' // Only pending invitations can be accepted/declined
             );
-            console.log(`🔍 Found ${seriesInvitations.length} pending invitations in series using series_id`);
+            console.log(`🔍 Found ${seriesInvitations.length} pending invitations in series using series_id: ${seriesId}`);
           } else {
-            // Fallback to name-based grouping
-            seriesInvitations = invitationsResponse.data.filter((inv: any) => 
-              inv.activity_name === activityName &&
-              inv.invited_child_id === currentInvitation.invited_child_id &&
-              inv.host_parent_username === currentInvitation.host_parent_username &&
-              inv.status === 'pending' // Only pending invitations
-            );
-            console.log(`🔍 Found ${seriesInvitations.length} pending invitations in series using name matching`);
+            // No series_id means this is a single activity invitation
+            // Even if multiple children are invited, each child accepts individually
+            seriesInvitations = [currentInvitation];
+            console.log(`🔍 Single activity invitation - no series_id found, treating as individual invitation`);
           }
           
           console.log(`🔍 Series invitations:`, seriesInvitations.map(inv => ({
@@ -862,6 +937,42 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                   : `Series declined. ${successCount} invitations removed.`;
                 alert(message);
                 
+                // If series was accepted, increment club usage for each accepted invitation
+                if (action === 'accept') {
+                  try {
+                    const acceptedInvitations = seriesInvitations.filter((inv, index) => 
+                      results[index]?.success
+                    );
+                    
+                    for (const invitation of acceptedInvitations) {
+                      console.log('🎯 SERIES ACCEPT DEBUG: Processing invitation for club usage:', invitation);
+                      
+                      const clubUsageData = {
+                        website_url: invitation.website_url,
+                        activity_type: invitation.activity_type,
+                        location: invitation.location || undefined,
+                        child_age: child.age || undefined,
+                        activity_start_date: invitation.start_date,
+                        activity_uuid: invitation.activity_uuid
+                      };
+                      
+                      console.log('🎯 SERIES ACCEPT DEBUG: Club usage data:', clubUsageData);
+                      
+                      if (clubUsageData.website_url && clubUsageData.activity_type) {
+                        await apiService.incrementClubUsage(clubUsageData);
+                        console.log('✅ SERIES ACCEPT: Club usage incremented for invitation:', invitation.uuid);
+                      } else {
+                        console.warn('❌ SERIES ACCEPT: Missing required data for club usage:', {
+                          website_url: clubUsageData.website_url,
+                          activity_type: clubUsageData.activity_type
+                        });
+                      }
+                    }
+                  } catch (clubError) {
+                    // Don't fail invitation acceptance if club increment fails
+                  }
+                }
+                
                 // Reload activities to update the display
                 loadActivities();
                 
@@ -886,6 +997,53 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           ? 'Invitation accepted! Activity will appear in your calendar.' 
           : 'Invitation declined.';
         alert(message);
+        
+        // If invitation was accepted, increment club usage for this guest
+        if (action === 'accept') {
+          try {
+            // Find the activity details from the current invitation
+            const today = new Date();
+            const oneYearLater = new Date();
+            oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+            const startDate = today.toISOString().split('T')[0];
+            const endDate = oneYearLater.toISOString().split('T')[0];
+            
+            const invitationsResponse = await apiService.getAllInvitations(startDate, endDate);
+            if (invitationsResponse.success && invitationsResponse.data) {
+              const currentInvitation = invitationsResponse.data.find((inv: any) => 
+                inv.uuid === invitationUuid
+              );
+              
+              if (currentInvitation) {
+                console.log('🎯 INVITATION ACCEPT DEBUG: Current invitation for club usage:', currentInvitation);
+                
+                // The invitation object has the activity details we need
+                const clubUsageData = {
+                  website_url: currentInvitation.website_url || (selectedActivity as any)?.website_url,
+                  activity_type: currentInvitation.activity_type || (selectedActivity as any)?.activity_type,
+                  location: currentInvitation.location || selectedActivity?.location,
+                  child_age: child.age || undefined,
+                  activity_start_date: currentInvitation.start_date || selectedActivity?.start_date,
+                  activity_uuid: currentInvitation.activity_uuid || (selectedActivity as any)?.activity_uuid
+                };
+                
+                console.log('🎯 INVITATION ACCEPT DEBUG: Club usage data for increment:', clubUsageData);
+                
+                if (clubUsageData.website_url && clubUsageData.activity_type) {
+                  await apiService.incrementClubUsage(clubUsageData);
+                  console.log('✅ INVITATION ACCEPT: Club usage incremented successfully');
+                } else {
+                  console.warn('❌ INVITATION ACCEPT: Missing required data for club usage increment:', {
+                    website_url: clubUsageData.website_url,
+                    activity_type: clubUsageData.activity_type
+                  });
+                }
+              }
+            }
+          } catch (clubError) {
+            // Don't fail invitation acceptance if club increment fails
+          }
+        }
         
         // Reload activities to update the display
         loadActivities();
@@ -1050,7 +1208,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
               isPendingInvitation: invitation.status === 'pending',
               isAcceptedInvitation: invitation.status === 'accepted',
               isDeclinedInvitation: invitation.status === 'declined',
-              invitationUuid: invitation.invitation_uuid,
+              invitationUuid: invitation.uuid,
               invitation_message: invitation.invitation_message
             };
             
@@ -1220,7 +1378,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
       
       // Navigate to club selection page with return context
       const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
-      window.location.href = `/clubs?select=${fieldType}&return=${returnUrl}`;
+      navigate(`/clubs?select=${fieldType}&return=${returnUrl}`);
     };
 
     if (!showBrowseButton) {
@@ -1468,8 +1626,8 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
         const endDate = oneYearLater.toISOString().split('T')[0];
         
         const pendingResponse = await apiService.getPendingInvitationsForCalendar(startDate, endDate);
-        console.log('🔍 Checking for pending invitations for activity:', activity.name, activity.uuid || activity.activity_uuid);
-        console.log('📋 Pending invitations response:', pendingResponse);
+        console.log('🔍 INVITATION DEBUG: Checking for pending invitations for activity:', activity.name, activity.uuid || activity.activity_uuid);
+        console.log('📋 INVITATION DEBUG: Pending invitations response:', pendingResponse);
         if (pendingResponse.success && pendingResponse.data) {
           // Look for a pending invitation that matches this activity
           const matchingInvitation = pendingResponse.data.find((inv: any) => {
@@ -1486,20 +1644,35 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                    inv.start_time === activity.start_time;
           });
           
-          console.log('🎯 Matching invitation found:', matchingInvitation);
+          console.log('🎯 INVITATION DEBUG: Matching invitation found:', matchingInvitation);
           
           if (matchingInvitation) {
             // Convert this activity to a pending invitation format
             enhancedActivity = {
               ...activity,
               isPendingInvitation: true,
-              invitationUuid: matchingInvitation.invitation_uuid,
+              invitationUuid: matchingInvitation.uuid,
               invitation_message: matchingInvitation.invitation_message,
               host_child_name: matchingInvitation.host_child_name,
               host_parent_name: matchingInvitation.host_parent_username,
               activity_uuid: matchingInvitation.activity_uuid
             } as any;
-            console.log('🎯 Enhanced activity with pending invitation data:', enhancedActivity);
+            console.log('🎯 INVITATION DEBUG: Enhanced activity with pending invitation data:', enhancedActivity);
+          } else {
+            console.log('❌ INVITATION DEBUG: No matching invitation found for activity');
+            console.log('📋 INVITATION DEBUG: Available invitations:', pendingResponse.data.map((inv: any) => ({
+              name: inv.activity_name,
+              uuid: inv.activity_uuid,
+              date: inv.start_date,
+              time: inv.start_time
+            })));
+            console.log('🎯 INVITATION DEBUG: Activity details:', {
+              name: activity.name,
+              uuid: activity.uuid,
+              activity_uuid: activity.activity_uuid,
+              date: activity.start_date,
+              time: activity.start_time
+            });
           }
         }
       } catch (error) {
@@ -1646,17 +1819,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
     }
 
     // ✅ RECURRING ACTIVITIES: Check if this is a recurring activity and get all instances
-    console.log('🔍 INVITATION DEBUG: Checking for recurring activity:', {
-      activityName: selectedActivity.name,
-      selectedActivityUuid: selectedActivity.uuid || selectedActivity.activity_uuid,
-      selectedActivityChildId: selectedActivity.child_id,
-      selectedActivityChildUuid: selectedActivity.child_uuid,
-      currentChildId: child.id,
-      currentChildUuid: child.uuid,
-      totalActivitiesLoaded: activities.length,
-      seriesId: (selectedActivity as any).series_id,
-      isRecurring: (selectedActivity as any).is_recurring
-    });
     
     // Debug all activities with the same name
     const sameNameActivities = activities.filter(a => a.name === selectedActivity.name);
@@ -2208,18 +2370,21 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
                 location: activityData.location
               });
               
-              await apiService.incrementClubUsage({
+              // Try different ways to get the UUID
+              const uuid = response.data?.data?.uuid || response.data?.uuid;
+              
+              const clubUsageData = {
                 website_url: activityData.website_url,
                 activity_type: activityData.activity_type,
                 location: activityData.location || undefined,
                 child_age: child.age || undefined,
                 activity_start_date: activityData.start_date,
-                activity_uuid: response.data?.data?.uuid
-              });
+                activity_uuid: uuid
+              };
               
-              console.log('✅ Club usage incremented successfully');
+              await apiService.incrementClubUsage(clubUsageData);
+              
             } catch (clubError) {
-              console.warn('⚠️ Failed to increment club usage:', clubError);
               // Don't fail activity creation if club increment fails
             }
           }
@@ -2374,16 +2539,7 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
           // With child_uuid now included in the response, we can properly filter activities by host
           let hostActivities = [];
           
-          console.log('🔍 DEBUG: createdActivities:', createdActivities);
-          console.log('🔍 DEBUG: hostChildUuid:', hostChildUuid);
-          console.log('🔍 DEBUG: jointHostChildren:', jointHostChildren);
           
-          // Before filtering
-          console.log('🔍 DEBUG: Activities before filter:', createdActivities.map(a => ({ 
-            uuid: a.uuid, 
-            name: a.name,
-            child_uuid: a.child_uuid 
-          })));
           
           if (jointHostChildren.length === 0) {
             // No joint hosting - all activities belong to primary host
@@ -2393,14 +2549,6 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             hostActivities = createdActivities.filter(activity => activity.child_uuid === hostChildUuid);
           }
           
-          // After filtering
-          console.log('🔍 DEBUG: Activities after filter:', hostActivities.map(a => ({ 
-            uuid: a.uuid, 
-            name: a.name,
-            child_uuid: a.child_uuid 
-          })));
-          
-          console.log(`🎯 Found ${hostActivities.length} activities for host ${hostChild.name}`);
           
           for (const actualChildId of childIds) {
             try {
@@ -3343,8 +3491,25 @@ const ChildActivityScreen: React.FC<ChildActivityScreenProps> = ({ child, onBack
             </button>
             
             {/* Show accept/decline buttons for pending invitations */}
-            {(((selectedActivity as any).isPendingInvitation && (selectedActivity as any).invitationUuid) || 
-              (invitationData?.isPendingInvitation && invitationData?.invitationUuid)) && (
+            {(() => {
+              const condition1 = (selectedActivity as any).isPendingInvitation && (selectedActivity as any).invitationUuid;
+              const condition2 = invitationData?.isPendingInvitation && invitationData?.invitationUuid;
+              const shouldShow = condition1 || condition2;
+              
+              console.log('🎯 ACCEPT BUTTON DEBUG:', {
+                'selectedActivity.isPendingInvitation': (selectedActivity as any).isPendingInvitation,
+                'selectedActivity.invitationUuid': (selectedActivity as any).invitationUuid,
+                'selectedActivity.invitation_uuid': (selectedActivity as any).invitation_uuid,
+                'invitationData?.isPendingInvitation': invitationData?.isPendingInvitation,
+                'invitationData?.invitationUuid': invitationData?.invitationUuid,
+                'condition1': condition1,
+                'condition2': condition2,
+                'shouldShow': shouldShow
+              });
+              console.log('🎯 FULL selectedActivity object:', selectedActivity);
+              
+              return shouldShow;
+            })() && (
               <>
                 <button
                   onClick={() => {
