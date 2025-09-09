@@ -1348,7 +1348,7 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                         
                         if (isTrulyRecurring) {
                           console.log(`  ✅ Using series_id grouping for "${activityName}"`);
-                          // Use series_id for grouping (preferred method)
+                          // Use series_id for grouping (only for truly recurring activities)
                           const seriesInvitations = allInvitations.filter(other => 
                             (other as any).series_id === currentSeriesId
                           );
@@ -1364,32 +1364,10 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
                             console.log(`  📅 First invitation ID: ${sortedSeries[0].id}, date: ${sortedSeries[0].start_date}`);
                             return shouldShow;
                           }
-                        } else {
-                          console.log(`  ⚠️ Using name-based fallback grouping for "${activityName}"`);
-                          // Fallback: Use name-based grouping when series_id is invalid
-                          
-                          // Find all invitations with same name and host
-                          const sameNameInvitations = allInvitations.filter(other => 
-                            other.activity_name === activityName &&
-                            (other as any).host_parent_name === hostParentName
-                          );
-                          
-                          console.log(`  🔍 Found ${sameNameInvitations.length} invitations with name "${activityName}" and host "${hostParentName}"`);
-                          
-                          if (sameNameInvitations.length > 1) {
-                            // This is part of a recurring series - only show the earliest one
-                            const sortedSeries = sameNameInvitations.sort((a, b) => 
-                              new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
-                            );
-                            const shouldShow = invitation.id === sortedSeries[0].id;
-                            console.log(`  📅 Recurring series of ${sameNameInvitations.length}, showing first: ${shouldShow}`);
-                            console.log(`  📅 First invitation date: ${sortedSeries[0].start_date}, current: ${invitation.start_date}`);
-                            return shouldShow;
-                          }
                         }
                         
-                        console.log(`  ✅ Single activity, showing: true`);
-                        // Show all invitations that are single activities
+                        console.log(`  ✅ Individual activity, showing: true`);
+                        // Show all individual activities (no fallback grouping by name)
                         return true;
                       })
                       .map((invitation) => {
