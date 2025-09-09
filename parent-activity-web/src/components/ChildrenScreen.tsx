@@ -800,6 +800,42 @@ const ChildrenScreen: React.FC<ChildrenScreenProps> = ({ onNavigateToCalendar, o
           return updated;
         });
         
+        // If invitation was accepted, increment club usage (external API call like activity creation)
+        if (action === 'accept' && currentInvitation) {
+          try {
+            console.log('🏢 INVITATION ACCEPT: Attempting to increment club usage for accepted invitation');
+            
+            // Find the invited child UUID from the invitation
+            const invitedChildUuid = currentInvitation.invited_child_uuid;
+            
+            if (currentInvitation.website_url && currentInvitation.activity_type && invitedChildUuid) {
+              const clubUsageData = {
+                website_url: currentInvitation.website_url,
+                activity_type: currentInvitation.activity_type,
+                location: currentInvitation.location || null,
+                activity_uuid: currentInvitation.activity_uuid
+              };
+              
+              console.log('🏢 INVITATION ACCEPT: Calling club increment API:', {
+                childUuid: invitedChildUuid,
+                clubUsageData
+              });
+              
+              const clubResponse = await apiService.incrementClubUsage(invitedChildUuid, clubUsageData);
+              if (clubResponse.success) {
+                console.log('✅ INVITATION ACCEPT: Club usage incremented successfully');
+              } else {
+                console.log('⚠️ INVITATION ACCEPT: Club usage increment failed:', clubResponse.error);
+              }
+            } else {
+              console.log('ℹ️ INVITATION ACCEPT: Activity does not have required club data for increment');
+            }
+          } catch (clubError) {
+            console.error('❌ INVITATION ACCEPT: Failed to increment club usage:', clubError);
+            // Don't fail the invitation acceptance if club increment fails
+          }
+        }
+        
         const message = action === 'accept' 
           ? 'Invitation accepted! Activity will appear in your calendar.' 
           : 'Invitation declined.';

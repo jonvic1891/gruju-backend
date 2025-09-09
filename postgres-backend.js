@@ -5048,15 +5048,14 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
                 inviterParentId: invitationData.inviter_parent_id
             });
             
-            // Get the activity details including club-related fields
+            // Get the activity's child_id to connect with the invited child
             const activityResult = await client.query(
-                'SELECT child_id, uuid, website_url, activity_type, location FROM activities WHERE id = $1',
+                'SELECT child_id FROM activities WHERE id = $1',
                 [invitationData.activity_id]
             );
             
             if (activityResult.rows.length > 0) {
-                const activity = activityResult.rows[0];
-                const hostChildId = activity.child_id;
+                const hostChildId = activityResult.rows[0].child_id;
                 const invitedChildId = invitationData.invited_child_id;
                 
                 console.log(`🔍 Checking connection between host child ${hostChildId} and invited child ${invitedChildId}`);
@@ -5082,56 +5081,6 @@ app.post('/api/activity-invitations/:invitationId/respond', authenticateToken, a
                     console.log(`✅ Created connection ${connectionResult.rows[0].uuid} between children ${hostChildId} and ${invitedChildId} after accepting activity invitation`);
                 } else {
                     console.log(`ℹ️ Connection already exists between children ${hostChildId} and ${invitedChildId}:`, existingConnection.rows[0]);
-                }
-
-                // Increment club usage when invitation is accepted (same logic as activity creation)
-                if (activity.website_url && activity.website_url.trim() && 
-                    activity.activity_type && activity.activity_type.trim()) {
-                    
-                    console.log('🏢 INVITATION ACCEPT: Incrementing club usage for:', {
-                        website_url: activity.website_url,
-                        activity_type: activity.activity_type,
-                        location: activity.location,
-                        activity_uuid: activity.uuid
-                    });
-                    
-                    try {
-                        const clubUsageData = {
-                            website_url: activity.website_url.trim(),
-                            activity_type: activity.activity_type.trim(),
-                            location: activity.location || null,
-                            activity_uuid: activity.uuid,
-                            child_id: invitedChildId // Use the invited child's ID for usage tracking
-                        };
-
-                        const clubUsageResponse = await client.query(`
-                            INSERT INTO club_usage (club_id, child_id, activity_uuid, used_at)
-                            SELECT c.id, $2, $3, CURRENT_TIMESTAMP
-                            FROM clubs c
-                            WHERE COALESCE(c.website_url, '') = COALESCE($1, '')
-                            AND COALESCE(c.activity_type, '') = COALESCE($4, '')
-                            AND COALESCE(c.location, '') = COALESCE($5, '')
-                            ON CONFLICT (club_id, child_id, activity_uuid) DO NOTHING
-                            RETURNING club_id, child_id, activity_uuid
-                        `, [
-                            clubUsageData.website_url,
-                            clubUsageData.child_id,
-                            clubUsageData.activity_uuid,
-                            clubUsageData.activity_type,
-                            clubUsageData.location
-                        ]);
-
-                        if (clubUsageResponse.rows.length > 0) {
-                            console.log('✅ INVITATION ACCEPT: Club usage incremented:', clubUsageResponse.rows[0]);
-                        } else {
-                            console.log('ℹ️ INVITATION ACCEPT: Club usage already exists or no matching club found');
-                        }
-                    } catch (clubError) {
-                        console.error('❌ INVITATION ACCEPT: Failed to increment club usage:', clubError);
-                        // Don't fail the invitation acceptance if club increment fails
-                    }
-                } else {
-                    console.log('ℹ️ INVITATION ACCEPT: Activity does not have website_url and activity_type, skipping club increment');
                 }
             } else {
                 console.error(`❌ Could not find activity ${invitationData.activity_id} when processing accepted invitation`);
